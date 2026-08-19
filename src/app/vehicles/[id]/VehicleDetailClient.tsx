@@ -28,20 +28,27 @@ export default function VehicleDetailPage() {
   const vehicleId = params?.id as string;
 
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [activeTab, setActiveTab] = useState<'timeline' | 'equipment' | 'qr' | 'issues'>('timeline');
 
-  const loadData = () => {
+  const loadData = async () => {
     if (!vehicleId) return;
-    const v = dbService.getVehicle(vehicleId) || dbService.getVehicleByQR(vehicleId);
+
+    let v = dbService.getVehicle(vehicleId) || dbService.getVehicleByQR(vehicleId);
+    if (!v) {
+      v = (await dbService.fetchVehicleAsync(vehicleId)) || undefined;
+    }
+
     if (v) {
       setVehicle(v);
       setEquipment(dbService.getEquipmentForVehicle(v.id));
       setInspections(dbService.getInspectionsForVehicle(v.id));
       setIssues(dbService.getIssuesForVehicle(v.id));
     }
+    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -49,6 +56,17 @@ export default function VehicleDetailPage() {
     window.addEventListener('sunny_db_update', loadData);
     return () => window.removeEventListener('sunny_db_update', loadData);
   }, [vehicleId]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-sky-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-bold text-slate-500">Loading Vehicle Profile...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!vehicle) {
     return (

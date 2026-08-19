@@ -430,6 +430,53 @@ class DataStore {
     return this.getVehicle(token);
   }
 
+  /**
+   * Directly queries Firebase Firestore for a specific vehicle by ID or qrCodeToken.
+   * Useful on direct URL navigation / QR scan when local storage hasn't synced yet.
+   */
+  public async fetchVehicleAsync(idOrToken: string): Promise<Vehicle | null> {
+    if (!idOrToken) return null;
+    this.init();
+
+    // 1. Check local cache first
+    const cached = this.getVehicle(idOrToken);
+    if (cached) return cached;
+
+    // 2. Fetch directly from Cloud Firestore
+    if (db) {
+      try {
+        const cleanId = idOrToken.trim();
+        
+        // Direct doc lookup by ID
+        const docSnap = await getDoc(doc(db, 'vehicles', cleanId));
+        if (docSnap.exists()) {
+          const v = docSnap.data() as Vehicle;
+          // Cache it in localStorage
+          const current = this.getVehicles();
+          if (!current.some(x => x.id === v.id)) {
+            localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify([...current, v]));
+            window.dispatchEvent(new Event('sunny_db_update'));
+          }
+          return v;
+        }
+
+        // Also query collection in case idOrToken matches qrCodeToken or vehicleNumber
+        const allDocs = await getDocs(collection(db, 'vehicles'));
+        if (!allDocs.empty) {
+          const fetchedList: Vehicle[] = [];
+          allDocs.forEach(d => fetchedList.push(d.data() as Vehicle));
+          localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(fetchedList));
+          window.dispatchEvent(new Event('sunny_db_update'));
+          return this.getVehicle(idOrToken) || null;
+        }
+      } catch (err) {
+        console.warn('Direct Firestore vehicle query failed:', err);
+      }
+    }
+
+    return null;
+  }
+
   public async createVehicle(
     vehicleData: Partial<Vehicle> & { vehicleNumber: string; name: string; licensePlate: string },
     initialEquipmentNames?: string[]

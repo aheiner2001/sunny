@@ -39,6 +39,7 @@ export default function InspectVehiclePage() {
   const { user } = useAuth();
 
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [categories, setCategories] = useState<ChecklistCategoryConfig[]>([]);
   const [questions, setQuestions] = useState<ChecklistQuestion[]>([]);
   const [activeTab, setActiveTab] = useState<string>('equipment');
@@ -48,12 +49,22 @@ export default function InspectVehiclePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedInspection, setSubmittedInspection] = useState<any | null>(null);
 
-  const loadData = () => {
+  const loadData = async () => {
     if (!vehicleId) return;
-    const v = dbService.getVehicle(vehicleId) || dbService.getVehicleByQR(vehicleId);
+
+    // 1. Try local cache first
+    let v = dbService.getVehicle(vehicleId) || dbService.getVehicleByQR(vehicleId);
+
+    // 2. If not found locally, fetch directly from Cloud Firestore
+    if (!v) {
+      v = (await dbService.fetchVehicleAsync(vehicleId)) || undefined;
+    }
+
     if (v) {
       setVehicle(v);
     }
+    setIsLoading(false);
+
     const cats = dbService.getChecklistCategories();
     const qList = dbService.getChecklistQuestions();
     setCategories(cats);
@@ -84,6 +95,17 @@ export default function InspectVehiclePage() {
     window.addEventListener('sunny_db_update', loadData);
     return () => window.removeEventListener('sunny_db_update', loadData);
   }, [vehicleId]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-sky-600 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs font-bold text-slate-500">Loading Vehicle Inspection Checklist...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!vehicle) {
     const allVehicles = dbService.getVehicles();
