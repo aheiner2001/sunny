@@ -13,11 +13,24 @@ export function SPARedirectHandler() {
   const router = useRouter();
 
   useEffect(() => {
-    const redirectPath = sessionStorage.getItem('spa-redirect-path');
+    if (typeof window === 'undefined') return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    // 1. Direct query parameter support for QR codes (e.g. ?inspect=van-1 or ?vehicle=van-1 or ?v=van-1)
+    const directInspect = urlParams.get('inspect') || urlParams.get('vehicle') || urlParams.get('v');
+    if (directInspect) {
+      router.replace(`/inspect/${encodeURIComponent(directInspect)}`);
+      return;
+    }
+
+    // 2. 404.html redirect parameter (?p=/inspect/van-1234)
+    const pParam = urlParams.get('p');
+    const redirectPath = pParam ? decodeURIComponent(pParam) : sessionStorage.getItem('spa-redirect-path');
+
     if (redirectPath) {
       sessionStorage.removeItem('spa-redirect-path');
       
-      // Strip the basePath (/sunny) to get the app-relative path
       const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '/sunny';
       let appPath = redirectPath;
       if (appPath.startsWith(basePath)) {

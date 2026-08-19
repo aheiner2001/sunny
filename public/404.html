@@ -4,23 +4,30 @@
   <meta charset="utf-8">
   <title>Sunny Fleet - Redirecting...</title>
   <script>
-    // GitHub Pages SPA redirect trick
-    // When GitHub Pages can't find a static file for a dynamic route (e.g. /sunny/inspect/van-12345),
-    // it serves this 404.html. We store the intended path and redirect to index,
-    // where the app picks it up and does client-side navigation.
-    var pathSegmentsToKeep = 1; // keep '/sunny' (the repo name segment)
+    // GitHub Pages Single Page App redirect
+    // Encodes the path & query into a query parameter on the base path
+    var pathSegmentsToKeep = 1; // e.g. 1 keeps '/sunny'
     var l = window.location;
-    var fullPath = l.pathname;
     
-    // Store the full path for the SPA to pick up
-    sessionStorage.setItem('spa-redirect-path', fullPath + l.search + l.hash);
+    // Calculate base path (e.g. /sunny/)
+    var pathParts = l.pathname.split('/');
+    var basePath = pathParts.slice(0, 1 + pathSegmentsToKeep).join('/') + '/';
     
-    // Redirect to the base path (e.g., /sunny/)
-    var basePath = l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/';
-    l.replace(basePath);
+    // Remaining path after base path
+    var routePath = pathParts.slice(1 + pathSegmentsToKeep).join('/');
+    var fullRoute = '/' + routePath + l.search + l.hash;
+
+    // Store in sessionStorage as backup and redirect with ?p=
+    sessionStorage.setItem('spa-redirect-path', fullRoute);
+    
+    // Redirect to base path preserving target route
+    l.replace(
+      l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+      basePath + '?p=' + encodeURIComponent(fullRoute)
+    );
   </script>
 </head>
 <body>
-  <p>Redirecting...</p>
+  <p>Redirecting to Sunny Fleet...</p>
 </body>
 </html>

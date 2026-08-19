@@ -7,9 +7,11 @@ import { Vehicle } from '@/types';
 
 export function QRCodeDisplay({ vehicle }: { vehicle: Vehicle }) {
   const qrRef = useRef<HTMLDivElement>(null);
-  const scanUrl = typeof window !== 'undefined' 
-    ? `${window.location.origin}/inspect/${vehicle.id}`
-    : `https://sunnyfleet.app/inspect/${vehicle.id}`;
+  const isProd = process.env.NODE_ENV === 'production';
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH || (isProd ? '/sunny' : '');
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://aheiner2001.github.io';
+  // Use query parameter format which always hits index.html reliably on static hosts
+  const scanUrl = `${origin}${basePath}/?inspect=${encodeURIComponent(vehicle.id)}`;
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');

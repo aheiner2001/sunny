@@ -86,14 +86,51 @@ export default function InspectVehiclePage() {
   }, [vehicleId]);
 
   if (!vehicle) {
+    const allVehicles = dbService.getVehicles();
     return (
-      <div className="max-w-md mx-auto py-12 text-center">
-        <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-amber-800 text-sm mb-4">
-          Vehicle "{vehicleId}" not found.
+      <div className="max-w-md mx-auto py-8 text-center space-y-6">
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 mx-auto flex items-center justify-center">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-base font-extrabold text-slate-900">Vehicle Not Found</h2>
+            <p className="text-xs text-slate-500 mt-1">
+              The tag <code className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono text-[11px] font-bold">{vehicleId || 'unknown'}</code> does not match an active vehicle.
+            </p>
+          </div>
+
+          <div className="border-t border-slate-100 pt-4 text-left">
+            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-2">
+              Select your vehicle manually:
+            </label>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {allVehicles.map((v) => (
+                <button
+                  key={v.id}
+                  onClick={() => router.push(`/inspect/${v.id}`)}
+                  className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-sky-500 hover:bg-sky-50 transition-all text-left group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Truck className="w-4 h-4 text-slate-400 group-hover:text-sky-600" />
+                    <div>
+                      <div className="text-xs font-bold text-slate-900 group-hover:text-sky-700">{v.vehicleNumber}</div>
+                      <div className="text-[10px] text-slate-400">{v.name} &bull; {v.licensePlate}</div>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-sky-600 transition-transform group-hover:translate-x-0.5" />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="pt-2">
+            <Link href="/scan" className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-600 hover:underline">
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Try scanning another QR Code</span>
+            </Link>
+          </div>
         </div>
-        <Link href="/scan" className="text-xs font-bold text-sky-600 hover:underline">
-          Return to QR Scanner
-        </Link>
       </div>
     );
   }
