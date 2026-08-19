@@ -410,7 +410,7 @@ export default function DashboardPage() {
                       <div className="w-8 h-8 rounded-lg bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
                         <Truck className="w-4 h-4" />
                       </div>
-                      <Link href={`/vehicles/${vehicle.id}`} className="hover:text-sky-600 font-bold">
+                      <Link href={`/vehicles/detail?id=${encodeURIComponent(vehicle.id)}`} className="hover:text-sky-600 font-bold">
                         {vehicle.vehicleNumber}
                       </Link>
                     </td>

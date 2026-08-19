@@ -215,7 +215,7 @@ export default function InspectionsPage() {
 
                     <div className="flex items-center justify-between gap-2 pt-2">
                       <Link
-                        href={`/vehicles/${insp.vehicleId}`}
+                        href={`/vehicles/detail?id=${encodeURIComponent(insp.vehicleId)}`}
                         className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-100 transition-colors"
                       >
                         View Vehicle History

@@ -245,7 +245,7 @@ export default function EquipmentPage() {
               <div className="bg-slate-50 rounded-xl p-3 text-xs flex items-center justify-between border border-slate-100 mb-3">
                 <span className="text-slate-500">Dedicated Van:</span>
                 <Link
-                  href={`/vehicles/${eq.vehicleId}`}
+                  href={`/vehicles/detail?id=${encodeURIComponent(eq.vehicleId)}`}
                   className="font-bold text-sky-600 hover:underline flex items-center gap-1"
                 >
                   <Truck className="w-3.5 h-3.5" />
@@ -273,7 +273,7 @@ export default function EquipmentPage() {
               </div>
 
               <Link
-                href={`/vehicles/${eq.vehicleId}`}
+                href={`/vehicles/detail?id=${encodeURIComponent(eq.vehicleId)}`}
                 className="font-bold text-slate-700 hover:text-sky-600 flex items-center gap-1"
               >
                 <span>Van History</span>

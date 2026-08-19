@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { 
   Truck, 
@@ -24,18 +24,10 @@ import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { Vehicle, ChecklistQuestion, ChecklistCategoryConfig, InspectionResponse } from '@/types';
 
-const ICON_MAP: Record<string, any> = {
-  Wrench,
-  Sparkles,
-  Truck,
-  ShieldCheck,
-  FileText
-};
-
-export default function InspectVehiclePage() {
-  const params = useParams();
+export default function InspectClient() {
+  const searchParams = useSearchParams();
   const router = useRouter();
-  const vehicleId = params?.id as string;
+  const vehicleId = searchParams?.get('id') || searchParams?.get('vehicle') || searchParams?.get('v') || '';
   const { user } = useAuth();
 
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
@@ -52,10 +44,12 @@ export default function InspectVehiclePage() {
   const loadData = async () => {
     if (!vehicleId) {
       setIsLoading(false);
+      setVehicle(null);
       return;
     }
 
     try {
+      setIsLoading(true);
       // 1. Try local cache first
       let v = dbService.getVehicle(vehicleId) || dbService.getVehicleByQR(vehicleId);
 
@@ -66,6 +60,8 @@ export default function InspectVehiclePage() {
 
       if (v) {
         setVehicle(v);
+      } else {
+        setVehicle(null);
       }
 
       const cats = dbService.getChecklistCategories();
@@ -124,21 +120,27 @@ export default function InspectVehiclePage() {
             <AlertTriangle className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-base font-extrabold text-slate-900">Vehicle Not Found</h2>
+            <h2 className="text-base font-extrabold text-slate-900">
+              {vehicleId ? 'Vehicle Not Found' : 'Select Vehicle to Inspect'}
+            </h2>
             <p className="text-xs text-slate-500 mt-1">
-              The tag <code className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono text-[11px] font-bold">{vehicleId || 'unknown'}</code> does not match an active vehicle.
+              {vehicleId ? (
+                <>The tag <code className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono text-[11px] font-bold">{vehicleId}</code> does not match an active vehicle.</>
+              ) : (
+                'Choose a vehicle from the fleet to begin today’s inspection checklist.'
+              )}
             </p>
           </div>
 
           <div className="border-t border-slate-100 pt-4 text-left">
             <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-2">
-              Select your vehicle manually:
+              Select vehicle:
             </label>
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {allVehicles.map((v) => (
                 <button
                   key={v.id}
-                  onClick={() => router.push(`/inspect/${v.id}`)}
+                  onClick={() => router.push(`/inspect?id=${encodeURIComponent(v.id)}`)}
                   className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:border-sky-500 hover:bg-sky-50 transition-all text-left group"
                 >
                   <div className="flex items-center gap-2.5">
@@ -157,7 +159,7 @@ export default function InspectVehiclePage() {
           <div className="pt-2">
             <Link href="/scan" className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-600 hover:underline">
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Try scanning another QR Code</span>
+              <span>Scan QR Code with Camera</span>
             </Link>
           </div>
         </div>
@@ -301,7 +303,7 @@ export default function InspectVehiclePage() {
               Go to Dashboard
             </Link>
             <Link
-              href={`/vehicles/${vehicle.id}`}
+              href={`/vehicles/detail?id=${encodeURIComponent(vehicle.id)}`}
               className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors text-center"
             >
               View Vehicle Timeline
@@ -657,5 +659,3 @@ export default function InspectVehiclePage() {
     </div>
   );
 }
-
-

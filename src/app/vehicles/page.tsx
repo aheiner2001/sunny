@@ -327,13 +327,13 @@ export default function VehiclesPage() {
               <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
                 <div className="flex items-center gap-2">
                   <Link
-                    href={`/inspect/${vehicle.id}`}
+                    href={`/inspect?id=${encodeURIComponent(vehicle.id)}`}
                     className="flex-1 py-2 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 font-bold text-xs text-center transition-colors"
                   >
                     Inspect
                   </Link>
                   <Link
-                    href={`/vehicles/${vehicle.id}`}
+                    href={`/vehicles/detail?id=${encodeURIComponent(vehicle.id)}`}
                     className="flex-1 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 font-bold text-xs text-center transition-colors flex items-center justify-center gap-1 group"
                   >
                     <span>Timeline</span>

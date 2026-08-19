@@ -324,7 +324,7 @@ export default function EmployeesPage() {
                       Currently Operating:{' '}
                       {currentAssignedVehicle ? (
                         <Link
-                          href={`/vehicles/${currentAssignedVehicle.id}`}
+                          href={`/vehicles/detail?id=${encodeURIComponent(currentAssignedVehicle.id)}`}
                           className="text-sky-600 font-bold hover:underline"
                         >
                           {currentAssignedVehicle.vehicleNumber} ({currentAssignedVehicle.licensePlate})
@@ -411,7 +411,7 @@ export default function EmployeesPage() {
                         <div>
                           <div className="flex items-center gap-2">
                             <Link
-                              href={`/vehicles/${insp.vehicleId}`}
+                              href={`/vehicles/detail?id=${encodeURIComponent(insp.vehicleId)}`}
                               className="text-xs font-bold text-slate-900 hover:text-sky-600"
                             >
                               {insp.vehicleNumber}
@@ -425,7 +425,7 @@ export default function EmployeesPage() {
                       </div>
 
                       <Link
-                        href={`/vehicles/${insp.vehicleId}`}
+                        href={`/vehicles/detail?id=${encodeURIComponent(insp.vehicleId)}`}
                         className="text-xs font-bold text-sky-600 hover:text-sky-700 flex items-center gap-1 self-end sm:self-auto"
                       >
                         <span>View Van</span>

@@ -411,9 +411,14 @@ class DataStore {
 
     // Strip URL prefixes or app schemes if passed from QR / link
     const cleanToken = lower
+      .replace(/^https?:\/\/[^/]+\/inspect\?id=/i, '')
+      .replace(/^https?:\/\/[^/]+\/\?inspect=/i, '')
       .replace(/^https?:\/\/[^/]+\/inspect\//i, '')
+      .replace(/^\/inspect\?id=/i, '')
+      .replace(/^\/\?inspect=/i, '')
       .replace(/^\/inspect\//i, '')
-      .replace(/^sunny:\/\/vehicle\//i, '');
+      .replace(/^sunny:\/\/vehicle\//i, '')
+      .split('&')[0];
 
     return vehicles.find(v => {
       const vid = (v.id || '').toLowerCase();

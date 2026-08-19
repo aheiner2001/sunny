@@ -73,7 +73,11 @@ export default function ScanPage() {
 
   const handleDecoded = (rawCode: string) => {
     let token = rawCode;
-    if (rawCode.includes('/inspect/')) {
+    if (rawCode.includes('/inspect?id=')) {
+      token = rawCode.split('/inspect?id=')[1]?.split('&')[0] || rawCode;
+    } else if (rawCode.includes('?inspect=')) {
+      token = rawCode.split('?inspect=')[1]?.split('&')[0] || rawCode;
+    } else if (rawCode.includes('/inspect/')) {
       token = rawCode.split('/inspect/')[1]?.split('?')[0] || rawCode;
     } else if (rawCode.includes('sunny://vehicle/')) {
       token = rawCode.replace('sunny://vehicle/', '');
@@ -81,7 +85,7 @@ export default function ScanPage() {
 
     const vehicle = dbService.getVehicleByQR(token) || dbService.getVehicle(token);
     if (vehicle) {
-      router.push(`/inspect/${vehicle.id}`);
+      router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}`);
     } else {
       alert(`Vehicle with QR token "${rawCode}" was not found.`);
     }

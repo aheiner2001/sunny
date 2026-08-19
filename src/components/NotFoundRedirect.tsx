@@ -29,15 +29,29 @@ export default function NotFoundRedirect() {
       appPath = '/' + appPath;
     }
 
-    // Known dynamic route prefixes that should be handled client-side
-    const dynamicPrefixes = ['/inspect/', '/vehicles/'];
-    const shouldRedirect = dynamicPrefixes.some(prefix => appPath.startsWith(prefix));
+    // Strip query and hash from path check
+    const pathOnly = appPath.split('?')[0];
 
-    if (shouldRedirect) {
+    // Handle legacy dynamic route prefixes and rewrite to static query routes
+    if (pathOnly.startsWith('/inspect/') && !pathOnly.startsWith('/inspect?')) {
       setIsRedirecting(true);
-      // Ensure we preserve full query strings and hash
+      const id = pathOnly.replace('/inspect/', '');
+      router.replace(`/inspect?id=${encodeURIComponent(id)}`);
+      return;
+    }
+
+    if (pathOnly.startsWith('/vehicles/') && !pathOnly.startsWith('/vehicles/detail')) {
+      setIsRedirecting(true);
+      const id = pathOnly.replace('/vehicles/', '');
+      router.replace(`/vehicles/detail?id=${encodeURIComponent(id)}`);
+      return;
+    }
+
+    if (pathOnly === '/inspect' || pathOnly === '/vehicles/detail') {
+      setIsRedirecting(true);
       const target = appPath + window.location.search + window.location.hash;
       router.replace(target);
+      return;
     }
   }, [router]);
 

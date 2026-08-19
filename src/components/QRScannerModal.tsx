@@ -103,7 +103,11 @@ export function QRScannerModal({
     stopScanner();
     // Parse vehicle from code/url
     let token = scannedText;
-    if (scannedText.includes('/inspect/')) {
+    if (scannedText.includes('/inspect?id=')) {
+      token = scannedText.split('/inspect?id=')[1]?.split('&')[0] || scannedText;
+    } else if (scannedText.includes('?inspect=')) {
+      token = scannedText.split('?inspect=')[1]?.split('&')[0] || scannedText;
+    } else if (scannedText.includes('/inspect/')) {
       token = scannedText.split('/inspect/')[1]?.split('?')[0] || scannedText;
     } else if (scannedText.includes('sunny://vehicle/')) {
       token = scannedText.replace('sunny://vehicle/', '');
@@ -114,7 +118,7 @@ export function QRScannerModal({
       if (onScanSuccess) {
         onScanSuccess(vehicle);
       } else {
-        router.push(`/inspect/${vehicle.id}`);
+        router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}`);
       }
       onClose();
     } else {

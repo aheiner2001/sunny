@@ -20,11 +20,11 @@ export function SPARedirectHandler() {
     // 1. Direct query parameter support for QR codes (e.g. ?inspect=van-1 or ?vehicle=van-1 or ?v=van-1)
     const directInspect = urlParams.get('inspect') || urlParams.get('vehicle') || urlParams.get('v');
     if (directInspect) {
-      router.replace(`/inspect/${encodeURIComponent(directInspect)}`);
+      router.replace(`/inspect?id=${encodeURIComponent(directInspect)}`);
       return;
     }
 
-    // 2. 404.html redirect parameter (?p=/inspect/van-1234)
+    // 2. 404.html redirect parameter (?p=/inspect/van-1234 or ?p=/vehicles/van-1234)
     const pParam = urlParams.get('p');
     const redirectPath = pParam ? decodeURIComponent(pParam) : sessionStorage.getItem('spa-redirect-path');
 
@@ -38,6 +38,18 @@ export function SPARedirectHandler() {
       }
       if (!appPath.startsWith('/')) {
         appPath = '/' + appPath;
+      }
+
+      // Convert legacy dynamic paths into query params
+      if (appPath.startsWith('/inspect/') && !appPath.startsWith('/inspect?')) {
+        const id = appPath.replace('/inspect/', '').split('?')[0];
+        router.replace(`/inspect?id=${encodeURIComponent(id)}`);
+        return;
+      }
+      if (appPath.startsWith('/vehicles/') && !appPath.startsWith('/vehicles/detail')) {
+        const id = appPath.replace('/vehicles/', '').split('?')[0];
+        router.replace(`/vehicles/detail?id=${encodeURIComponent(id)}`);
+        return;
       }
 
       router.replace(appPath);

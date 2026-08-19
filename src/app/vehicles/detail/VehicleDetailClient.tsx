@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { 
   Truck, 
@@ -23,9 +23,9 @@ import { VehicleStatusBadge, InspectionStatusBadge, EquipmentStatusBadge, IssueS
 import { QRCodeDisplay } from '@/components/QRCodeDisplay';
 import { IssueTimeline } from '@/components/IssueTimeline';
 
-export default function VehicleDetailPage() {
-  const params = useParams();
-  const vehicleId = params?.id as string;
+export default function VehicleDetailClient() {
+  const searchParams = useSearchParams();
+  const vehicleId = searchParams?.get('id') || '';
 
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,10 +37,12 @@ export default function VehicleDetailPage() {
   const loadData = async () => {
     if (!vehicleId) {
       setIsLoading(false);
+      setVehicle(null);
       return;
     }
 
     try {
+      setIsLoading(true);
       let v = dbService.getVehicle(vehicleId) || dbService.getVehicleByQR(vehicleId);
       if (!v) {
         v = (await dbService.fetchVehicleAsync(vehicleId)) || undefined;
@@ -51,6 +53,8 @@ export default function VehicleDetailPage() {
         setEquipment(dbService.getEquipmentForVehicle(v.id));
         setInspections(dbService.getInspectionsForVehicle(v.id));
         setIssues(dbService.getIssuesForVehicle(v.id));
+      } else {
+        setVehicle(null);
       }
     } catch (error) {
       console.error('Error loading vehicle details:', error);
@@ -78,10 +82,18 @@ export default function VehicleDetailPage() {
 
   if (!vehicle) {
     return (
-      <div className="max-w-md mx-auto py-12 text-center">
-        <p className="text-slate-500 text-sm mb-4">Vehicle not found.</p>
-        <Link href="/vehicles" className="text-xs font-bold text-sky-600 hover:underline">
-          Return to Vehicles List
+      <div className="max-w-md mx-auto py-12 text-center bg-white rounded-3xl p-8 border border-slate-200 shadow-sm mt-8">
+        <Truck className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+        <h2 className="text-base font-bold text-slate-800 mb-1">Vehicle Not Found</h2>
+        <p className="text-slate-500 text-xs mb-6">
+          {vehicleId ? `No vehicle was found with ID "${vehicleId}".` : 'No vehicle was specified.'}
+        </p>
+        <Link 
+          href="/vehicles" 
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Return to Vehicles List</span>
         </Link>
       </div>
     );
@@ -121,7 +133,7 @@ export default function VehicleDetailPage() {
         </div>
 
         <Link
-          href={`/inspect/${vehicle.id}`}
+          href={`/inspect?id=${encodeURIComponent(vehicle.id)}`}
           className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-sm transition-colors self-start sm:self-auto"
         >
           <ClipboardCheck className="w-4 h-4" />
@@ -203,7 +215,7 @@ export default function VehicleDetailPage() {
           </div>
 
           <div className="relative pl-6 space-y-6 before:content-[''] before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
-            {timelineItems.map((item, idx) => {
+            {timelineItems.map((item) => {
               if (item.type === 'inspection') {
                 const insp = item.data;
                 const isPassed = insp.status === 'passed';
@@ -339,4 +351,3 @@ export default function VehicleDetailPage() {
     </div>
   );
 }
-
