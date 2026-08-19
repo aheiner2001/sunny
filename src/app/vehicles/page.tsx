@@ -36,6 +36,25 @@ export default function VehiclesPage() {
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
 
+  // Common standard equipment options
+  const STANDARD_EQUIPMENT_OPTIONS = [
+    'Air Compressor 200 PSI',
+    'Pressure Washer',
+    'Vacuum Extractor',
+    'Chemical Caddy',
+    'Microfiber Towel Set',
+    'Window Squeegee',
+    'Extension Pole',
+    'Water Tank & Pump'
+  ];
+
+  const [selectedEquipment, setSelectedEquipment] = useState<string[]>([
+    'Air Compressor 200 PSI',
+    'Pressure Washer',
+    'Vacuum Extractor'
+  ]);
+  const [customEquipment, setCustomEquipment] = useState('');
+
   // Form states
   const [formData, setFormData] = useState<{
     vehicleNumber: string;
@@ -43,14 +62,12 @@ export default function VehiclesPage() {
     licensePlate: string;
     qrCodeToken: string;
     status: VehicleStatus;
-    initialEquipmentStr: string;
   }>({
     vehicleNumber: '',
     name: '',
     licensePlate: '',
     qrCodeToken: '',
     status: 'active',
-    initialEquipmentStr: 'Air Compressor 200 PSI, Pressure Washer, Vacuum Extractor'
   });
 
   const loadData = () => {
@@ -82,9 +99,20 @@ export default function VehiclesPage() {
       licensePlate: `${nextNum}U${Math.floor(Math.random() * 9 + 1)}-SUN`,
       qrCodeToken: `van-${nextNum}`,
       status: 'active',
-      initialEquipmentStr: 'Air Compressor 200 PSI, Pressure Washer, Vacuum Extractor'
     });
+    setSelectedEquipment([
+      'Air Compressor 200 PSI',
+      'Pressure Washer',
+      'Vacuum Extractor'
+    ]);
+    setCustomEquipment('');
     setIsAddModalOpen(true);
+  };
+
+  const toggleEquipmentOption = (item: string) => {
+    setSelectedEquipment(prev => 
+      prev.includes(item) ? prev.filter(e => e !== item) : [...prev, item]
+    );
   };
 
   const handleOpenEdit = (v: Vehicle) => {
@@ -95,7 +123,6 @@ export default function VehiclesPage() {
       licensePlate: v.licensePlate,
       qrCodeToken: v.qrCodeToken,
       status: v.status,
-      initialEquipmentStr: ''
     });
     setIsEditModalOpen(true);
   };
@@ -114,10 +141,14 @@ export default function VehiclesPage() {
 
     try {
       setModalLoading(true);
-      const eqNames = formData.initialEquipmentStr
+      
+      // Combine checked equipment + any extra custom comma-separated items
+      const extraItems = customEquipment
         .split(',')
         .map(s => s.trim())
         .filter(s => s.length > 0);
+      
+      const allEquipment = Array.from(new Set([...selectedEquipment, ...extraItems]));
 
       await dbService.createVehicle(
         {
@@ -127,7 +158,7 @@ export default function VehiclesPage() {
           qrCodeToken: formData.qrCodeToken || formData.vehicleNumber.toLowerCase().replace(/\s+/g, '-'),
           status: formData.status
         },
-        eqNames
+        allEquipment
       );
 
       setIsAddModalOpen(false);
@@ -358,12 +389,12 @@ export default function VehiclesPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Vehicle Number
+                    Number / Name
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Van #2"
+                    placeholder="e.g. Van #2 or Rig Alpha"
                     value={formData.vehicleNumber}
                     onChange={(e) => setFormData({ ...formData, vehicleNumber: e.target.value })}
                     className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
@@ -430,18 +461,54 @@ export default function VehiclesPage() {
                 </div>
               </div>
 
+              {/* Quick Select Initial Equipment Checkboxes */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Initial Equipment (Comma-separated)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Air Compressor, Pressure Washer, Vacuum"
-                  value={formData.initialEquipmentStr}
-                  onChange={(e) => setFormData({ ...formData, initialEquipmentStr: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                />
-                <p className="text-[11px] text-slate-400 mt-1">Equipment records will automatically be provisioned and assigned.</p>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Initial Equipment (Select all that apply)
+                  </label>
+                  <span className="text-[10px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-100">
+                    {selectedEquipment.length} Selected
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200/80 max-h-44 overflow-y-auto">
+                  {STANDARD_EQUIPMENT_OPTIONS.map((item) => {
+                    const isChecked = selectedEquipment.includes(item);
+                    return (
+                      <label
+                        key={item}
+                        className={`flex items-center gap-2 p-2 rounded-xl border text-xs font-medium cursor-pointer transition-colors ${
+                          isChecked
+                            ? 'bg-sky-50 border-sky-300 text-sky-900 font-semibold'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/80'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleEquipmentOption(item)}
+                          className="w-3.5 h-3.5 text-sky-600 rounded border-slate-300 focus:ring-sky-500"
+                        />
+                        <span className="truncate">{item}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                {/* Additional Custom Equipment Input */}
+                <div className="mt-2">
+                  <input
+                    type="text"
+                    placeholder="Add other custom gear (comma-separated)..."
+                    value={customEquipment}
+                    onChange={(e) => setCustomEquipment(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Selected equipment records will automatically be provisioned and assigned to this vehicle.
+                </p>
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex gap-2">
@@ -483,7 +550,7 @@ export default function VehiclesPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Vehicle Number
+                    Number / Name
                   </label>
                   <input
                     type="text"

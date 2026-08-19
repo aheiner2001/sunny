@@ -957,6 +957,41 @@ class DataStore {
     return { inspection: newInspection, newIssues };
   }
 
+  public async deleteInspection(inspectionId: string): Promise<void> {
+    if (!this.isClient()) return;
+    this.init();
+
+    const inspections = this.getInspections();
+    const target = inspections.find(i => i.id === inspectionId);
+    const updated = inspections.filter(i => i.id !== inspectionId);
+    localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(updated));
+
+    // If the vehicle's lastInspectionId was this inspection, update the vehicle record
+    if (target) {
+      const vehicle = this.getVehicle(target.vehicleId);
+      if (vehicle && vehicle.lastInspectionId === inspectionId) {
+        const remainingForVehicle = updated.filter(i => i.vehicleId === target.vehicleId);
+        const latest = remainingForVehicle.length > 0 ? remainingForVehicle[0] : null;
+        this.updateVehicle({
+          ...vehicle,
+          lastInspectionId: latest ? latest.id : null,
+          lastInspectionStatus: latest ? latest.status : null,
+          lastInspectionAt: latest ? latest.submittedAt : null
+        });
+      }
+    }
+
+    if (db) {
+      try {
+        await deleteDoc(doc(db, 'inspections', inspectionId));
+      } catch (e) {
+        console.warn('Firestore delete inspection error:', e);
+      }
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
+  }
+
   // ==========================================
   // ISSUES & STATUS LOGS
   // ==========================================

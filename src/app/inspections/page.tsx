@@ -13,7 +13,8 @@ import {
   AlertTriangle, 
   Calendar,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Trash2
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Inspection } from '@/types';
@@ -28,6 +29,13 @@ export default function InspectionsPage() {
 
   const loadData = () => {
     setInspections(dbService.getInspections());
+  };
+
+  const handleDeleteInspection = async (e: React.MouseEvent, inspectionId: string, vehicleNumber: string) => {
+    e.stopPropagation();
+    if (confirm(`Are you sure you want to delete this inspection record for ${vehicleNumber}?`)) {
+      await dbService.deleteInspection(inspectionId);
+    }
   };
 
   useEffect(() => {
@@ -144,69 +152,85 @@ export default function InspectionsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between sm:justify-end gap-4">
-                  <div className="text-left sm:text-right text-xs">
-                    <div className="font-bold text-slate-900">
-                      {new Date(insp.submittedAt).toLocaleDateString()}
-                    </div>
-                    <div className="text-[11px] text-slate-400">
-                      {new Date(insp.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  </div>
-
-                  <div className="p-1 rounded-lg bg-slate-100 text-slate-400">
-                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </div>
-                </div>
-              </div>
-
-              {/* Expanded Checklist Details */}
-              {isExpanded && (
-                <div className="px-5 pb-5 pt-2 border-t border-slate-100 bg-slate-50/50 space-y-4 animate-in fade-in duration-150">
-                  {insp.generalNotes && (
-                    <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs">
-                      <span className="font-bold text-slate-500 uppercase tracking-wider block mb-1">Operator Notes</span>
-                      <p className="text-slate-700 italic">"{insp.generalNotes}"</p>
-                    </div>
-                  )}
-
-                  {insp.responses && insp.responses.length > 0 ? (
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Checklist Responses</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {insp.responses.map((resp, idx) => (
-                          <div
-                            key={idx}
-                            className={`p-2.5 rounded-xl border text-xs flex items-center justify-between ${
-                              resp.isFlagged
-                                ? 'bg-amber-50 border-amber-200 text-amber-900 font-semibold'
-                                : 'bg-white border-slate-200 text-slate-700'
-                            }`}
-                          >
-                            <span className="truncate pr-2">{resp.questionText}</span>
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase shrink-0 ${
-                              resp.isFlagged ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-800'
-                            }`}>
-                              {resp.value}
-                            </span>
-                          </div>
-                        ))}
+                  <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
+                    <div className="text-left sm:text-right text-xs">
+                      <div className="font-bold text-slate-900">
+                        {new Date(insp.submittedAt).toLocaleDateString()}
+                      </div>
+                      <div className="text-[11px] text-slate-400">
+                        {new Date(insp.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </div>
-                  ) : (
-                    <p className="text-xs text-slate-400">Standard checklist verified without anomalies.</p>
-                  )}
 
-                  <div className="flex gap-2 pt-2">
-                    <Link
-                      href={`/vehicles/${insp.vehicleId}`}
-                      className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-100 transition-colors"
+                    <button
+                      onClick={(e) => handleDeleteInspection(e, insp.id, insp.vehicleNumber)}
+                      className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                      title="Delete Inspection"
                     >
-                      View Vehicle History
-                    </Link>
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+
+                    <div className="p-1 rounded-lg bg-slate-100 text-slate-400">
+                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </div>
                   </div>
                 </div>
-              )}
+
+                {/* Expanded Checklist Details */}
+                {isExpanded && (
+                  <div className="px-5 pb-5 pt-2 border-t border-slate-100 bg-slate-50/50 space-y-4 animate-in fade-in duration-150">
+                    {insp.generalNotes && (
+                      <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs">
+                        <span className="font-bold text-slate-500 uppercase tracking-wider block mb-1">Operator Notes</span>
+                        <p className="text-slate-700 italic">"{insp.generalNotes}"</p>
+                      </div>
+                    )}
+
+                    {insp.responses && insp.responses.length > 0 ? (
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Checklist Responses</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {insp.responses.map((resp, idx) => (
+                            <div
+                              key={idx}
+                              className={`p-2.5 rounded-xl border text-xs flex items-center justify-between ${
+                                resp.isFlagged
+                                  ? 'bg-amber-50 border-amber-200 text-amber-900 font-semibold'
+                                  : 'bg-white border-slate-200 text-slate-700'
+                              }`}
+                            >
+                              <span className="truncate pr-2">{resp.questionText}</span>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase shrink-0 ${
+                                resp.isFlagged ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-800'
+                              }`}>
+                                {resp.value}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400">Standard checklist verified without anomalies.</p>
+                    )}
+
+                    <div className="flex items-center justify-between gap-2 pt-2">
+                      <Link
+                        href={`/vehicles/${insp.vehicleId}`}
+                        className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-100 transition-colors"
+                      >
+                        View Vehicle History
+                      </Link>
+
+                      <button
+                        onClick={(e) => handleDeleteInspection(e, insp.id, insp.vehicleNumber)}
+                        className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-xs flex items-center gap-1.5 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete Record</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
             </div>
           );
         })}
