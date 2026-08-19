@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Sunny Fleet - Redirecting...</title>
+  <script>
+    // GitHub Pages SPA redirect trick
+    // When GitHub Pages can't find a static file for a dynamic route (e.g. /sunny/inspect/van-12345),
+    // it serves this 404.html. We store the intended path and redirect to index,
+    // where the app picks it up and does client-side navigation.
+    var pathSegmentsToKeep = 1; // keep '/sunny' (the repo name segment)
+    var l = window.location;
+    var fullPath = l.pathname;
+    
+    // Store the full path for the SPA to pick up
+    sessionStorage.setItem('spa-redirect-path', fullPath + l.search + l.hash);
+    
+    // Redirect to the base path (e.g., /sunny/)
+    var basePath = l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/';
+    l.replace(basePath);
+  </script>
+</head>
+<body>
+  <p>Redirecting...</p>
+</body>
+</html>

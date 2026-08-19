@@ -7,6 +7,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
 import { QRScannerModal } from '@/components/QRScannerModal';
 import { QrCode, X } from 'lucide-react';
+import { SPARedirectHandler } from '@/components/SPARedirectHandler';
 
 export default function RootLayout({
   children,
@@ -24,6 +25,7 @@ export default function RootLayout({
       </head>
       <body className="bg-slate-50 text-slate-900 min-h-screen">
         <AuthProvider>
+          <SPARedirectHandler />
           <div className="flex min-h-screen bg-slate-50">
             {/* Desktop Sidebar */}
             <div className="hidden lg:block">
