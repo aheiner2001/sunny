@@ -15,12 +15,14 @@ export default function NotFoundRedirect() {
   const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     const path = window.location.pathname;
-    const basePath = '/sunny';
+    const isProd = process.env.NODE_ENV === 'production';
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH || (isProd ? '/sunny' : '');
     
     // Strip basePath to get the app-relative path
     let appPath = path;
-    if (appPath.startsWith(basePath)) {
+    if (basePath && appPath.startsWith(basePath)) {
       appPath = appPath.slice(basePath.length);
     }
     if (!appPath.startsWith('/')) {
@@ -33,10 +35,9 @@ export default function NotFoundRedirect() {
 
     if (shouldRedirect) {
       setIsRedirecting(true);
-      // Use router.replace to do client-side navigation to the dynamic route.
-      // The page's client component (InspectClient, VehicleDetailClient) will
-      // load the vehicle data from the local store.
-      router.replace(appPath);
+      // Ensure we preserve full query strings and hash
+      const target = appPath + window.location.search + window.location.hash;
+      router.replace(target);
     }
   }, [router]);
 
