@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -15,4 +15,36 @@ const firebaseConfig = {
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+/**
+ * Ensures Firebase Auth is resolved before any Firestore operation.
+ * On first call: waits for onAuthStateChanged, auto-signs-in anonymously if needed.
+ * On subsequent calls: returns the cached promise immediately.
+ */
+let _authReadyPromise: Promise<FirebaseUser | null> | null = null;
+
+export function ensureAuth(): Promise<FirebaseUser | null> {
+  if (typeof window === 'undefined') return Promise.resolve(null);
+
+  if (!_authReadyPromise) {
+    _authReadyPromise = new Promise((resolve) => {
+      const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        unsubscribe();
+        if (user) {
+          resolve(user);
+        } else {
+          try {
+            const credential = await signInAnonymously(auth);
+            resolve(credential.user);
+          } catch (err) {
+            console.warn('Firebase anonymous sign-in failed:', err);
+            resolve(null);
+          }
+        }
+      });
+    });
+  }
+  return _authReadyPromise;
+}
+
 export default app;

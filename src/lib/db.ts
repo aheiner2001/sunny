@@ -25,6 +25,7 @@ import {
   INITIAL_USERS 
 } from './mockData';
 import { db } from './firebase';
+import { ensureAuth } from './firebase';
 import { 
   collection, 
   doc, 
@@ -102,9 +103,12 @@ class DataStore {
   }
 
   // Set up real-time bidirectional listeners with Cloud Firestore
-  public setupFirestoreListeners() {
+  public async setupFirestoreListeners() {
     if (!this.isClient() || this.listening || !db) return;
     this.listening = true;
+
+    // Wait for Firebase Auth to resolve before attaching listeners
+    await ensureAuth();
 
     try {
       // Listen to Users collection
@@ -192,6 +196,9 @@ class DataStore {
   // Push all fleet data directly to Cloud Firestore
   public async syncAllToFirestore(): Promise<{ success: boolean; message: string }> {
     if (!db) return { success: false, message: 'Firestore is not initialized.' };
+
+    // Ensure Firebase Auth is resolved before writing
+    await ensureAuth();
 
     try {
       const batch = writeBatch(db);
@@ -442,13 +449,22 @@ class DataStore {
     const cached = this.getVehicle(idOrToken);
     if (cached) return cached;
 
-    // 2. Fetch directly from Cloud Firestore
+    // 2. Fetch directly from Cloud Firestore with auth guarantee & 5s timeout
     if (db) {
       try {
+        await Promise.race([
+          ensureAuth(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Auth resolution timeout')), 5000))
+        ]);
+
         const cleanId = idOrToken.trim();
         
         // Direct doc lookup by ID
-        const docSnap = await getDoc(doc(db, 'vehicles', cleanId));
+        const docSnap = await Promise.race([
+          getDoc(doc(db, 'vehicles', cleanId)),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Firestore getDoc timeout')), 5000))
+        ]);
+
         if (docSnap.exists()) {
           const v = docSnap.data() as Vehicle;
           // Cache it in localStorage
@@ -461,7 +477,11 @@ class DataStore {
         }
 
         // Also query collection in case idOrToken matches qrCodeToken or vehicleNumber
-        const allDocs = await getDocs(collection(db, 'vehicles'));
+        const allDocs = await Promise.race([
+          getDocs(collection(db, 'vehicles')),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Firestore getDocs timeout')), 5000))
+        ]);
+
         if (!allDocs.empty) {
           const fetchedList: Vehicle[] = [];
           allDocs.forEach(d => fetchedList.push(d.data() as Vehicle));
@@ -470,7 +490,7 @@ class DataStore {
           return this.getVehicle(idOrToken) || null;
         }
       } catch (err) {
-        console.warn('Direct Firestore vehicle query failed:', err);
+        console.warn('Direct Firestore vehicle query failed or timed out:', err);
       }
     }
 

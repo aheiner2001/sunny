@@ -50,44 +50,52 @@ export default function InspectVehiclePage() {
   const [submittedInspection, setSubmittedInspection] = useState<any | null>(null);
 
   const loadData = async () => {
-    if (!vehicleId) return;
-
-    // 1. Try local cache first
-    let v = dbService.getVehicle(vehicleId) || dbService.getVehicleByQR(vehicleId);
-
-    // 2. If not found locally, fetch directly from Cloud Firestore
-    if (!v) {
-      v = (await dbService.fetchVehicleAsync(vehicleId)) || undefined;
+    if (!vehicleId) {
+      setIsLoading(false);
+      return;
     }
 
-    if (v) {
-      setVehicle(v);
-    }
-    setIsLoading(false);
+    try {
+      // 1. Try local cache first
+      let v = dbService.getVehicle(vehicleId) || dbService.getVehicleByQR(vehicleId);
 
-    const cats = dbService.getChecklistCategories();
-    const qList = dbService.getChecklistQuestions();
-    setCategories(cats);
-    setQuestions(qList);
+      // 2. If not found locally, fetch directly from Cloud Firestore
+      if (!v) {
+        v = (await dbService.fetchVehicleAsync(vehicleId)) || undefined;
+      }
 
-    if (cats.length > 0 && !cats.some(c => c.id === activeTab)) {
-      setActiveTab(cats[0].id);
-    }
+      if (v) {
+        setVehicle(v);
+      }
 
-    // Initialize default responses
-    setResponses(prev => {
-      const initial: Record<string, { value: string; isFlagged: boolean; notes?: string }> = { ...prev };
-      qList.forEach(q => {
-        if (!initial[q.id]) {
-          if (q.type === 'pass_fail') initial[q.id] = { value: 'pass', isFlagged: false };
-          else if (q.type === 'yes_no') initial[q.id] = { value: 'yes', isFlagged: false };
-          else if (q.type === 'equipment_status') initial[q.id] = { value: 'working', isFlagged: false };
-          else if (q.type === 'text') initial[q.id] = { value: '', isFlagged: false, notes: '' };
-          else initial[q.id] = { value: 'pass', isFlagged: false };
-        }
+      const cats = dbService.getChecklistCategories();
+      const qList = dbService.getChecklistQuestions();
+      setCategories(cats);
+      setQuestions(qList);
+
+      if (cats.length > 0 && !cats.some(c => c.id === activeTab)) {
+        setActiveTab(cats[0].id);
+      }
+
+      // Initialize default responses
+      setResponses(prev => {
+        const initial: Record<string, { value: string; isFlagged: boolean; notes?: string }> = { ...prev };
+        qList.forEach(q => {
+          if (!initial[q.id]) {
+            if (q.type === 'pass_fail') initial[q.id] = { value: 'pass', isFlagged: false };
+            else if (q.type === 'yes_no') initial[q.id] = { value: 'yes', isFlagged: false };
+            else if (q.type === 'equipment_status') initial[q.id] = { value: 'working', isFlagged: false };
+            else if (q.type === 'text') initial[q.id] = { value: '', isFlagged: false, notes: '' };
+            else initial[q.id] = { value: 'pass', isFlagged: false };
+          }
+        });
+        return initial;
       });
-      return initial;
-    });
+    } catch (error) {
+      console.error('Error loading inspection data:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {

@@ -35,20 +35,28 @@ export default function VehicleDetailPage() {
   const [activeTab, setActiveTab] = useState<'timeline' | 'equipment' | 'qr' | 'issues'>('timeline');
 
   const loadData = async () => {
-    if (!vehicleId) return;
-
-    let v = dbService.getVehicle(vehicleId) || dbService.getVehicleByQR(vehicleId);
-    if (!v) {
-      v = (await dbService.fetchVehicleAsync(vehicleId)) || undefined;
+    if (!vehicleId) {
+      setIsLoading(false);
+      return;
     }
 
-    if (v) {
-      setVehicle(v);
-      setEquipment(dbService.getEquipmentForVehicle(v.id));
-      setInspections(dbService.getInspectionsForVehicle(v.id));
-      setIssues(dbService.getIssuesForVehicle(v.id));
+    try {
+      let v = dbService.getVehicle(vehicleId) || dbService.getVehicleByQR(vehicleId);
+      if (!v) {
+        v = (await dbService.fetchVehicleAsync(vehicleId)) || undefined;
+      }
+
+      if (v) {
+        setVehicle(v);
+        setEquipment(dbService.getEquipmentForVehicle(v.id));
+        setInspections(dbService.getInspectionsForVehicle(v.id));
+        setIssues(dbService.getIssuesForVehicle(v.id));
+      }
+    } catch (error) {
+      console.error('Error loading vehicle details:', error);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   useEffect(() => {

@@ -150,7 +150,8 @@ The application connects to Firebase project `sunny-cf80c` using Firebase Web SD
    - "Today's Activity" chronological feed.
    - "Inspection Calendar" mini-widget with date indicator dots (green for inspections, amber for issues, blue for today).
    - "Open Issues" table widget with colored status badges (`OPEN`, `IN REPAIR`, `FIXED`).
-   - "Vehicles in Use" table widget showing Vehicle, Current User, Start Time, Last Inspection status, and In Use status.
+   - "Vehicles in Use" table widget showing Vehicle, Current User, Start Time, Last 
+   Inspection status, and In Use status.
    - "Recent Inspections" card.
 2. **Vehicle Directory & Detail (`/vehicles`, `/vehicles/[id]`)**:
    - QR Code Generator for each vehicle with instant printable view and download option.
