@@ -17,18 +17,20 @@ import {
   HelpCircle,
   Clock,
   RotateCcw,
-  Check
+  Check,
+  FileText
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
-import { Vehicle, ChecklistQuestion, ChecklistCategory, InspectionResponse } from '@/types';
+import { Vehicle, ChecklistQuestion, ChecklistCategoryConfig, InspectionResponse } from '@/types';
 
-const CATEGORIES: { id: ChecklistCategory; title: string; subtitle: string; icon: any }[] = [
-  { id: 'equipment', title: 'Equipment', subtitle: 'Compressor, pressure washer, vacuum, tools', icon: Wrench },
-  { id: 'supplies', title: 'Supplies', subtitle: 'Towels, chemicals, coatings, PPE', icon: Sparkles },
-  { id: 'vehicle_condition', title: 'Vehicle Condition', subtitle: 'Dashboard lights, wrap, tire pressure, fluids', icon: Truck },
-  { id: 'previous_user_condition', title: 'Previous User Check', subtitle: 'Cab cleanliness, gear stowed, trash removed', icon: ShieldCheck },
-];
+const ICON_MAP: Record<string, any> = {
+  Wrench,
+  Sparkles,
+  Truck,
+  ShieldCheck,
+  FileText
+};
 
 export default function InspectVehiclePage() {
   const params = useParams();
@@ -37,31 +39,50 @@ export default function InspectVehiclePage() {
   const { user } = useAuth();
 
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
+  const [categories, setCategories] = useState<ChecklistCategoryConfig[]>([]);
   const [questions, setQuestions] = useState<ChecklistQuestion[]>([]);
-  const [activeTab, setActiveTab] = useState<ChecklistCategory>('equipment');
+  const [activeTab, setActiveTab] = useState<string>('equipment');
   const [responses, setResponses] = useState<Record<string, { value: string; isFlagged: boolean; notes?: string }>>({});
   const [flagIssues, setFlagIssues] = useState<Record<string, { title: string; description: string }>>({});
   const [generalNotes, setGeneralNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedInspection, setSubmittedInspection] = useState<any | null>(null);
 
-  useEffect(() => {
+  const loadData = () => {
     if (!vehicleId) return;
     const v = dbService.getVehicle(vehicleId) || dbService.getVehicleByQR(vehicleId);
     if (v) {
       setVehicle(v);
     }
+    const cats = dbService.getChecklistCategories();
     const qList = dbService.getChecklistQuestions();
+    setCategories(cats);
     setQuestions(qList);
 
+    if (cats.length > 0 && !cats.some(c => c.id === activeTab)) {
+      setActiveTab(cats[0].id);
+    }
+
     // Initialize default responses
-    const initial: Record<string, { value: string; isFlagged: boolean; notes?: string }> = {};
-    qList.forEach(q => {
-      if (q.type === 'pass_fail') initial[q.id] = { value: 'pass', isFlagged: false };
-      else if (q.type === 'yes_no') initial[q.id] = { value: 'yes', isFlagged: false };
-      else if (q.type === 'equipment_status') initial[q.id] = { value: 'working', isFlagged: false };
+    setResponses(prev => {
+      const initial: Record<string, { value: string; isFlagged: boolean; notes?: string }> = { ...prev };
+      qList.forEach(q => {
+        if (!initial[q.id]) {
+          if (q.type === 'pass_fail') initial[q.id] = { value: 'pass', isFlagged: false };
+          else if (q.type === 'yes_no') initial[q.id] = { value: 'yes', isFlagged: false };
+          else if (q.type === 'equipment_status') initial[q.id] = { value: 'working', isFlagged: false };
+          else if (q.type === 'text') initial[q.id] = { value: '', isFlagged: false, notes: '' };
+          else initial[q.id] = { value: 'pass', isFlagged: false };
+        }
+      });
+      return initial;
     });
-    setResponses(initial);
+  };
+
+  useEffect(() => {
+    loadData();
+    window.addEventListener('sunny_db_update', loadData);
+    return () => window.removeEventListener('sunny_db_update', loadData);
   }, [vehicleId]);
 
   if (!vehicle) {
@@ -78,10 +99,10 @@ export default function InspectVehiclePage() {
   }
 
   // Handle Response Click
-  const handleSetResponse = (q: ChecklistQuestion, value: string, isFlagged: boolean) => {
+  const handleSetResponse = (q: ChecklistQuestion, value: string, isFlagged: boolean, notes?: string) => {
     setResponses(prev => ({
       ...prev,
-      [q.id]: { value, isFlagged, notes: prev[q.id]?.notes || '' }
+      [q.id]: { value, isFlagged, notes: notes !== undefined ? notes : prev[q.id]?.notes || '' }
     }));
 
     if (isFlagged && !flagIssues[q.id]) {
@@ -118,7 +139,7 @@ export default function InspectVehiclePage() {
 
     // Check if any flagged item lacks description
     for (const [qId, issue] of Object.entries(flagIssues)) {
-      if (!issue.description.trim()) {
+      if (!issue.description || !issue.description.trim()) {
         alert('Please provide a problem description for all flagged items before submitting.');
         return;
       }
@@ -133,10 +154,11 @@ export default function InspectVehiclePage() {
           questionId: q.id,
           questionText: q.text,
           category: q.category,
-          value: resp?.value || 'pass',
-          isFlagged: !!resp?.isFlagged,
-          notes: resp?.notes,
-          equipmentName: q.equipmentName
+          value: resp?.value || (q.type === 'text' ? '' : 'pass'),
+          isFlagged: Boolean(resp?.isFlagged),
+          notes: resp?.notes || '',
+          equipmentId: q.equipmentId || null as any,
+          equipmentName: q.equipmentName || null as any
         };
       });
 
@@ -144,9 +166,9 @@ export default function InspectVehiclePage() {
         const question = questions.find(q => q.id === qId);
         return {
           equipmentId: question?.equipmentId || null,
-          equipmentName: question?.equipmentName || issueData.title,
-          title: issueData.title,
-          description: issueData.description
+          equipmentName: question?.equipmentName || issueData.title || 'Equipment Item',
+          title: issueData.title || 'Flagged Issue',
+          description: issueData.description || ''
         };
       });
 
@@ -157,7 +179,7 @@ export default function InspectVehiclePage() {
         userEmail: user?.email || 'employee@sunnyfleet.com',
         responses: inspectionResponses,
         flaggedIssues: flaggedList,
-        generalNotes
+        generalNotes: generalNotes.trim() || null
       });
 
       setSubmittedInspection(result);
@@ -225,6 +247,7 @@ export default function InspectVehiclePage() {
 
   // Active Category Questions
   const categoryQuestions = questions.filter(q => q.category === activeTab);
+  const activeCategoryObj = categories.find(c => c.id === activeTab);
 
   return (
     <div className="max-w-2xl mx-auto space-y-5 pb-12">
@@ -277,7 +300,7 @@ export default function InspectVehiclePage() {
 
       {/* Category Tabs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {CATEGORIES.map((cat, idx) => {
+        {categories.map((cat, idx) => {
           const isActive = activeTab === cat.id;
           const catQuestions = questions.filter(q => q.category === cat.id);
           const hasFlags = catQuestions.some(q => responses[q.id]?.isFlagged);
@@ -310,10 +333,10 @@ export default function InspectVehiclePage() {
       <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-6">
         <div className="border-b border-slate-100 pb-3">
           <h2 className="text-base font-bold text-slate-900">
-            {CATEGORIES.find(c => c.id === activeTab)?.title} Checklist
+            {activeCategoryObj?.title || 'Inspection'} Checklist
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            {CATEGORIES.find(c => c.id === activeTab)?.subtitle}
+            {activeCategoryObj?.subtitle || 'Complete all items before vehicle checkout.'}
           </p>
         </div>
 
@@ -321,7 +344,7 @@ export default function InspectVehiclePage() {
         <div className="space-y-4">
           {categoryQuestions.map((q) => {
             const resp = responses[q.id];
-            const isFlagged = resp?.isFlagged;
+            const isFlagged = Boolean(resp?.isFlagged);
             const currentIssue = flagIssues[q.id];
 
             return (
@@ -423,8 +446,37 @@ export default function InspectVehiclePage() {
                         </button>
                       </>
                     )}
+
+                    {q.type === 'text' && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSetResponse(q, resp?.value || '', !isFlagged)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                            isFlagged
+                              ? 'bg-amber-500 text-white'
+                              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          {isFlagged ? '⚠️ Flagged' : 'Flag Concern'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
+
+                {/* Text Note Field for 'text' question type */}
+                {q.type === 'text' && (
+                  <div className="mt-2">
+                    <input
+                      type="text"
+                      placeholder="Type note or response..."
+                      value={resp?.value || ''}
+                      onChange={(e) => handleSetResponse(q, e.target.value, isFlagged)}
+                      className="w-full px-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    />
+                  </div>
+                )}
 
                 {/* Inline Flag Description Drawer */}
                 {isFlagged && (
@@ -452,6 +504,12 @@ export default function InspectVehiclePage() {
               </div>
             );
           })}
+
+          {categoryQuestions.length === 0 && (
+            <div className="text-center py-6 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-400">
+              No questions configured in this category yet.
+            </div>
+          )}
         </div>
 
         {/* Tab Navigation Footer */}
@@ -459,21 +517,21 @@ export default function InspectVehiclePage() {
           <button
             type="button"
             onClick={() => {
-              const curIdx = CATEGORIES.findIndex(c => c.id === activeTab);
-              if (curIdx > 0) setActiveTab(CATEGORIES[curIdx - 1].id);
+              const curIdx = categories.findIndex(c => c.id === activeTab);
+              if (curIdx > 0) setActiveTab(categories[curIdx - 1].id);
             }}
-            disabled={activeTab === CATEGORIES[0].id}
+            disabled={categories.length === 0 || activeTab === categories[0]?.id}
             className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-30"
           >
             Previous Section
           </button>
 
-          {activeTab !== CATEGORIES[CATEGORIES.length - 1].id ? (
+          {categories.length > 0 && activeTab !== categories[categories.length - 1]?.id ? (
             <button
               type="button"
               onClick={() => {
-                const curIdx = CATEGORIES.findIndex(c => c.id === activeTab);
-                if (curIdx < CATEGORIES.length - 1) setActiveTab(CATEGORIES[curIdx + 1].id);
+                const curIdx = categories.findIndex(c => c.id === activeTab);
+                if (curIdx < categories.length - 1) setActiveTab(categories[curIdx + 1].id);
               }}
               className="px-5 py-2.5 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 shadow-sm flex items-center gap-1.5"
             >
@@ -513,4 +571,5 @@ export default function InspectVehiclePage() {
     </div>
   );
 }
+
 

@@ -4,15 +4,21 @@ import {
   Vehicle, 
   Equipment, 
   ChecklistQuestion, 
+  ChecklistCategoryConfig,
+  ChecklistConfig,
   Inspection, 
   Issue, 
   IssueStatusLog,
   InspectionResponse,
-  IssueStatus
+  IssueStatus,
+  User,
+  UserRole,
+  EquipmentCategory
 } from '@/types';
 import { 
   INITIAL_VEHICLES, 
   INITIAL_EQUIPMENT, 
+  INITIAL_CATEGORIES,
   INITIAL_CHECKLIST_QUESTIONS, 
   INITIAL_INSPECTIONS, 
   INITIAL_ISSUES, 
@@ -24,6 +30,7 @@ import {
   doc, 
   setDoc, 
   deleteDoc,
+  getDoc,
   getDocs, 
   updateDoc, 
   onSnapshot,
@@ -31,14 +38,50 @@ import {
 } from 'firebase/firestore';
 
 const STORAGE_KEYS = {
+  USERS: 'sunny_users',
   VEHICLES: 'sunny_vehicles',
   EQUIPMENT: 'sunny_equipment',
-  QUESTIONS: 'sunny_questions',
+  CATEGORIES: 'sunny_checklist_categories',
+  QUESTIONS: 'sunny_checklist_questions',
+  CHECKLIST_CONFIG: 'sunny_checklist_config',
   INSPECTIONS: 'sunny_inspections',
   ISSUES: 'sunny_issues',
-  SEEDED: 'sunny_seeded_v1',
+  SEEDED: 'sunny_seeded_v2',
   FIREBASE_SYNCED: 'sunny_firebase_synced',
 };
+
+const DEFAULT_CHECKLIST_ID = 'standard-detailing-checklist';
+
+/**
+ * Recursively sanitizes data before writing to Cloud Firestore.
+ * Converts any `undefined` values to `null` so Firestore does not throw
+ * "Unsupported field value: undefined" errors.
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === undefined) {
+    return null as any;
+  }
+  if (data === null || typeof data !== 'object') {
+    return data;
+  }
+  if (data instanceof Date) {
+    return data.toISOString() as any;
+  }
+  if (Array.isArray(data)) {
+    return data.map(item => sanitizeForFirestore(item)) as any;
+  }
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) {
+      result[key] = null;
+    } else if (value !== null && typeof value === 'object') {
+      result[key] = sanitizeForFirestore(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result as T;
+}
 
 class DataStore {
   private initialized = false;
@@ -64,11 +107,23 @@ class DataStore {
     this.listening = true;
 
     try {
+      // Listen to Users collection
+      onSnapshot(collection(db, 'users'), (snapshot) => {
+        if (!snapshot.empty) {
+          const list: User[] = [];
+          snapshot.forEach((d) => list.push(d.data() as User));
+          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(list));
+          window.dispatchEvent(new Event('sunny_db_update'));
+        }
+      }, (err) => {
+        console.warn('Firestore users listener (using local cache):', err.message);
+      });
+
       // Listen to Vehicles collection
       onSnapshot(collection(db, 'vehicles'), (snapshot) => {
         if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
           const list: Vehicle[] = [];
-          snapshot.forEach((doc) => list.push(doc.data() as Vehicle));
+          snapshot.forEach((d) => list.push(d.data() as Vehicle));
           localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(list));
           window.dispatchEvent(new Event('sunny_db_update'));
         }
@@ -80,7 +135,7 @@ class DataStore {
       onSnapshot(collection(db, 'issues'), (snapshot) => {
         if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
           const list: Issue[] = [];
-          snapshot.forEach((doc) => list.push(doc.data() as Issue));
+          snapshot.forEach((d) => list.push(d.data() as Issue));
           localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(list));
           window.dispatchEvent(new Event('sunny_db_update'));
         }
@@ -92,7 +147,7 @@ class DataStore {
       onSnapshot(collection(db, 'inspections'), (snapshot) => {
         if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
           const list: Inspection[] = [];
-          snapshot.forEach((doc) => list.push(doc.data() as Inspection));
+          snapshot.forEach((d) => list.push(d.data() as Inspection));
           localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(list));
           window.dispatchEvent(new Event('sunny_db_update'));
         }
@@ -104,12 +159,29 @@ class DataStore {
       onSnapshot(collection(db, 'equipment'), (snapshot) => {
         if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
           const list: Equipment[] = [];
-          snapshot.forEach((doc) => list.push(doc.data() as Equipment));
+          snapshot.forEach((d) => list.push(d.data() as Equipment));
           localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
           window.dispatchEvent(new Event('sunny_db_update'));
         }
       }, (err) => {
         console.warn('Firestore equipment listener (using local cache):', err.message);
+      });
+
+      // Listen to Checklist doc: checklists/standard-detailing-checklist
+      onSnapshot(doc(db, 'checklists', DEFAULT_CHECKLIST_ID), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data() as ChecklistConfig;
+          if (data.questions && data.questions.length > 0) {
+            localStorage.setItem(STORAGE_KEYS.QUESTIONS, JSON.stringify(data.questions));
+          }
+          if (data.categories && data.categories.length > 0) {
+            localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(data.categories));
+          }
+          localStorage.setItem(STORAGE_KEYS.CHECKLIST_CONFIG, JSON.stringify(data));
+          window.dispatchEvent(new Event('sunny_db_update'));
+        }
+      }, (err) => {
+        console.warn('Firestore checklist listener (using local cache):', err.message);
       });
 
     } catch (e: any) {
@@ -124,41 +196,40 @@ class DataStore {
     try {
       const batch = writeBatch(db);
 
+      // Seed Users
+      this.getUsers().forEach((u) => {
+        const ref = doc(db, 'users', u.id);
+        batch.set(ref, sanitizeForFirestore(u));
+      });
+
       // Seed Vehicles
       this.getVehicles().forEach((v) => {
         const ref = doc(db, 'vehicles', v.id);
-        batch.set(ref, v);
+        batch.set(ref, sanitizeForFirestore(v));
       });
 
       // Seed Equipment
       this.getEquipment().forEach((eq) => {
         const ref = doc(db, 'equipment', eq.id);
-        batch.set(ref, eq);
+        batch.set(ref, sanitizeForFirestore(eq));
       });
 
       // Seed Inspections
       this.getInspections().forEach((insp) => {
         const ref = doc(db, 'inspections', insp.id);
-        batch.set(ref, insp);
+        batch.set(ref, sanitizeForFirestore(insp));
       });
 
       // Seed Issues
       this.getIssues().forEach((iss) => {
         const ref = doc(db, 'issues', iss.id);
-        batch.set(ref, iss);
+        batch.set(ref, sanitizeForFirestore(iss));
       });
 
-      // Seed Checklist Questions
-      this.getChecklistQuestions().forEach((q) => {
-        const ref = doc(db, 'checklist_questions', q.id);
-        batch.set(ref, q);
-      });
-
-      // Seed Users
-      INITIAL_USERS.forEach((u) => {
-        const ref = doc(db, 'users', u.id);
-        batch.set(ref, u);
-      });
+      // Seed Standard Checklist Document
+      const checklistConfig = this.getChecklistConfig();
+      const checklistRef = doc(db, 'checklists', DEFAULT_CHECKLIST_ID);
+      batch.set(checklistRef, sanitizeForFirestore(checklistConfig));
 
       await batch.commit();
       localStorage.setItem(STORAGE_KEYS.FIREBASE_SYNCED, 'true');
@@ -172,34 +243,31 @@ class DataStore {
     }
   }
 
-  // Clean Slate default reset: empty collections, default checklist questions initialized
+  // Clean Slate default reset: 1 demo vehicle, 1 demo equipment, 1 demo employee, 1 demo manager
   public resetToDefaults() {
     if (!this.isClient()) return;
-    localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.QUESTIONS, JSON.stringify(INITIAL_CHECKLIST_QUESTIONS));
-    localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.SEEDED, 'true');
-    window.dispatchEvent(new Event('sunny_db_update'));
-  }
-
-  // Populates full mock demo dataset for testing & demonstrations
-  public async loadStarterDemoData(): Promise<void> {
-    if (!this.isClient()) return;
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
     localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(INITIAL_VEHICLES));
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(INITIAL_EQUIPMENT));
+    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(INITIAL_CATEGORIES));
     localStorage.setItem(STORAGE_KEYS.QUESTIONS, JSON.stringify(INITIAL_CHECKLIST_QUESTIONS));
+    
+    const initialConfig: ChecklistConfig = {
+      id: DEFAULT_CHECKLIST_ID,
+      name: 'Standard Detailing Checklist',
+      categories: INITIAL_CATEGORIES,
+      questions: INITIAL_CHECKLIST_QUESTIONS,
+      updatedAt: new Date().toISOString()
+    };
+    localStorage.setItem(STORAGE_KEYS.CHECKLIST_CONFIG, JSON.stringify(initialConfig));
+
     localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(INITIAL_INSPECTIONS));
     localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(INITIAL_ISSUES));
     localStorage.setItem(STORAGE_KEYS.SEEDED, 'true');
 
+    // Also sync to Firestore if connected
     if (db) {
-      try {
-        await this.syncAllToFirestore();
-      } catch (e) {
-        console.warn('Could not sync starter demo data to Firestore:', e);
-      }
+      this.syncAllToFirestore().catch((e) => console.warn('Sync to Firestore on reset fallback:', e));
     }
 
     window.dispatchEvent(new Event('sunny_db_update'));
@@ -216,7 +284,110 @@ class DataStore {
     window.dispatchEvent(new Event('sunny_db_update'));
   }
 
-  // Vehicles
+  // ==========================================
+  // USERS / EMPLOYEES (Manager CRUD)
+  // ==========================================
+  public getUsers(): User[] {
+    if (!this.isClient()) return INITIAL_USERS;
+    this.init();
+    const data = localStorage.getItem(STORAGE_KEYS.USERS);
+    return data ? JSON.parse(data) : INITIAL_USERS;
+  }
+
+  public getUser(id: string): User | undefined {
+    return this.getUsers().find(u => u.id === id);
+  }
+
+  public async createUser(userData: {
+    name: string;
+    email: string;
+    role: UserRole;
+    status?: 'active' | 'inactive';
+    avatarUrl?: string;
+  }): Promise<User> {
+    if (!this.isClient()) throw new Error('Client only');
+    this.init();
+
+    const timestamp = Date.now();
+    const newUser: User = {
+      id: `user-${timestamp}`,
+      name: userData.name.trim(),
+      email: userData.email.trim().toLowerCase(),
+      role: userData.role,
+      status: userData.status || 'active',
+      avatarUrl: userData.avatarUrl?.trim() || `https://images.unsplash.com/photo-${1534528741775 + (timestamp % 1000)}?w=150&auto=format&fit=crop&q=80`
+    };
+
+    const currentUsers = this.getUsers();
+    const updatedUsers = [...currentUsers, newUser];
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(updatedUsers));
+
+    if (db) {
+      try {
+        await setDoc(doc(db, 'users', newUser.id), sanitizeForFirestore(newUser));
+      } catch (e) {
+        console.warn('Firestore createUser write error:', e);
+      }
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return newUser;
+  }
+
+  public async updateUser(updated: User): Promise<User> {
+    if (!this.isClient()) throw new Error('Client only');
+    this.init();
+
+    const currentUsers = this.getUsers();
+    const updatedUsers = currentUsers.map(u => u.id === updated.id ? { ...u, ...updated } : u);
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(updatedUsers));
+
+    if (db) {
+      try {
+        await setDoc(doc(db, 'users', updated.id), sanitizeForFirestore(updated), { merge: true });
+      } catch (e) {
+        console.warn('Firestore updateUser write error:', e);
+      }
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return updated;
+  }
+
+  public async deleteUser(userId: string): Promise<void> {
+    if (!this.isClient()) return;
+    this.init();
+
+    const currentUsers = this.getUsers().filter(u => u.id !== userId);
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(currentUsers));
+
+    // Clear user from any currently assigned vehicle
+    const vehicles = this.getVehicles();
+    vehicles.forEach(v => {
+      if (v.currentUserId === userId) {
+        this.updateVehicle({
+          ...v,
+          currentUserId: null,
+          currentUserName: null,
+          currentUserStartTime: null
+        });
+      }
+    });
+
+    if (db) {
+      try {
+        await deleteDoc(doc(db, 'users', userId));
+      } catch (e) {
+        console.warn('Firestore deleteUser error:', e);
+      }
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
+  }
+
+  // ==========================================
+  // VEHICLES (Manager CRUD)
+  // ==========================================
   public getVehicles(): Vehicle[] {
     if (!this.isClient()) return [];
     this.init();
@@ -268,7 +439,7 @@ class DataStore {
 
     const timestamp = Date.now();
     const vehicleId = vehicleData.id || `van-${timestamp}`;
-    const qrCodeToken = vehicleData.qrCodeToken || `token-${timestamp}`;
+    const qrCodeToken = vehicleData.qrCodeToken || vehicleId;
     const nowIso = new Date().toISOString();
 
     const newVehicle: Vehicle = {
@@ -323,9 +494,9 @@ class DataStore {
     // Sync to Firestore
     if (db) {
       try {
-        await setDoc(doc(db, 'vehicles', newVehicle.id), newVehicle);
+        await setDoc(doc(db, 'vehicles', newVehicle.id), sanitizeForFirestore(newVehicle));
         for (const eq of newEquipmentList) {
-          await setDoc(doc(db, 'equipment', eq.id), eq);
+          await setDoc(doc(db, 'equipment', eq.id), sanitizeForFirestore(eq));
         }
       } catch (e) {
         console.warn('Firestore create vehicle write fallback to local cache:', e);
@@ -336,20 +507,32 @@ class DataStore {
     return newVehicle;
   }
 
-  public async updateVehicle(updated: Vehicle) {
-    if (!this.isClient()) return;
-    const vehicles = this.getVehicles().map(v => v.id === updated.id ? updated : v);
+  public async updateVehicle(updated: Vehicle): Promise<Vehicle> {
+    if (!this.isClient()) return updated;
+    const sanitized = sanitizeForFirestore(updated);
+    const vehicles = this.getVehicles().map(v => v.id === updated.id ? sanitized : v);
     localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(vehicles));
+
+    // Also update vehicleNumber on any assigned equipment
+    const equipment = this.getEquipment().map(eq => {
+      if (eq.vehicleId === updated.id && eq.vehicleNumber !== updated.vehicleNumber) {
+        return { ...eq, vehicleNumber: updated.vehicleNumber };
+      }
+      return eq;
+    });
+    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(equipment));
+
     window.dispatchEvent(new Event('sunny_db_update'));
 
     // Sync to Firestore
     try {
       if (db) {
-        await setDoc(doc(db, 'vehicles', updated.id), updated, { merge: true });
+        await setDoc(doc(db, 'vehicles', updated.id), sanitized, { merge: true });
       }
     } catch (e) {
       console.warn('Firestore write vehicle fallback to local cache:', e);
     }
+    return sanitized;
   }
 
   public async deleteVehicle(vehicleId: string): Promise<void> {
@@ -383,7 +566,9 @@ class DataStore {
     window.dispatchEvent(new Event('sunny_db_update'));
   }
 
-  // Equipment
+  // ==========================================
+  // EQUIPMENT (Manager CRUD)
+  // ==========================================
   public getEquipment(): Equipment[] {
     if (!this.isClient()) return [];
     this.init();
@@ -391,8 +576,99 @@ class DataStore {
     return data ? JSON.parse(data) : [];
   }
 
+  public getEquipmentItem(id: string): Equipment | undefined {
+    return this.getEquipment().find(e => e.id === id);
+  }
+
   public getEquipmentForVehicle(vehicleId: string): Equipment[] {
     return this.getEquipment().filter(e => e.vehicleId === vehicleId);
+  }
+
+  public async createEquipment(equipmentData: {
+    name: string;
+    vehicleId: string;
+    category?: EquipmentCategory;
+    status?: Equipment['status'];
+  }): Promise<Equipment> {
+    if (!this.isClient()) throw new Error('Client only');
+    this.init();
+
+    const timestamp = Date.now();
+    const targetVehicle = this.getVehicle(equipmentData.vehicleId);
+    const nowIso = new Date().toISOString();
+
+    const newEq: Equipment = {
+      id: `eq-${timestamp}`,
+      vehicleId: equipmentData.vehicleId,
+      vehicleNumber: targetVehicle ? targetVehicle.vehicleNumber : 'Unassigned',
+      name: equipmentData.name.trim(),
+      category: equipmentData.category || 'equipment',
+      status: equipmentData.status || 'working',
+      activeIssueId: null,
+      createdAt: nowIso,
+      updatedAt: nowIso
+    };
+
+    const currentList = this.getEquipment();
+    const updatedList = [...currentList, newEq];
+    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(updatedList));
+
+    if (db) {
+      try {
+        await setDoc(doc(db, 'equipment', newEq.id), sanitizeForFirestore(newEq));
+      } catch (e) {
+        console.warn('Firestore create equipment error:', e);
+      }
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return newEq;
+  }
+
+  public async updateEquipment(updated: Equipment): Promise<Equipment> {
+    if (!this.isClient()) throw new Error('Client only');
+    this.init();
+
+    const targetVehicle = this.getVehicle(updated.vehicleId);
+    const enriched: Equipment = {
+      ...updated,
+      vehicleNumber: targetVehicle ? targetVehicle.vehicleNumber : updated.vehicleNumber || 'Unassigned',
+      updatedAt: new Date().toISOString()
+    };
+
+    const sanitized = sanitizeForFirestore(enriched);
+    const currentList = this.getEquipment();
+    const updatedList = currentList.map(e => e.id === updated.id ? sanitized : e);
+    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(updatedList));
+
+    if (db) {
+      try {
+        await setDoc(doc(db, 'equipment', updated.id), sanitized, { merge: true });
+      } catch (e) {
+        console.warn('Firestore update equipment error:', e);
+      }
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return sanitized;
+  }
+
+  public async deleteEquipment(equipmentId: string): Promise<void> {
+    if (!this.isClient()) return;
+    this.init();
+
+    const currentList = this.getEquipment().filter(e => e.id !== equipmentId);
+    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(currentList));
+
+    if (db) {
+      try {
+        await deleteDoc(doc(db, 'equipment', equipmentId));
+      } catch (e) {
+        console.warn('Firestore delete equipment error:', e);
+      }
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
   }
 
   public async updateEquipmentStatus(equipmentId: string, status: Equipment['status'], activeIssueId?: string | null) {
@@ -416,14 +692,23 @@ class DataStore {
     // Sync to Firestore
     if (targetEq && db) {
       try {
-        await setDoc(doc(db, 'equipment', equipmentId), targetEq, { merge: true });
+        await setDoc(doc(db, 'equipment', equipmentId), sanitizeForFirestore(targetEq), { merge: true });
       } catch (e) {
         console.warn('Firestore write equipment fallback to local cache:', e);
       }
     }
   }
 
-  // Questions
+  // ==========================================
+  // CHECKLIST & CATEGORIES CONFIGURATION
+  // ==========================================
+  public getChecklistCategories(): ChecklistCategoryConfig[] {
+    if (!this.isClient()) return INITIAL_CATEGORIES;
+    this.init();
+    const data = localStorage.getItem(STORAGE_KEYS.CATEGORIES);
+    return data ? JSON.parse(data) : INITIAL_CATEGORIES;
+  }
+
   public getChecklistQuestions(): ChecklistQuestion[] {
     if (!this.isClient()) return INITIAL_CHECKLIST_QUESTIONS;
     this.init();
@@ -431,7 +716,88 @@ class DataStore {
     return data ? JSON.parse(data) : INITIAL_CHECKLIST_QUESTIONS;
   }
 
-  // Inspections
+  public getChecklistConfig(): ChecklistConfig {
+    if (!this.isClient()) {
+      return {
+        id: DEFAULT_CHECKLIST_ID,
+        name: 'Standard Detailing Checklist',
+        categories: INITIAL_CATEGORIES,
+        questions: INITIAL_CHECKLIST_QUESTIONS,
+      };
+    }
+    this.init();
+    const raw = localStorage.getItem(STORAGE_KEYS.CHECKLIST_CONFIG);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+    const config: ChecklistConfig = {
+      id: DEFAULT_CHECKLIST_ID,
+      name: 'Standard Detailing Checklist',
+      categories: this.getChecklistCategories(),
+      questions: this.getChecklistQuestions(),
+      updatedAt: new Date().toISOString()
+    };
+    return config;
+  }
+
+  public async saveChecklistConfig(config: ChecklistConfig): Promise<void> {
+    if (!this.isClient()) return;
+    this.init();
+
+    const nowIso = new Date().toISOString();
+    const updatedConfig: ChecklistConfig = {
+      ...config,
+      id: DEFAULT_CHECKLIST_ID,
+      updatedAt: nowIso
+    };
+
+    localStorage.setItem(STORAGE_KEYS.CHECKLIST_CONFIG, JSON.stringify(updatedConfig));
+    localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(updatedConfig.categories));
+    localStorage.setItem(STORAGE_KEYS.QUESTIONS, JSON.stringify(updatedConfig.questions));
+
+    // Save directly to Firestore document: checklists/standard-detailing-checklist
+    if (db) {
+      try {
+        const sanitized = sanitizeForFirestore(updatedConfig);
+        await setDoc(doc(db, 'checklists', DEFAULT_CHECKLIST_ID), sanitized);
+      } catch (e: any) {
+        console.warn('Firestore save checklist error (saved to local storage):', e.message);
+      }
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
+  }
+
+  public async saveChecklistQuestions(questions: ChecklistQuestion[]): Promise<void> {
+    const config = this.getChecklistConfig();
+    await this.saveChecklistConfig({
+      ...config,
+      questions
+    });
+  }
+
+  public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Promise<void> {
+    const config = this.getChecklistConfig();
+    await this.saveChecklistConfig({
+      ...config,
+      categories
+    });
+  }
+
+  public async resetChecklistToDefaults(): Promise<void> {
+    const defaultConfig: ChecklistConfig = {
+      id: DEFAULT_CHECKLIST_ID,
+      name: 'Standard Detailing Checklist',
+      categories: INITIAL_CATEGORIES,
+      questions: INITIAL_CHECKLIST_QUESTIONS,
+      updatedAt: new Date().toISOString()
+    };
+    await this.saveChecklistConfig(defaultConfig);
+  }
+
+  // ==========================================
+  // INSPECTIONS (With sanitized write)
+  // ==========================================
   public getInspections(): Inspection[] {
     if (!this.isClient()) return [];
     this.init();
@@ -459,7 +825,7 @@ class DataStore {
       title: string;
       description: string;
     }>;
-    generalNotes?: string;
+    generalNotes?: string | null;
   }): { inspection: Inspection; newIssues: Issue[] } {
     if (!this.isClient()) throw new Error('Client only');
     this.init();
@@ -483,8 +849,8 @@ class DataStore {
       const initialLog: IssueStatusLog = {
         id: `log-${Date.now()}-${idx}`,
         issueId,
-        changedById: data.userId,
-        changedByName: data.userName,
+        changedById: data.userId || 'anon',
+        changedByName: data.userName || 'Inspector',
         oldStatus: 'created',
         newStatus: 'open',
         notes: `Flagged during inspection on ${vehicle.vehicleNumber}: ${flag.description}`,
@@ -496,15 +862,19 @@ class DataStore {
         vehicleId: vehicle.id,
         vehicleNumber: vehicle.vehicleNumber,
         equipmentId: flag.equipmentId || null,
-        equipmentName: flag.equipmentName,
-        reportedById: data.userId,
-        reportedByName: data.userName,
+        equipmentName: flag.equipmentName || 'Vehicle Equipment',
+        reportedById: data.userId || 'anon',
+        reportedByName: data.userName || 'Inspector',
         reportedAt: nowIso,
         dateString: dateStr,
         inspectionId,
-        title: flag.title,
-        description: flag.description,
+        title: flag.title || 'Flagged Inspection Item',
+        description: flag.description || '',
         status: 'open',
+        resolvedAt: null,
+        resolvedById: null,
+        resolvedByName: null,
+        resolutionNotes: null,
         statusLogs: [initialLog]
       };
 
@@ -515,9 +885,9 @@ class DataStore {
         this.updateEquipmentStatus(flag.equipmentId, 'flagged', issueId);
       }
 
-      // Sync Issue to Firestore
+      // Sync Issue to Firestore (Sanitized)
       if (db) {
-        setDoc(doc(db, 'issues', issueId), newIssue).catch((e) =>
+        setDoc(doc(db, 'issues', issueId), sanitizeForFirestore(newIssue)).catch((e) =>
           console.warn('Firestore issue write error:', e)
         );
       }
@@ -525,20 +895,32 @@ class DataStore {
 
     const status: Inspection['status'] = newIssues.length > 0 ? 'issues_found' : 'passed';
 
+    // Ensure responses are fully sanitized with no undefined values
+    const cleanResponses: InspectionResponse[] = (data.responses || []).map(r => ({
+      questionId: r.questionId || '',
+      questionText: r.questionText || '',
+      category: r.category || 'general',
+      value: r.value !== undefined ? r.value : 'pass',
+      isFlagged: Boolean(r.isFlagged),
+      notes: r.notes || null as any,
+      equipmentId: r.equipmentId || null as any,
+      equipmentName: r.equipmentName || null as any
+    }));
+
     const newInspection: Inspection = {
       id: inspectionId,
       vehicleId: vehicle.id,
       vehicleNumber: vehicle.vehicleNumber,
-      userId: data.userId,
-      userName: data.userName,
-      userEmail: data.userEmail,
+      userId: data.userId || 'anon',
+      userName: data.userName || 'Inspector',
+      userEmail: data.userEmail || 'inspector@sunnyfleet.com',
       status,
       startedAt: new Date(now.getTime() - 8 * 60 * 1000).toISOString(),
       submittedAt: nowIso,
       dateString: dateStr,
-      responses: data.responses,
+      responses: cleanResponses,
       issueIds,
-      generalNotes: data.generalNotes
+      generalNotes: data.generalNotes || null as any
     };
 
     // Save Inspection locally
@@ -555,8 +937,8 @@ class DataStore {
     const updatedVehicle: Vehicle = {
       ...vehicle,
       status: 'in_use',
-      currentUserId: data.userId,
-      currentUserName: data.userName,
+      currentUserId: data.userId || null,
+      currentUserName: data.userName || null,
       currentUserStartTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       lastInspectionId: inspectionId,
       lastInspectionStatus: status,
@@ -564,9 +946,9 @@ class DataStore {
     };
     this.updateVehicle(updatedVehicle);
 
-    // Sync Inspection to Firestore
+    // Sync Inspection to Firestore (Sanitized!)
     if (db) {
-      setDoc(doc(db, 'inspections', inspectionId), newInspection).catch((e) =>
+      setDoc(doc(db, 'inspections', inspectionId), sanitizeForFirestore(newInspection)).catch((e) =>
         console.warn('Firestore inspection write error:', e)
       );
     }
@@ -575,7 +957,9 @@ class DataStore {
     return { inspection: newInspection, newIssues };
   }
 
-  // Issues
+  // ==========================================
+  // ISSUES & STATUS LOGS
+  // ==========================================
   public getIssues(): Issue[] {
     if (!this.isClient()) return [];
     this.init();
@@ -629,10 +1013,10 @@ class DataStore {
       ...issue,
       status: newStatus,
       statusLogs: [...(issue.statusLogs || []), newLog],
-      resolvedAt: newStatus === 'fixed' ? nowIso : issue.resolvedAt,
-      resolvedById: newStatus === 'fixed' ? changedBy.id : issue.resolvedById,
-      resolvedByName: newStatus === 'fixed' ? changedBy.name : issue.resolvedByName,
-      resolutionNotes: newStatus === 'fixed' ? notes : issue.resolutionNotes
+      resolvedAt: newStatus === 'fixed' ? nowIso : issue.resolvedAt || null,
+      resolvedById: newStatus === 'fixed' ? changedBy.id : issue.resolvedById || null,
+      resolvedByName: newStatus === 'fixed' ? changedBy.name : issue.resolvedByName || null,
+      resolutionNotes: newStatus === 'fixed' ? notes : issue.resolutionNotes || null
     };
 
     issues[targetIndex] = updatedIssue;
@@ -649,15 +1033,31 @@ class DataStore {
       this.updateEquipmentStatus(issue.equipmentId, equipmentStatus, newStatus === 'fixed' ? null : issue.id);
     }
 
-    // Sync to Firestore
+    // Sync to Firestore (Sanitized)
     if (db) {
-      setDoc(doc(db, 'issues', issueId), updatedIssue, { merge: true }).catch((e) =>
+      setDoc(doc(db, 'issues', issueId), sanitizeForFirestore(updatedIssue), { merge: true }).catch((e) =>
         console.warn('Firestore update issue status error:', e)
       );
     }
 
     window.dispatchEvent(new Event('sunny_db_update'));
     return updatedIssue;
+  }
+
+  public async deleteIssue(issueId: string): Promise<void> {
+    if (!this.isClient()) return;
+    const issues = this.getIssues().filter(i => i.id !== issueId);
+    localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(issues));
+
+    if (db) {
+      try {
+        await deleteDoc(doc(db, 'issues', issueId));
+      } catch (e) {
+        console.warn('Firestore delete issue error:', e);
+      }
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
   }
 }
 

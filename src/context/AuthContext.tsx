@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, UserRole } from '@/types';
-import { INITIAL_USERS } from '@/lib/mockData';
+import { dbService } from '@/lib/db';
 
 interface AuthContextType {
   user: User | null;
@@ -16,18 +16,43 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [users, setUsers] = useState<User[]>(INITIAL_USERS);
   const [user, setUser] = useState<User | null>(INITIAL_USERS[0]); // Default to Jacob Heiner (Manager)
 
-  useEffect(() => {
+  const refreshUsers = () => {
+    const list = dbService.getUsers();
+    setUsers(list);
+    
     const savedUserId = localStorage.getItem('sunny_current_user_id');
     if (savedUserId) {
-      const found = INITIAL_USERS.find(u => u.id === savedUserId);
-      if (found) setUser(found);
+      const found = list.find(u => u.id === savedUserId);
+      if (found) {
+        setUser(found);
+        return;
+      }
     }
+
+    // Default or fallback
+    if (list.length > 0) {
+      setUser(prev => {
+        if (!prev) return list[0];
+        const stillExists = list.find(u => u.id === prev.id);
+        return stillExists || list[0];
+      });
+    } else {
+      setUser(null);
+    }
+  };
+
+  useEffect(() => {
+    refreshUsers();
+    window.addEventListener('sunny_db_update', refreshUsers);
+    return () => window.removeEventListener('sunny_db_update', refreshUsers);
   }, []);
 
   const switchUser = (userId: string) => {
-    const target = INITIAL_USERS.find(u => u.id === userId);
+    const list = dbService.getUsers();
+    const target = list.find(u => u.id === userId);
     if (target) {
       setUser(target);
       localStorage.setItem('sunny_current_user_id', target.id);
@@ -35,7 +60,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const login = (email: string) => {
-    const target = INITIAL_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
+    const list = dbService.getUsers();
+    const target = list.find(u => u.email.toLowerCase() === email.toLowerCase());
     if (target) {
       setUser(target);
       localStorage.setItem('sunny_current_user_id', target.id);
@@ -43,8 +69,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
-    setUser(INITIAL_USERS[1]); // switch to John Smith for employee demo or clear
-    localStorage.setItem('sunny_current_user_id', INITIAL_USERS[1].id);
+    const list = dbService.getUsers();
+    const employee = list.find(u => u.role === 'employee') || list[0];
+    if (employee) {
+      setUser(employee);
+      localStorage.setItem('sunny_current_user_id', employee.id);
+    }
   };
 
   return (
@@ -53,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         role: user?.role || 'employee',
         switchUser,
-        availableUsers: INITIAL_USERS,
+        availableUsers: users,
         login,
         logout
       }}

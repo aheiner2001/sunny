@@ -44,18 +44,30 @@ export interface Equipment {
   updatedAt?: string;
 }
 
-export type ChecklistCategory = 
-  | 'equipment'
-  | 'supplies'
-  | 'vehicle_condition'
-  | 'previous_user_condition';
+export type ChecklistCategory = string;
+
+export interface ChecklistCategoryConfig {
+  id: string;
+  title: string;
+  subtitle: string;
+  order: number;
+  iconName?: string;
+}
+
+export interface ChecklistConfig {
+  id: string;
+  name: string;
+  categories: ChecklistCategoryConfig[];
+  questions: ChecklistQuestion[];
+  updatedAt?: string;
+}
 
 export type QuestionType = 
   | 'pass_fail'
   | 'yes_no'
-  | 'checkbox'
-  | 'equipment_status'
   | 'text'
+  | 'equipment_status'
+  | 'checkbox'
   | 'multiple_choice';
 
 export interface ChecklistQuestion {
