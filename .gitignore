@@ -6,11 +6,10 @@ node_modules/
 # testing
 /coverage
 
-# next.js
+# Build outputs
 .next/
+dist/
 out/
-
-# production
 build/
 
 # misc
