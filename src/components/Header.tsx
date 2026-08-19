@@ -12,15 +12,19 @@ import {
   User as UserIcon, 
   RotateCcw,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Camera,
+  Settings
 } from 'lucide-react';
 import Link from 'next/link';
 import { dbService } from '@/lib/db';
+import { ProfileModal } from '@/components/ProfileModal';
 
 export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void }) {
   const { user, role, switchUser, availableUsers } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notifMenuOpen, setNotifMenuOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -98,26 +102,16 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
               </div>
               <div className="space-y-2">
                 <div className="p-2 rounded-xl bg-amber-50/70 border border-amber-100 text-xs">
-                  <div className="font-semibold text-slate-800">Issue Reported: Van #2</div>
-                  <div className="text-slate-600">Sarah Johnson flagged Vacuum Hose tear.</div>
-                  <div className="text-[10px] text-amber-700 font-medium mt-1">7:58 AM Today</div>
-                </div>
-                <div className="p-2 rounded-xl bg-sky-50/70 border border-sky-100 text-xs">
-                  <div className="font-semibold text-slate-800">Inspection Passed: Van #3</div>
-                  <div className="text-slate-600">John Smith submitted standard inspection.</div>
-                  <div className="text-[10px] text-sky-700 font-medium mt-1">8:42 AM Today</div>
-                </div>
-                <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 text-xs">
-                  <div className="font-semibold text-slate-800">Maintenance Update: Van #5</div>
-                  <div className="text-slate-600">Window Squeegee moved to In Repair.</div>
-                  <div className="text-[10px] text-slate-500 font-medium mt-1">Aug 17</div>
+                  <div className="font-semibold text-slate-800">Issue Reported: Van #1</div>
+                  <div className="text-slate-600">Inspection flagged air compressor check.</div>
+                  <div className="text-[10px] text-amber-700 font-medium mt-1">Today</div>
                 </div>
               </div>
             </div>
           )}
         </div>
 
-        {/* User profile with Role Switcher dropdown */}
+        {/* User profile with Role Switcher & Customize Profile */}
         <div className="relative">
           <button
             onClick={() => {
@@ -129,7 +123,7 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
             <img
               src={user?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
               alt={user?.name || 'User'}
-              className="w-9 h-9 rounded-full object-cover ring-2 ring-sky-500/20"
+              className="w-9 h-9 rounded-full object-cover ring-2 ring-sky-500/20 shadow-sm"
             />
             <div className="hidden sm:block text-left">
               <div className="text-sm font-bold text-slate-900 leading-tight flex items-center gap-1.5">
@@ -144,15 +138,31 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
 
           {userMenuOpen && (
             <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-              <div className="px-3 py-2 border-b border-slate-100">
-                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Active Account</p>
-                <p className="text-sm font-bold text-slate-900">{user?.name}</p>
-                <p className="text-xs text-slate-500">{user?.email}</p>
+              <div className="px-3 py-2 border-b border-slate-100 flex items-center justify-between">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Active Account</p>
+                  <p className="text-sm font-bold text-slate-900 truncate">{user?.name}</p>
+                  <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+                </div>
               </div>
 
-              <div className="py-2">
+              {/* Profile Photo Customization Button */}
+              <div className="p-1">
+                <button
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    setProfileModalOpen(true);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left text-xs text-slate-700 hover:bg-slate-100 font-semibold transition-colors"
+                >
+                  <Camera className="w-4 h-4 text-sky-600" />
+                  <span>Customize Photo & Profile</span>
+                </button>
+              </div>
+
+              <div className="py-2 border-t border-slate-100">
                 <p className="px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                  Switch Demo Account (RBAC)
+                  Switch Account (RBAC)
                 </p>
                 <div className="space-y-1">
                   {availableUsers.map((u) => {
@@ -204,6 +214,12 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
           )}
         </div>
       </div>
+
+      <ProfileModal
+        isOpen={profileModalOpen}
+        onClose={() => setProfileModalOpen(false)}
+      />
     </header>
   );
 }
+

@@ -276,7 +276,7 @@ export default function InspectVehiclePage() {
       </div>
 
       {/* Vehicle Info Card */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm flex items-center justify-between">
+      <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
             <Truck className="w-6 h-6" />
@@ -292,9 +292,28 @@ export default function InspectVehiclePage() {
           </div>
         </div>
 
-        <div className="text-right hidden sm:block">
-          <div className="text-[11px] font-semibold text-slate-400">Inspecting As</div>
-          <div className="text-xs font-bold text-slate-800">{user?.name}</div>
+        <div className="flex items-center gap-2 self-end sm:self-auto bg-slate-50 p-2 rounded-xl border border-slate-100">
+          <UserIcon className="w-4 h-4 text-sky-600" />
+          <div className="text-left">
+            <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Operator</div>
+            <select
+              value={user?.id || ''}
+              onChange={(e) => {
+                const selected = dbService.getUser(e.target.value);
+                if (selected) {
+                  localStorage.setItem('sunny_current_user_id', selected.id);
+                  window.dispatchEvent(new Event('sunny_db_update'));
+                }
+              }}
+              className="text-xs font-bold text-slate-900 bg-transparent border-0 p-0 focus:ring-0 cursor-pointer"
+            >
+              {dbService.getUsers().map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.role})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 

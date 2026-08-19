@@ -8,6 +8,7 @@ interface AuthContextType {
   user: User | null;
   role: UserRole;
   switchUser: (userId: string) => void;
+  updateProfile: (updatedData: Partial<User>) => Promise<User>;
   availableUsers: User[];
   login: (email: string) => void;
   logout: () => void;
@@ -16,14 +17,14 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [users, setUsers] = useState<User[]>(INITIAL_USERS);
-  const [user, setUser] = useState<User | null>(INITIAL_USERS[0]); // Default to Jacob Heiner (Manager)
+  const [users, setUsers] = useState<User[]>([]);
+  const [user, setUser] = useState<User | null>(null);
 
   const refreshUsers = () => {
     const list = dbService.getUsers();
     setUsers(list);
     
-    const savedUserId = localStorage.getItem('sunny_current_user_id');
+    const savedUserId = typeof window !== 'undefined' ? localStorage.getItem('sunny_current_user_id') : null;
     if (savedUserId) {
       const found = list.find(u => u.id === savedUserId);
       if (found) {
@@ -59,6 +60,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateProfile = async (updatedData: Partial<User>): Promise<User> => {
+    if (!user) throw new Error('No user signed in');
+    const updatedUser: User = {
+      ...user,
+      ...updatedData
+    };
+    const result = await dbService.updateUser(updatedUser);
+    setUser(result);
+    return result;
+  };
+
   const login = (email: string) => {
     const list = dbService.getUsers();
     const target = list.find(u => u.email.toLowerCase() === email.toLowerCase());
@@ -83,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         role: user?.role || 'employee',
         switchUser,
+        updateProfile,
         availableUsers: users,
         login,
         logout
@@ -100,3 +113,4 @@ export function useAuth() {
   }
   return context;
 }
+
