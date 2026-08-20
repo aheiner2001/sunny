@@ -19,15 +19,15 @@ import {
 import { useAuth } from '@/context/AuthContext';
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Vehicles', href: '/vehicles', icon: Truck },
-  { label: 'Inspections', href: '/inspections', icon: ClipboardCheck },
-  { label: 'Calendar', href: '/calendar', icon: CalendarDays },
-  { label: 'Equipment', href: '/equipment', icon: Wrench },
-  { label: 'Issues', href: '/issues', icon: AlertTriangle },
-  { label: 'Employees', href: '/employees', icon: Users },
-  { label: 'Reports', href: '/reports', icon: BarChart3 },
-  { label: 'Settings', href: '/settings', icon: Settings },
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, managerOnly: false },
+  { label: 'Vehicles', href: '/vehicles', icon: Truck, managerOnly: true },
+  { label: 'Inspections', href: '/inspections', icon: ClipboardCheck, managerOnly: false },
+  { label: 'Calendar', href: '/calendar', icon: CalendarDays, managerOnly: true },
+  { label: 'Equipment', href: '/equipment', icon: Wrench, managerOnly: true },
+  { label: 'Issues', href: '/issues', icon: AlertTriangle, managerOnly: true },
+  { label: 'Employees', href: '/employees', icon: Users, managerOnly: true },
+  { label: 'Reports', href: '/reports', icon: BarChart3, managerOnly: true },
+  { label: 'Settings', href: '/settings', icon: Settings, managerOnly: true },
 ];
 
 export function Sidebar() {
@@ -57,7 +57,7 @@ export function Sidebar() {
 
         {/* Nav links */}
         <nav className="p-4 space-y-1.5">
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter(item => !item.managerOnly || role === 'manager').map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
 

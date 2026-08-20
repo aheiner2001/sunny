@@ -25,9 +25,13 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notifMenuOpen, setNotifMenuOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [issues, setIssues] = useState<any[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const loadNotifications = () => setIssues(dbService.getIssues().filter(issue => issue.status !== 'fixed'));
+    loadNotifications();
+    window.addEventListener('sunny_db_update', loadNotifications);
     function handleClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setUserMenuOpen(false);
@@ -35,7 +39,10 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('sunny_db_update', loadNotifications);
+    };
   }, []);
 
   return (
@@ -89,23 +96,22 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
             className="relative p-2.5 rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
           >
             <Bell className="w-5 h-5" />
-            <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-amber-400 text-slate-950 font-extrabold text-[10px] flex items-center justify-center shadow-sm">
-              3
-            </span>
+            {issues.length > 0 && <span className="absolute top-1.5 right-1.5 min-w-4 h-4 px-1 rounded-full bg-amber-400 text-slate-950 font-extrabold text-[10px] flex items-center justify-center shadow-sm">{issues.length}</span>}
           </button>
 
           {notifMenuOpen && (
             <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 px-2">
                 <span className="font-bold text-slate-900 text-sm">Notifications</span>
-                <span className="text-xs bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full">3 unread</span>
+                <span className="text-xs bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full">{issues.length} unread</span>
               </div>
               <div className="space-y-2">
-                <div className="p-2 rounded-xl bg-amber-50/70 border border-amber-100 text-xs">
-                  <div className="font-semibold text-slate-800">Issue Reported: Van #1</div>
-                  <div className="text-slate-600">Inspection flagged air compressor check.</div>
-                  <div className="text-[10px] text-amber-700 font-medium mt-1">Today</div>
-                </div>
+                {issues.slice(0, 5).map(issue => <div key={issue.id} className="p-2 rounded-xl bg-amber-50/70 border border-amber-100 text-xs">
+                  <div className="font-semibold text-slate-800">Issue Reported: {issue.vehicleNumber}</div>
+                  <div className="text-slate-600">{issue.title || issue.equipmentName}</div>
+                  <div className="text-[10px] text-amber-700 font-medium mt-1">{new Date(issue.reportedAt).toLocaleString()}</div>
+                </div>)}
+                {issues.length === 0 && <p className="p-2 text-xs text-slate-400">No unread notifications.</p>}
               </div>
             </div>
           )}
@@ -120,11 +126,17 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
             }}
             className="flex items-center gap-3 p-1.5 pr-3 rounded-full hover:bg-slate-100/80 transition-colors border border-transparent hover:border-slate-200"
           >
-            <img
-              src={user?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
-              alt={user?.name || 'User'}
-              className="w-9 h-9 rounded-full object-cover ring-2 ring-sky-500/20 shadow-sm"
-            />
+            {user?.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt={user.name || 'User'}
+                className="w-9 h-9 rounded-full object-cover ring-2 ring-sky-500/20 shadow-sm"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center ring-2 ring-sky-500/20 shadow-sm">
+                <UserIcon className="w-4 h-4" />
+              </div>
+            )}
             <div className="hidden sm:block text-left">
               <div className="text-sm font-bold text-slate-900 leading-tight flex items-center gap-1.5">
                 {user?.name}
@@ -180,11 +192,17 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
                             : 'hover:bg-slate-50 text-slate-700 font-medium'
                         }`}
                       >
-                        <img
-                          src={u.avatarUrl}
-                          alt={u.name}
-                          className="w-6 h-6 rounded-full object-cover ring-1 ring-slate-200"
-                        />
+                        {u.avatarUrl ? (
+                          <img
+                            src={u.avatarUrl}
+                            alt={u.name}
+                            className="w-6 h-6 rounded-full object-cover ring-1 ring-slate-200"
+                          />
+                        ) : (
+                          <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center ring-1 ring-slate-200">
+                            <UserIcon className="w-3 h-3" />
+                          </div>
+                        )}
                         <div className="flex-1 truncate">
                           <span className="block truncate">{u.name}</span>
                           <span className="text-[10px] text-slate-400 capitalize">{u.role}</span>
@@ -222,4 +240,3 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
     </header>
   );
 }
-

@@ -80,6 +80,7 @@ export interface ChecklistQuestion {
   equipmentId?: string;
   equipmentName?: string;
   options?: string[];
+  reasonPresets?: string[];
   helperText?: string;
 }
 
@@ -108,6 +109,41 @@ export interface Inspection {
   responses: InspectionResponse[];
   issueIds: string[];
   generalNotes?: string;
+  scheduleLabel?: string | null;
+  scheduledAt?: string | null;
+  taskId?: string | null;
+}
+
+export type TaskStatus = 'open' | 'completed';
+
+export interface FleetTask {
+  id: string;
+  title: string;
+  description?: string;
+  vehicleId?: string | null;
+  assignedToId?: string | null;
+  assignedToName?: string | null;
+  dueAt?: string | null;
+  scheduleLabel?: string | null;
+  status: TaskStatus;
+  createdById: string;
+  createdByName: string;
+  createdAt: string;
+  completedAt?: string | null;
+  completedInspectionId?: string | null;
+}
+
+export interface EquipmentOption {
+  id: string;
+  name: string;
+  category: EquipmentCategory;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReportSettings {
+  enabledMetrics: string[];
+  updatedAt?: string;
 }
 
 export type IssueStatus = 'open' | 'needs_repair' | 'being_repaired' | 'fixed';

@@ -18,6 +18,7 @@ import {
   Shield,
   UserCheck,
   UserX,
+  User as UserIcon,
   X,
   Plus
 } from 'lucide-react';
@@ -96,7 +97,7 @@ export default function EmployeesPage() {
       email: '',
       role: 'employee',
       status: 'active',
-      avatarUrl: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 100000000)}?w=150&auto=format&fit=crop&q=80`
+      avatarUrl: ''
     });
     setIsAddModalOpen(true);
   };
@@ -242,11 +243,17 @@ export default function EmployeesPage() {
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <img
-                      src={emp.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
-                      alt={emp.name}
-                      className="w-10 h-10 rounded-full object-cover ring-2 ring-white shadow-sm shrink-0"
-                    />
+                    {emp.avatarUrl ? (
+                      <img
+                        src={emp.avatarUrl}
+                        alt={emp.name}
+                        className="w-10 h-10 rounded-full object-cover ring-2 ring-white shadow-sm shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center ring-2 ring-white shadow-sm shrink-0">
+                        <UserIcon className="w-4 h-4" />
+                      </div>
+                    )}
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <h3 className={`text-xs font-bold truncate ${isSelected ? 'text-sky-900' : 'text-slate-900'}`}>
@@ -294,11 +301,17 @@ export default function EmployeesPage() {
               {/* Employee Profile Header Card */}
               <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                  <img
-                    src={selectedUser.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
-                    alt={selectedUser.name}
-                    className="w-16 h-16 rounded-2xl object-cover ring-4 ring-sky-500/20 shadow-md shrink-0"
-                  />
+                  {selectedUser.avatarUrl ? (
+                    <img
+                      src={selectedUser.avatarUrl}
+                      alt={selectedUser.name}
+                      className="w-16 h-16 rounded-2xl object-cover ring-4 ring-sky-500/20 shadow-md shrink-0"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center ring-4 ring-sky-500/20 shadow-md shrink-0">
+                      <UserIcon className="w-7 h-7" />
+                    </div>
+                  )}
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <h2 className="text-xl font-extrabold text-slate-900">{selectedUser.name}</h2>

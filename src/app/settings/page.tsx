@@ -5,7 +5,8 @@ import {
   Settings as SettingsIcon, 
   RotateCcw, 
   ListChecks, 
-  ShieldCheck, 
+  ShieldCheck,
+  Calendar,
   CheckCircle2, 
   CloudUpload, 
   Plus, 
@@ -23,7 +24,7 @@ import {
   Check
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
-import { ChecklistQuestion, ChecklistCategoryConfig, QuestionType, ChecklistConfig } from '@/types';
+import { ChecklistQuestion, ChecklistCategoryConfig, QuestionType, ChecklistConfig, EquipmentOption, FleetTask } from '@/types';
 
 export default function SettingsPage() {
   const [categories, setCategories] = useState<ChecklistCategoryConfig[]>([]);
@@ -31,6 +32,10 @@ export default function SettingsPage() {
   const [activeCategoryTab, setActiveCategoryTab] = useState<string>('all');
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [equipmentOptions, setEquipmentOptions] = useState<EquipmentOption[]>([]);
+  const [newEquipmentOption, setNewEquipmentOption] = useState('');
+  const [tasks, setTasks] = useState<FleetTask[]>([]);
+  const [taskForm, setTaskForm] = useState({ title: '', description: '', vehicleId: '', dueAt: '', scheduleLabel: '' });
 
   // Category Modal State
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -57,19 +62,61 @@ export default function SettingsPage() {
     required: boolean;
     helperText: string;
     equipmentName: string;
+    reasonPresets: string;
   }>({
     text: '',
     category: 'equipment',
     type: 'pass_fail',
     required: true,
     helperText: '',
-    equipmentName: ''
+    equipmentName: '',
+    reasonPresets: ''
   });
 
   const loadData = () => {
     const config = dbService.getChecklistConfig();
     setCategories(config.categories || []);
     setQuestions(config.questions || []);
+    setEquipmentOptions(dbService.getEquipmentOptions());
+    setTasks(dbService.getTasks());
+  };
+
+  const saveEquipmentOption = async () => {
+    const name = newEquipmentOption.trim();
+    if (!name || equipmentOptions.some(option => option.name.toLowerCase() === name.toLowerCase())) return;
+    const now = new Date().toISOString();
+    const updated = [...equipmentOptions, { id: `equipment-option-${Date.now()}`, name, category: 'equipment' as const, createdAt: now, updatedAt: now }];
+    setEquipmentOptions(updated);
+    setNewEquipmentOption('');
+    await dbService.saveEquipmentOptions(updated);
+  };
+
+  const updateEquipmentOption = async (option: EquipmentOption) => {
+    const name = prompt('Equipment option name', option.name)?.trim();
+    if (!name) return;
+    await dbService.saveEquipmentOptions(equipmentOptions.map(item => item.id === option.id ? { ...item, name } : item));
+  };
+
+  const deleteEquipmentOption = async (id: string) => {
+    if (!confirm('Remove this default option? Existing vehicle equipment will remain.')) return;
+    await dbService.saveEquipmentOptions(equipmentOptions.filter(option => option.id !== id));
+  };
+
+  const createManagerTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!taskForm.title.trim()) return;
+    await dbService.createTask({
+      title: taskForm.title,
+      description: taskForm.description,
+      vehicleId: taskForm.vehicleId || null,
+      dueAt: taskForm.dueAt ? new Date(taskForm.dueAt).toISOString() : null,
+      scheduleLabel: taskForm.scheduleLabel || null,
+      assignedToId: null,
+      assignedToName: null,
+      createdById: 'manager',
+      createdByName: 'Fleet Manager'
+    });
+    setTaskForm({ title: '', description: '', vehicleId: '', dueAt: '', scheduleLabel: '' });
   };
 
   useEffect(() => {
@@ -221,7 +268,8 @@ export default function SettingsPage() {
       type: 'pass_fail',
       required: true,
       helperText: '',
-      equipmentName: ''
+      equipmentName: '',
+      reasonPresets: ''
     });
     setIsQuestionModalOpen(true);
   };
@@ -234,7 +282,8 @@ export default function SettingsPage() {
       type: q.type,
       required: q.required,
       helperText: q.helperText || '',
-      equipmentName: q.equipmentName || ''
+      equipmentName: q.equipmentName || '',
+      reasonPresets: (q.reasonPresets || []).join(', ')
     });
     setIsQuestionModalOpen(true);
   };
@@ -256,7 +305,8 @@ export default function SettingsPage() {
         type: questionForm.type,
         required: questionForm.required,
         helperText: questionForm.helperText.trim() || undefined,
-        equipmentName: questionForm.equipmentName.trim() || undefined
+        equipmentName: questionForm.equipmentName.trim() || undefined,
+        reasonPresets: questionForm.reasonPresets.split(',').map(s => s.trim()).filter(Boolean)
       } : q);
     } else {
       const newQ: ChecklistQuestion = {
@@ -267,7 +317,8 @@ export default function SettingsPage() {
         required: questionForm.required,
         order: questions.length + 1,
         helperText: questionForm.helperText.trim() || undefined,
-        equipmentName: questionForm.equipmentName.trim() || undefined
+        equipmentName: questionForm.equipmentName.trim() || undefined,
+        reasonPresets: questionForm.reasonPresets.split(',').map(s => s.trim()).filter(Boolean)
       };
       updatedQs = [...questions, newQ];
     }
@@ -349,6 +400,25 @@ export default function SettingsPage() {
           <span className="font-bold">{saveStatus}</span>
         </div>
       )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <section className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+          <div><h2 className="text-base font-bold text-slate-900 flex items-center gap-2"><Wrench className="w-5 h-5 text-sky-600" />Default Equipment Options</h2><p className="text-xs text-slate-400">Managers control the quick-select list used when creating vehicles. Custom one-off entries remain supported.</p></div>
+          <div className="flex gap-2"><input value={newEquipmentOption} onChange={e => setNewEquipmentOption(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), saveEquipmentOption())} placeholder="Add equipment option" className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-200" /><button onClick={saveEquipmentOption} className="px-3 py-2 rounded-xl bg-sky-600 text-white text-xs font-bold">Add</button></div>
+          <div className="space-y-2">{equipmentOptions.map(option => <div key={option.id} className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs"><span className="font-semibold truncate">{option.name}</span><div className="flex gap-1"><button onClick={() => updateEquipmentOption(option)} className="p-1.5 text-slate-500 hover:text-slate-900"><Edit2 className="w-3.5 h-3.5" /></button><button onClick={() => deleteEquipmentOption(option.id)} className="p-1.5 text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button></div></div>)}</div>
+        </section>
+        <section className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+          <div><h2 className="text-base font-bold text-slate-900 flex items-center gap-2"><Calendar className="w-5 h-5 text-sky-600" />Inspection Tasks & Scheduling</h2><p className="text-xs text-slate-400">Create intentional, repeatable inspection work with a label and due time.</p></div>
+          <form onSubmit={createManagerTask} className="space-y-2">
+            <input required value={taskForm.title} onChange={e => setTaskForm({ ...taskForm, title: e.target.value })} placeholder="Task or schedule title" className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200" />
+            <input value={taskForm.scheduleLabel} onChange={e => setTaskForm({ ...taskForm, scheduleLabel: e.target.value })} placeholder="Schedule label (e.g. Morning opening)" className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200" />
+            <div className="grid grid-cols-2 gap-2"><select value={taskForm.vehicleId} onChange={e => setTaskForm({ ...taskForm, vehicleId: e.target.value })} className="px-3 py-2 text-xs rounded-xl border border-slate-200"><option value="">Any vehicle</option>{dbService.getVehicles().map(v => <option key={v.id} value={v.id}>{v.vehicleNumber}</option>)}</select><input type="datetime-local" value={taskForm.dueAt} onChange={e => setTaskForm({ ...taskForm, dueAt: e.target.value })} className="px-3 py-2 text-xs rounded-xl border border-slate-200" /></div>
+            <input value={taskForm.description} onChange={e => setTaskForm({ ...taskForm, description: e.target.value })} placeholder="Instructions (optional)" className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200" />
+            <button className="w-full py-2 rounded-xl bg-slate-900 text-white text-xs font-bold">Create Task</button>
+          </form>
+          <div className="space-y-2 max-h-40 overflow-y-auto">{tasks.map(task => <div key={task.id} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs"><div><p className="font-bold">{task.title}</p><p className="text-slate-400">{task.scheduleLabel || 'Unscheduled'}{task.dueAt ? ` · ${new Date(task.dueAt).toLocaleString()}` : ''}</p></div><button onClick={() => dbService.deleteTask(task.id)} className="p-1.5 text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button></div>)}</div>
+        </section>
+      </div>
 
       {/* Section 1: Checklist Categories Management */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm space-y-4">
@@ -727,6 +797,20 @@ export default function SettingsPage() {
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Issue Reason Presets (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Low pressure, Leak, Missing item"
+                  value={questionForm.reasonPresets}
+                  onChange={(e) => setQuestionForm({ ...questionForm, reasonPresets: e.target.value })}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Comma-separated buttons shown to inspectors when they flag this question.</p>
+              </div>
+
               <div className="flex items-center gap-2 pt-1">
                 <input
                   type="checkbox"
@@ -762,4 +846,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-

@@ -13,7 +13,10 @@ import {
   IssueStatus,
   User,
   UserRole,
-  EquipmentCategory
+  EquipmentCategory,
+  EquipmentOption,
+  FleetTask,
+  ReportSettings
 } from '@/types';
 import { 
   INITIAL_VEHICLES, 
@@ -49,6 +52,9 @@ const STORAGE_KEYS = {
   ISSUES: 'sunny_issues',
   SEEDED: 'sunny_seeded_v2',
   FIREBASE_SYNCED: 'sunny_firebase_synced',
+  EQUIPMENT_OPTIONS: 'sunny_equipment_options',
+  TASKS: 'sunny_tasks',
+  REPORT_SETTINGS: 'sunny_report_settings',
 };
 
 const DEFAULT_CHECKLIST_ID = 'standard-detailing-checklist';
@@ -171,6 +177,31 @@ class DataStore {
         console.warn('Firestore equipment listener (using local cache):', err.message);
       });
 
+      onSnapshot(collection(db, 'equipmentOptions'), (snapshot) => {
+        if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
+          const list: EquipmentOption[] = [];
+          snapshot.forEach((d) => list.push(d.data() as EquipmentOption));
+          localStorage.setItem(STORAGE_KEYS.EQUIPMENT_OPTIONS, JSON.stringify(list));
+          window.dispatchEvent(new Event('sunny_db_update'));
+        }
+      }, (err) => console.warn('Firestore equipment options listener:', err.message));
+
+      onSnapshot(collection(db, 'tasks'), (snapshot) => {
+        if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
+          const list: FleetTask[] = [];
+          snapshot.forEach((d) => list.push(d.data() as FleetTask));
+          localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(list));
+          window.dispatchEvent(new Event('sunny_db_update'));
+        }
+      }, (err) => console.warn('Firestore tasks listener:', err.message));
+
+      onSnapshot(doc(db, 'settings', 'reports'), (snapshot) => {
+        if (snapshot.exists()) {
+          localStorage.setItem(STORAGE_KEYS.REPORT_SETTINGS, JSON.stringify(snapshot.data()));
+          window.dispatchEvent(new Event('sunny_db_update'));
+        }
+      }, (err) => console.warn('Firestore report settings listener:', err.message));
+
       // Listen to Checklist doc: checklists/standard-detailing-checklist
       onSnapshot(doc(db, 'checklists', DEFAULT_CHECKLIST_ID), (docSnap) => {
         if (docSnap.exists()) {
@@ -233,6 +264,14 @@ class DataStore {
         batch.set(ref, sanitizeForFirestore(iss));
       });
 
+      this.getEquipmentOptions().forEach((option) => {
+        batch.set(doc(db, 'equipmentOptions', option.id), sanitizeForFirestore(option));
+      });
+      this.getTasks().forEach((task) => {
+        batch.set(doc(db, 'tasks', task.id), sanitizeForFirestore(task));
+      });
+      batch.set(doc(db, 'settings', 'reports'), sanitizeForFirestore(this.getReportSettings()));
+
       // Seed Standard Checklist Document
       const checklistConfig = this.getChecklistConfig();
       const checklistRef = doc(db, 'checklists', DEFAULT_CHECKLIST_ID);
@@ -270,6 +309,21 @@ class DataStore {
 
     localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(INITIAL_INSPECTIONS));
     localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(INITIAL_ISSUES));
+    const nowIso = new Date().toISOString();
+    localStorage.setItem(STORAGE_KEYS.EQUIPMENT_OPTIONS, JSON.stringify(
+      INITIAL_EQUIPMENT.map((eq, index) => ({
+        id: `equipment-option-${index + 1}`,
+        name: eq.name,
+        category: eq.category,
+        createdAt: nowIso,
+        updatedAt: nowIso
+      }))
+    ));
+    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.REPORT_SETTINGS, JSON.stringify({
+      enabledMetrics: ['pass_rate', 'issues', 'fleet_size'],
+      updatedAt: nowIso
+    }));
     localStorage.setItem(STORAGE_KEYS.SEEDED, 'true');
 
     // Also sync to Firestore if connected
@@ -322,7 +376,7 @@ class DataStore {
       email: userData.email.trim().toLowerCase(),
       role: userData.role,
       status: userData.status || 'active',
-      avatarUrl: userData.avatarUrl?.trim() || `https://images.unsplash.com/photo-${1534528741775 + (timestamp % 1000)}?w=150&auto=format&fit=crop&q=80`
+      avatarUrl: userData.avatarUrl?.trim() || undefined
     };
 
     const currentUsers = this.getUsers();
@@ -756,6 +810,7 @@ class DataStore {
         };
         return targetEq;
       }
+
       return eq;
     });
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(list));
@@ -769,6 +824,77 @@ class DataStore {
         console.warn('Firestore write equipment fallback to local cache:', e);
       }
     }
+  }
+
+  // ==========================================
+  // MANAGER CONFIGURATION / TASKS
+  // ==========================================
+  public getEquipmentOptions(): EquipmentOption[] {
+    if (!this.isClient()) return INITIAL_EQUIPMENT.map((eq, index) => ({ id: `equipment-option-${index + 1}`, name: eq.name, category: eq.category, createdAt: '', updatedAt: '' }));
+    this.init();
+    const raw = localStorage.getItem(STORAGE_KEYS.EQUIPMENT_OPTIONS);
+    if (raw) return JSON.parse(raw);
+    const nowIso = new Date().toISOString();
+    const options = Array.from(new Map(this.getEquipment().map(eq => [eq.name, eq])).values()).map((eq, index) => ({ id: `equipment-option-${index + 1}`, name: eq.name, category: eq.category, createdAt: nowIso, updatedAt: nowIso }));
+    localStorage.setItem(STORAGE_KEYS.EQUIPMENT_OPTIONS, JSON.stringify(options));
+    return options;
+  }
+
+  public async saveEquipmentOptions(options: EquipmentOption[]): Promise<void> {
+    if (!this.isClient()) return;
+    this.init();
+    const normalized = options.filter(o => o.name.trim()).map(o => ({ ...o, name: o.name.trim(), updatedAt: new Date().toISOString() }));
+    localStorage.setItem(STORAGE_KEYS.EQUIPMENT_OPTIONS, JSON.stringify(normalized));
+    if (db) for (const option of normalized) await setDoc(doc(db, 'equipmentOptions', option.id), sanitizeForFirestore(option), { merge: true }).catch(e => console.warn('Firestore equipment option error:', e));
+    window.dispatchEvent(new Event('sunny_db_update'));
+  }
+
+  public getTasks(): FleetTask[] {
+    if (!this.isClient()) return [];
+    this.init();
+    const raw = localStorage.getItem(STORAGE_KEYS.TASKS);
+    return raw ? JSON.parse(raw) : [];
+  }
+
+  public async createTask(data: Omit<FleetTask, 'id' | 'createdAt' | 'status' | 'completedAt' | 'completedInspectionId'> & { status?: FleetTask['status'] }): Promise<FleetTask> {
+    if (!this.isClient()) throw new Error('Client only');
+    this.init();
+    const task: FleetTask = { ...data, id: `task-${Date.now()}`, title: data.title.trim(), description: data.description?.trim() || '', status: data.status || 'open', createdAt: new Date().toISOString(), completedAt: null, completedInspectionId: null };
+    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify([task, ...this.getTasks()]));
+    if (db) await setDoc(doc(db, 'tasks', task.id), sanitizeForFirestore(task)).catch(e => console.warn('Firestore create task error:', e));
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return task;
+  }
+
+  public async updateTask(task: FleetTask): Promise<FleetTask> {
+    if (!this.isClient()) return task;
+    const updated = { ...task, title: task.title.trim(), description: task.description?.trim() || '' };
+    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(this.getTasks().map(t => t.id === task.id ? updated : t)));
+    if (db) await setDoc(doc(db, 'tasks', task.id), sanitizeForFirestore(updated), { merge: true }).catch(e => console.warn('Firestore update task error:', e));
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return updated;
+  }
+
+  public async deleteTask(taskId: string): Promise<void> {
+    if (!this.isClient()) return;
+    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(this.getTasks().filter(t => t.id !== taskId)));
+    if (db) await deleteDoc(doc(db, 'tasks', taskId)).catch(e => console.warn('Firestore delete task error:', e));
+    window.dispatchEvent(new Event('sunny_db_update'));
+  }
+
+  public getReportSettings(): ReportSettings {
+    if (!this.isClient()) return { enabledMetrics: ['pass_rate', 'issues', 'fleet_size'] };
+    this.init();
+    const raw = localStorage.getItem(STORAGE_KEYS.REPORT_SETTINGS);
+    return raw ? JSON.parse(raw) : { enabledMetrics: ['pass_rate', 'issues', 'fleet_size'] };
+  }
+
+  public async saveReportSettings(settings: ReportSettings): Promise<void> {
+    if (!this.isClient()) return;
+    const updated = { ...settings, updatedAt: new Date().toISOString() };
+    localStorage.setItem(STORAGE_KEYS.REPORT_SETTINGS, JSON.stringify(updated));
+    if (db) await setDoc(doc(db, 'settings', 'reports'), sanitizeForFirestore(updated), { merge: true }).catch(e => console.warn('Firestore report settings error:', e));
+    window.dispatchEvent(new Event('sunny_db_update'));
   }
 
   // ==========================================
@@ -878,7 +1004,9 @@ class DataStore {
   }
 
   public getInspectionsForVehicle(vehicleId: string): Inspection[] {
-    return this.getInspections().filter(i => i.vehicleId === vehicleId);
+    return this.getInspections()
+      .filter(i => i.vehicleId === vehicleId)
+      .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
   }
 
   public getInspectionsForDate(dateStr: string): Inspection[] {
@@ -898,6 +1026,9 @@ class DataStore {
       description: string;
     }>;
     generalNotes?: string | null;
+    taskId?: string | null;
+    scheduleLabel?: string | null;
+    scheduledAt?: string | null;
   }): { inspection: Inspection; newIssues: Issue[] } {
     if (!this.isClient()) throw new Error('Client only');
     this.init();
@@ -992,7 +1123,10 @@ class DataStore {
       dateString: dateStr,
       responses: cleanResponses,
       issueIds,
-      generalNotes: data.generalNotes || null as any
+      generalNotes: data.generalNotes || null as any,
+      taskId: data.taskId || null,
+      scheduleLabel: data.scheduleLabel || null,
+      scheduledAt: data.scheduledAt || null
     };
 
     // Save Inspection locally
@@ -1017,6 +1151,13 @@ class DataStore {
       lastInspectionAt: nowIso
     };
     this.updateVehicle(updatedVehicle);
+
+    if (data.taskId) {
+      const task = this.getTasks().find(t => t.id === data.taskId);
+      if (task && task.status !== 'completed') {
+        this.updateTask({ ...task, status: 'completed', completedAt: nowIso, completedInspectionId: inspectionId });
+      }
+    }
 
     // Sync Inspection to Firestore (Sanitized!)
     if (db) {
@@ -1079,7 +1220,9 @@ class DataStore {
   }
 
   public getIssuesForVehicle(vehicleId: string): Issue[] {
-    return this.getIssues().filter(i => i.vehicleId === vehicleId);
+    return this.getIssues()
+      .filter(i => i.vehicleId === vehicleId)
+      .sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime());
   }
 
   public getIssuesForDate(dateStr: string): Issue[] {
@@ -1087,7 +1230,9 @@ class DataStore {
   }
 
   public getOpenIssues(): Issue[] {
-    return this.getIssues().filter(i => i.status !== 'fixed');
+    return this.getIssues()
+      .filter(i => i.status !== 'fixed')
+      .sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime());
   }
 
   // Append-only Status Transition

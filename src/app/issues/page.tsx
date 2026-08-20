@@ -36,7 +36,12 @@ export default function IssuesPage() {
     return () => window.removeEventListener('sunny_db_update', loadData);
   }, []);
 
-  const filteredIssues = issues.filter(iss => {
+  const activeIssues = (statusFilter === 'fixed'
+    ? issues.filter(iss => iss.status === 'fixed')
+    : issues.filter(iss => iss.status !== 'fixed')
+  ).sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime());
+
+  const filteredIssues = activeIssues.filter(iss => {
     const matchesSearch =
       iss.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       iss.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -57,7 +62,9 @@ export default function IssuesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Equipment & Issue Tracker</h1>
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+            {statusFilter === 'fixed' ? 'Resolved Issue History' : 'Active Equipment Issues'}
+          </h1>
           <p className="text-xs text-slate-500 mt-0.5">
             Trace problems back to origin, update equipment repair stages, and audit immutable resolution history.
           </p>
@@ -96,7 +103,7 @@ export default function IssuesPage() {
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              {st.replace('_', ' ')}
+              {st === 'all' ? 'active' : st === 'fixed' ? 'resolved history' : st.replace('_', ' ')}
             </button>
           ))}
 

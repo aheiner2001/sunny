@@ -68,6 +68,7 @@ export const INITIAL_CHECKLIST_QUESTIONS: ChecklistQuestion[] = [
     required: true,
     order: 1,
     equipmentName: 'Air Compressor',
+    reasonPresets: ['Won’t start', 'Low pressure', 'Air leak', 'Damaged hose'],
     helperText: 'Check oil level, drain valve closed, listen for leaks.'
   },
   {
@@ -78,6 +79,7 @@ export const INITIAL_CHECKLIST_QUESTIONS: ChecklistQuestion[] = [
     required: true,
     order: 2,
     equipmentName: 'Pressure Washer',
+    reasonPresets: ['Hose leak', 'No pressure', 'Trigger issue', 'Cracked fitting'],
     helperText: 'Inspect hose braiding and spray trigger.'
   },
   {
@@ -88,6 +90,7 @@ export const INITIAL_CHECKLIST_QUESTIONS: ChecklistQuestion[] = [
     required: true,
     order: 3,
     equipmentName: 'Vacuum Extractor',
+    reasonPresets: ['Weak suction', 'Filter blocked', 'Damaged hose', 'Missing part'],
     helperText: 'Empty waste canister if full.'
   },
 
@@ -99,7 +102,8 @@ export const INITIAL_CHECKLIST_QUESTIONS: ChecklistQuestion[] = [
     type: 'pass_fail',
     required: true,
     order: 4,
-    helperText: 'Separate paint, glass, and wheel towels.'
+    helperText: 'Separate paint, glass, and wheel towels.',
+    reasonPresets: ['Not enough towels', 'Towels are dirty', 'Wrong towel type']
   },
   {
     id: 'q-sup-2',
@@ -108,7 +112,8 @@ export const INITIAL_CHECKLIST_QUESTIONS: ChecklistQuestion[] = [
     type: 'pass_fail',
     required: true,
     order: 5,
-    helperText: 'Check triggers spray properly.'
+    helperText: 'Check triggers spray properly.',
+    reasonPresets: ['Bottle empty', 'Sprayer broken', 'Missing chemical']
   },
 
   // Vehicle Condition

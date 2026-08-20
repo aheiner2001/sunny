@@ -106,7 +106,7 @@ export function IssueTimeline({
         </h4>
 
         <div className="relative pl-6 space-y-6 before:content-[''] before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
-          {(issue.statusLogs || []).map((log, index) => (
+          {[...(issue.statusLogs || [])].reverse().map((log, index) => (
             <div key={log.id || index} className="relative group">
               {/* Bullet Node */}
               <div className="absolute -left-6 top-1 w-4 h-4 rounded-full bg-white border-2 border-sky-500 flex items-center justify-center">

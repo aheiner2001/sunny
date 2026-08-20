@@ -15,13 +15,20 @@ import {
 import Link from 'next/link';
 import { dbService } from '@/lib/db';
 import { Vehicle } from '@/types';
+import { useAuth } from '@/context/AuthContext';
 
 export default function ScanPage() {
   const router = useRouter();
+  const { role } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState('');
   const scannerRef = useRef<any>(null);
+  const roleRef = useRef(role);
+
+  useEffect(() => {
+    roleRef.current = role;
+  }, [role]);
 
   useEffect(() => {
     setVehicles(dbService.getVehicles());
@@ -85,7 +92,8 @@ export default function ScanPage() {
 
     const vehicle = dbService.getVehicleByQR(token) || dbService.getVehicle(token);
     if (vehicle) {
-      router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}`);
+      const mode = roleRef.current === 'manager' ? '' : '&mode=employee';
+      router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}${mode}`);
     } else {
       alert(`Vehicle with QR token "${rawCode}" was not found.`);
     }
@@ -104,7 +112,7 @@ export default function ScanPage() {
         </Link>
         <div className="flex items-center gap-1 text-xs font-bold text-sky-600 bg-sky-50 px-3 py-1.5 rounded-xl border border-sky-200">
           <ShieldCheck className="w-4 h-4" />
-          <span>Auto-Vehicle ID Active</span>
+          <span>{role === 'manager' ? 'Manager Scan Active' : 'Employee Inspection Flow'}</span>
         </div>
       </div>
 

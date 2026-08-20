@@ -22,13 +22,14 @@ import {
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
-import { Vehicle, ChecklistQuestion, ChecklistCategoryConfig, InspectionResponse } from '@/types';
+import { Vehicle, ChecklistQuestion, ChecklistCategoryConfig, InspectionResponse, FleetTask } from '@/types';
 
 export default function InspectClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const vehicleId = searchParams?.get('id') || searchParams?.get('vehicle') || searchParams?.get('v') || '';
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+  const employeeFlow = role === 'employee' || searchParams?.get('mode') === 'employee';
 
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,6 +41,8 @@ export default function InspectClient() {
   const [generalNotes, setGeneralNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedInspection, setSubmittedInspection] = useState<any | null>(null);
+  const [tasks, setTasks] = useState<FleetTask[]>([]);
+  const [selectedTaskId, setSelectedTaskId] = useState('');
 
   const loadData = async () => {
     if (!vehicleId) {
@@ -68,6 +71,10 @@ export default function InspectClient() {
       const qList = dbService.getChecklistQuestions();
       setCategories(cats);
       setQuestions(qList);
+      const vehicleTasks = dbService.getTasks().filter(task => !task.vehicleId || task.vehicleId === v?.id);
+      setTasks(vehicleTasks);
+      const openTask = vehicleTasks.find(task => task.status === 'open');
+      setSelectedTaskId(prev => prev || openTask?.id || '');
 
       if (cats.length > 0 && !cats.some(c => c.id === activeTab)) {
         setActiveTab(cats[0].id);
@@ -248,7 +255,10 @@ export default function InspectClient() {
         userEmail: user?.email || 'employee@sunnyfleet.com',
         responses: inspectionResponses,
         flaggedIssues: flaggedList,
-        generalNotes: generalNotes.trim() || null
+        generalNotes: generalNotes.trim() || null,
+        taskId: selectedTaskId || null,
+        scheduleLabel: selectedTask?.scheduleLabel || null,
+        scheduledAt: selectedTask?.dueAt || null
       });
 
       setSubmittedInspection(result);
@@ -258,6 +268,8 @@ export default function InspectClient() {
       setIsSubmitting(false);
     }
   };
+
+  const selectedTask = tasks.find(task => task.id === selectedTaskId);
 
   // Success view
   if (submittedInspection) {
@@ -297,16 +309,16 @@ export default function InspectClient() {
 
           <div className="flex flex-col sm:flex-row gap-3">
             <Link
-              href="/dashboard"
+              href={employeeFlow ? '/scan' : '/dashboard'}
               className="flex-1 px-4 py-3 rounded-xl bg-sky-600 text-white font-bold text-xs hover:bg-sky-700 shadow-sm transition-colors text-center"
             >
-              Go to Dashboard
+              {employeeFlow ? 'Back to Scanner' : 'Go to Dashboard'}
             </Link>
             <Link
-              href={`/vehicles/detail?id=${encodeURIComponent(vehicle.id)}`}
+              href={employeeFlow ? '/scan' : `/vehicles/detail?id=${encodeURIComponent(vehicle.id)}`}
               className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 transition-colors text-center"
             >
-              View Vehicle Timeline
+              {employeeFlow ? 'Scan Another Vehicle' : 'View Vehicle Timeline'}
             </Link>
           </div>
         </div>
@@ -330,6 +342,11 @@ export default function InspectClient() {
           <span>Rescan QR</span>
         </Link>
         <div className="flex items-center gap-2">
+          {employeeFlow && (
+            <span className="text-xs font-bold text-sky-700 bg-sky-50 px-3 py-1.5 rounded-xl border border-sky-200">
+              Employee To-Do
+            </span>
+          )}
           {flaggedCount > 0 ? (
             <span className="flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
               <AlertTriangle className="w-3.5 h-3.5" />
@@ -365,23 +382,27 @@ export default function InspectClient() {
           <UserIcon className="w-4 h-4 text-sky-600" />
           <div className="text-left">
             <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Operator</div>
-            <select
-              value={user?.id || ''}
-              onChange={(e) => {
-                const selected = dbService.getUser(e.target.value);
-                if (selected) {
-                  localStorage.setItem('sunny_current_user_id', selected.id);
-                  window.dispatchEvent(new Event('sunny_db_update'));
-                }
-              }}
-              className="text-xs font-bold text-slate-900 bg-transparent border-0 p-0 focus:ring-0 cursor-pointer"
-            >
-              {dbService.getUsers().map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} ({u.role})
-                </option>
-              ))}
-            </select>
+            {employeeFlow ? (
+              <div className="text-xs font-bold text-slate-900">{user?.name || 'Employee Operator'}</div>
+            ) : (
+              <select
+                value={user?.id || ''}
+                onChange={(e) => {
+                  const selected = dbService.getUser(e.target.value);
+                  if (selected) {
+                    localStorage.setItem('sunny_current_user_id', selected.id);
+                    window.dispatchEvent(new Event('sunny_db_update'));
+                  }
+                }}
+                className="text-xs font-bold text-slate-900 bg-transparent border-0 p-0 focus:ring-0 cursor-pointer"
+              >
+                {dbService.getUsers().map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} ({u.role})
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
       </div>
@@ -580,6 +601,20 @@ export default function InspectClient() {
                       onChange={(e) => handleIssueChange(q.id, 'title', e.target.value)}
                       className="w-full px-3 py-1.5 text-xs rounded-lg border border-amber-200 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold"
                     />
+                    {q.reasonPresets && q.reasonPresets.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {q.reasonPresets.map(reason => (
+                          <button
+                            key={reason}
+                            type="button"
+                            onClick={() => handleIssueChange(q.id, 'description', currentIssue?.description ? `${currentIssue.description}, ${reason}` : reason)}
+                            className="px-2 py-1 rounded-lg bg-white border border-amber-200 text-[10px] font-bold text-amber-800 hover:bg-amber-50"
+                          >
+                            {reason}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <textarea
                       rows={2}
                       placeholder="Detailed explanation of what is wrong or needs repair..."
@@ -634,6 +669,16 @@ export default function InspectClient() {
 
       {/* General Notes & Submit Card */}
       <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+        {tasks.length > 0 && (
+          <div className="p-3 rounded-2xl bg-sky-50 border border-sky-100">
+            <label className="block text-xs font-bold text-sky-900 uppercase tracking-wider mb-1">Scheduled inspection / task</label>
+            <select value={selectedTaskId} onChange={e => setSelectedTaskId(e.target.value)} className="w-full px-3 py-2 text-xs rounded-xl border border-sky-200 bg-white">
+              <option value="">Unscheduled inspection</option>
+              {tasks.map(task => <option key={task.id} value={task.id}>{task.title}{task.status === 'completed' ? ' (completed)' : ''}{task.dueAt ? ` · ${new Date(task.dueAt).toLocaleString()}` : ''}</option>)}
+            </select>
+            {selectedTask?.status === 'completed' && <p className="text-[11px] text-amber-700 mt-1">This scheduled task was already completed; submitting will create an additional intentional record.</p>}
+          </div>
+        )}
         <div>
           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
             General Inspection Notes (Optional)

@@ -19,7 +19,7 @@ import {
   X
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
-import { Vehicle, VehicleStatus } from '@/types';
+import { Vehicle, VehicleStatus, EquipmentOption } from '@/types';
 import { VehicleStatusBadge, InspectionStatusBadge } from '@/components/StatusBadges';
 import { QRScannerModal } from '@/components/QRScannerModal';
 
@@ -37,16 +37,7 @@ export default function VehiclesPage() {
   const [modalLoading, setModalLoading] = useState(false);
 
   // Common standard equipment options
-  const STANDARD_EQUIPMENT_OPTIONS = [
-    'Air Compressor 200 PSI',
-    'Pressure Washer',
-    'Vacuum Extractor',
-    'Chemical Caddy',
-    'Microfiber Towel Set',
-    'Window Squeegee',
-    'Extension Pole',
-    'Water Tank & Pump'
-  ];
+  const [equipmentOptions, setEquipmentOptions] = useState<EquipmentOption[]>([]);
 
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([
     'Air Compressor 200 PSI',
@@ -72,6 +63,7 @@ export default function VehiclesPage() {
 
   const loadData = () => {
     setVehicles(dbService.getVehicles());
+    setEquipmentOptions(dbService.getEquipmentOptions());
   };
 
   useEffect(() => {
@@ -100,11 +92,7 @@ export default function VehiclesPage() {
       qrCodeToken: `van-${nextNum}`,
       status: 'active',
     });
-    setSelectedEquipment([
-      'Air Compressor 200 PSI',
-      'Pressure Washer',
-      'Vacuum Extractor'
-    ]);
+    setSelectedEquipment(equipmentOptions.slice(0, 3).map(option => option.name));
     setCustomEquipment('');
     setIsAddModalOpen(true);
   };
@@ -336,7 +324,7 @@ export default function VehiclesPage() {
                     href={`/vehicles/detail?id=${encodeURIComponent(vehicle.id)}`}
                     className="flex-1 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 font-bold text-xs text-center transition-colors flex items-center justify-center gap-1 group"
                   >
-                    <span>Timeline</span>
+                    <span>Vehicle Details</span>
                     <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                   </Link>
                 </div>
@@ -473,7 +461,8 @@ export default function VehiclesPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-200/80 max-h-44 overflow-y-auto">
-                  {STANDARD_EQUIPMENT_OPTIONS.map((item) => {
+                  {equipmentOptions.map((option) => {
+                    const item = option.name;
                     const isChecked = selectedEquipment.includes(item);
                     return (
                       <label
@@ -679,4 +668,3 @@ export default function VehiclesPage() {
     </div>
   );
 }
-

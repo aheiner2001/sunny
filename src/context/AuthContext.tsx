@@ -36,9 +36,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Default or fallback
     if (list.length > 0) {
       setUser(prev => {
-        if (!prev) return list[0];
+        if (!prev) return list.find(u => u.role === 'employee') || list[0];
         const stillExists = list.find(u => u.id === prev.id);
-        return stillExists || list[0];
+        return stillExists || list.find(u => u.role === 'employee') || list[0];
       });
     } else {
       setUser(null);
@@ -113,4 +113,3 @@ export function useAuth() {
   }
   return context;
 }
-

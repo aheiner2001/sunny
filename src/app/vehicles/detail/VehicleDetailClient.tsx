@@ -33,6 +33,7 @@ export default function VehicleDetailClient() {
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [activeTab, setActiveTab] = useState<'timeline' | 'equipment' | 'qr' | 'issues'>('timeline');
+  const [showAllTimeline, setShowAllTimeline] = useState(false);
 
   const loadData = async () => {
     if (!vehicleId) {
@@ -108,6 +109,11 @@ export default function VehicleDetailClient() {
     ...inspections.map(i => ({ type: 'inspection' as const, date: i.submittedAt, data: i })),
     ...issues.map(iss => ({ type: 'issue' as const, date: iss.reportedAt, data: iss }))
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const recentCutoff = new Date();
+  recentCutoff.setDate(recentCutoff.getDate() - 30);
+  const recentTimelineItems = timelineItems.filter(item => new Date(item.date) >= recentCutoff);
+  const visibleTimelineItems = showAllTimeline ? timelineItems : recentTimelineItems;
+  const hasOlderTimeline = recentTimelineItems.length < timelineItems.length;
 
   return (
     <div className="space-y-6">
@@ -209,13 +215,24 @@ export default function VehicleDetailClient() {
             <div>
               <h2 className="text-base font-bold text-slate-900">Vehicle Operational Timeline</h2>
               <p className="text-xs text-slate-400">
-                Append-only history of every driver assignment, inspection result, and equipment issue.
+                {showAllTimeline
+                  ? 'Complete append-only history of every inspection result and equipment issue.'
+                  : 'Recent history from the last 30 days. Older records remain available below.'}
               </p>
             </div>
+            {hasOlderTimeline && (
+              <button
+                type="button"
+                onClick={() => setShowAllTimeline(current => !current)}
+                className="text-xs font-bold text-sky-600 hover:text-sky-700 whitespace-nowrap"
+              >
+                {showAllTimeline ? 'Show recent only' : `Show older history (${timelineItems.length - recentTimelineItems.length})`}
+              </button>
+            )}
           </div>
 
           <div className="relative pl-6 space-y-6 before:content-[''] before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
-            {timelineItems.map((item) => {
+            {visibleTimelineItems.map((item) => {
               if (item.type === 'inspection') {
                 const insp = item.data;
                 const isPassed = insp.status === 'passed';
@@ -286,8 +303,12 @@ export default function VehicleDetailClient() {
               }
             })}
 
-            {timelineItems.length === 0 && (
-              <p className="text-xs text-slate-400 py-4">No inspection or issue records logged for this vehicle yet.</p>
+            {visibleTimelineItems.length === 0 && (
+              <p className="text-xs text-slate-400 py-4">
+                {timelineItems.length === 0
+                  ? 'No inspection or issue records logged for this vehicle yet.'
+                  : 'No recent records. Show older history to view the complete timeline.'}
+              </p>
             )}
           </div>
         </div>

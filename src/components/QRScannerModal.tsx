@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Camera, X, RefreshCw, Sparkles, AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Vehicle } from '@/types';
+import { useAuth } from '@/context/AuthContext';
 
 export function QRScannerModal({
   isOpen,
@@ -16,12 +17,18 @@ export function QRScannerModal({
   onScanSuccess?: (vehicle: Vehicle) => void;
 }) {
   const router = useRouter();
+  const { role } = useAuth();
+  const roleRef = useRef(role);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [manualInput, setManualInput] = useState('');
   const scannerRef = useRef<any>(null);
   const scannerContainerId = 'qr-reader-container';
+
+  useEffect(() => {
+    roleRef.current = role;
+  }, [role]);
 
   useEffect(() => {
     setVehicles(dbService.getVehicles());
@@ -118,7 +125,8 @@ export function QRScannerModal({
       if (onScanSuccess) {
         onScanSuccess(vehicle);
       } else {
-        router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}`);
+        const mode = roleRef.current === 'manager' ? '' : '&mode=employee';
+        router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}${mode}`);
       }
       onClose();
     } else {
