@@ -38,21 +38,12 @@ export function Sidebar() {
     <aside className="w-64 bg-white border-r border-slate-200/80 min-h-screen flex flex-col justify-between shrink-0 select-none shadow-sm z-30">
       <div>
         {/* Brand Header */}
-        <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3">
+        <div className="px-6 py-5 border-b border-slate-100">
           <img
-            src={`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/logo.png`}
-            alt="Sunny Fleet Logo"
-            className="w-10 h-10 object-contain rounded-xl shadow-sm"
+            src={`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/sunny-logo.png`}
+            alt="Sunny logo"
+            className="h-10 w-28 object-contain"
           />
-          <div>
-            <div className="flex items-center gap-1.5 font-bold text-slate-900 text-lg tracking-tight">
-              Sunny Fleet
-              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-            </div>
-            <p className="text-[11px] font-semibold tracking-wider uppercase text-slate-400">
-              Accountability System
-            </p>
-          </div>
         </div>
 
         {/* Nav links */}

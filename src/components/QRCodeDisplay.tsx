@@ -10,6 +10,7 @@ export function QRCodeDisplay({ vehicle }: { vehicle: Vehicle }) {
   const isProd = process.env.NODE_ENV === 'production';
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH || (isProd ? '/sunny' : '');
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://aheiner2001.github.io';
+  const logoUrl = `${origin}${basePath}/sunny-logo.png`;
   // Use /inspect?id= format which routes cleanly to static inspect.html on static hosts
   const scanUrl = `${origin}${basePath}/inspect?id=${encodeURIComponent(vehicle.id)}`;
 
@@ -41,27 +42,14 @@ export function QRCodeDisplay({ vehicle }: { vehicle: Vehicle }) {
               margin: 0 auto; 
               box-shadow: 0 4px 20px rgba(0,0,0,0.06);
               background: #ffffff;
+              position: relative;
             }
-            .brand-header {
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              gap: 8px;
-              margin-bottom: 2px;
-            }
-            .brand { 
-              font-size: 26px; 
-              font-weight: 900; 
-              color: #0f172a; 
-              letter-spacing: -0.5px;
-            }
-            .dot {
-              display: inline-block;
-              width: 10px;
-              height: 10px;
-              background-color: #f59e0b;
-              border-radius: 50%;
-              margin-left: 2px;
+            .logo {
+              position: absolute;
+              top: 16px;
+              left: 18px;
+              width: 96px;
+              height: auto;
             }
             .sub { 
               font-size: 11px; 
@@ -127,9 +115,7 @@ export function QRCodeDisplay({ vehicle }: { vehicle: Vehicle }) {
         </head>
         <body>
           <div class="sticker">
-            <div class="brand-header">
-              <span class="brand">Sunny Fleet<span class="dot"></span></span>
-            </div>
+            <img class="logo" src="${logoUrl}" alt="Sunny logo" />
             <div class="sub">Vehicle Accountability System</div>
             <div class="qr-container">${qrRef.current?.innerHTML || ''}</div>
             <div class="van-num">${vehicle.vehicleNumber}</div>
