@@ -13,8 +13,7 @@ import {
   ChevronRight,
   Info,
   Clock,
-  Wrench,
-  Sparkles
+  Wrench
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Vehicle, Inspection, Issue } from '@/types';
@@ -65,7 +64,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-full overflow-x-hidden">
       {/* Top Row Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         {/* Card 1: Total Vehicles */}
@@ -81,7 +80,7 @@ export default function DashboardPage() {
           </div>
           <Link
             href="/vehicles"
-            className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-1 text-xs font-bold text-sky-600 hover:text-sky-700 group"
+            className="mt-4 pt-3 border-t border-slate-100 inline-flex items-center gap-1 min-h-11 text-sm sm:text-xs font-bold text-sky-600 hover:text-sky-700 group"
           >
             <span>View all vehicles</span>
             <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
@@ -101,7 +100,7 @@ export default function DashboardPage() {
           </div>
           <Link
             href="/inspections"
-            className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-1 text-xs font-bold text-sky-600 hover:text-sky-700 group"
+            className="mt-4 pt-3 border-t border-slate-100 inline-flex items-center gap-1 min-h-11 text-sm sm:text-xs font-bold text-sky-600 hover:text-sky-700 group"
           >
             <span>View today's inspections</span>
             <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
@@ -121,7 +120,7 @@ export default function DashboardPage() {
           </div>
           <Link
             href="/issues"
-            className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-1 text-xs font-bold text-sky-600 hover:text-sky-700 group"
+            className="mt-4 pt-3 border-t border-slate-100 inline-flex items-center gap-1 min-h-11 text-sm sm:text-xs font-bold text-sky-600 hover:text-sky-700 group"
           >
             <span>View all issues</span>
             <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
@@ -141,7 +140,7 @@ export default function DashboardPage() {
           </div>
           <Link
             href="/employees"
-            className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-1 text-xs font-bold text-sky-600 hover:text-sky-700 group"
+            className="mt-4 pt-3 border-t border-slate-100 inline-flex items-center gap-1 min-h-11 text-sm sm:text-xs font-bold text-sky-600 hover:text-sky-700 group"
           >
             <span>View active users</span>
             <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
@@ -156,7 +155,7 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
               <h2 className="font-bold text-slate-900 text-base">Today's Activity</h2>
-              <Link href="/inspections" className="text-xs font-bold text-sky-600 hover:text-sky-700 flex items-center gap-1">
+              <Link href="/inspections" className="text-sm sm:text-xs font-bold text-sky-600 hover:text-sky-700 inline-flex items-center gap-1 min-h-11">
                 View all <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
@@ -173,10 +172,10 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-slate-900 truncate">{activity.type === 'inspection' ? 'Inspection Completed' : 'Issue Reported'}</p>
-                    <span className="text-[11px] text-slate-400 font-medium">{new Date(activity.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                    <p className="text-sm sm:text-xs font-bold text-slate-900 truncate">{activity.type === 'inspection' ? 'Inspection Completed' : 'Issue Reported'}</p>
+                    <span className="text-xs sm:text-[11px] text-slate-400 font-medium">{new Date(activity.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
                   </div>
-                  <p className="text-xs text-slate-500 truncate">{activity.type === 'inspection' ? `${activity.insp.vehicleNumber} - ${activity.insp.userName}` : `${activity.issue.vehicleNumber} - ${activity.issue.equipmentName}`}</p>
+                  <p className="text-sm sm:text-xs text-slate-500 truncate">{activity.type === 'inspection' ? `${activity.insp.vehicleNumber} - ${activity.insp.userName}` : `${activity.issue.vehicleNumber} - ${activity.issue.equipmentName}`}</p>
                 </div>
               </div>
                 ))}
@@ -196,10 +195,10 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-slate-700">{currentMonthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
                 <div className="flex items-center">
-                  <button onClick={(e) => { e.stopPropagation(); setCurrentMonthDate(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - 1, 1)); }} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+                  <button onClick={(e) => { e.stopPropagation(); setCurrentMonthDate(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - 1, 1)); }} className="min-h-11 min-w-11 rounded hover:bg-slate-100 text-slate-400 flex items-center justify-center">
                     <ChevronLeft className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); setCurrentMonthDate(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 1)); }} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+                  <button onClick={(e) => { e.stopPropagation(); setCurrentMonthDate(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 1)); }} className="min-h-11 min-w-11 rounded hover:bg-slate-100 text-slate-400 flex items-center justify-center">
                     <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -218,11 +217,11 @@ export default function DashboardPage() {
             </div>
 
             {/* Calendar Numbers Grid */}
-            <div className="grid grid-cols-7 text-center text-xs gap-y-1.5 py-2 font-medium">
+            <div className="grid grid-cols-7 text-center text-sm sm:text-xs gap-y-1.5 py-2 font-medium">
               {Array.from({ length: startDayOffset }).map((_, i) => <span key={`empty-${i}`} className="text-slate-300" />)}
               {calendarDays.map(day => {
                 const info = getDayStatus(day);
-                return <span key={day} className="relative">{day}{info.hasIssue && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-amber-400" />}{info.hasInspection && !info.hasIssue && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-emerald-500" />}</span>;
+                return <span key={day} className="relative py-1">{day}{info.hasIssue && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-amber-400" />}{info.hasInspection && !info.hasIssue && <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-emerald-500" />}</span>;
               })}
             </div>
           </div>
@@ -250,7 +249,7 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
               <h2 className="font-bold text-slate-900 text-base">Open Issues</h2>
-              <Link href="/issues" className="text-xs font-bold text-sky-600 hover:text-sky-700 flex items-center gap-1">
+              <Link href="/issues" className="text-sm sm:text-xs font-bold text-sky-600 hover:text-sky-700 inline-flex items-center gap-1 min-h-11">
                 View all <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
@@ -275,7 +274,7 @@ export default function DashboardPage() {
 
           <Link
             href="/issues"
-            className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-1 text-xs font-bold text-sky-600 hover:text-sky-700 group"
+            className="mt-4 pt-3 border-t border-slate-100 inline-flex items-center gap-1 min-h-11 text-sm sm:text-xs font-bold text-sky-600 hover:text-sky-700 group"
           >
             <span>View all issues</span>
             <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
@@ -289,13 +288,13 @@ export default function DashboardPage() {
         <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm">
           <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
             <h2 className="font-bold text-slate-900 text-base">Vehicles in Use</h2>
-            <Link href="/vehicles" className="text-xs font-bold text-sky-600 hover:text-sky-700 flex items-center gap-1">
+            <Link href="/vehicles" className="text-sm sm:text-xs font-bold text-sky-600 hover:text-sky-700 inline-flex items-center gap-1 min-h-11">
               View all <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full min-w-[640px] text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase">
                   <th className="pb-3 font-bold">Vehicle</th>
@@ -341,7 +340,7 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
               <h2 className="font-bold text-slate-900 text-base">Recent Inspections</h2>
-              <Link href="/inspections" className="text-xs font-bold text-sky-600 hover:text-sky-700 flex items-center gap-1">
+              <Link href="/inspections" className="text-sm sm:text-xs font-bold text-sky-600 hover:text-sky-700 inline-flex items-center gap-1 min-h-11">
                 View all <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
@@ -382,7 +381,7 @@ export default function DashboardPage() {
 
           <Link
             href="/inspections"
-            className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-1 text-xs font-bold text-sky-600 hover:text-sky-700 group"
+            className="mt-4 pt-3 border-t border-slate-100 inline-flex items-center gap-1 min-h-11 text-sm sm:text-xs font-bold text-sky-600 hover:text-sky-700 group"
           >
             <span>View all inspections</span>
             <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
