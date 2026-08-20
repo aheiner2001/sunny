@@ -14,6 +14,8 @@ import {
   User,
   UserRole,
   EquipmentCategory,
+  EquipmentKind,
+  EquipmentAssignment,
   EquipmentOption,
   FleetTask,
   ReportSettings
@@ -96,6 +98,43 @@ class DataStore {
 
   private isClient(): boolean {
     return typeof window !== 'undefined';
+  }
+
+  private normalizeEquipment(raw: Equipment): Equipment {
+    const kind: EquipmentKind = raw.kind || raw.equipmentType || (raw.isConsumable ? 'consumable' : (raw.category === 'supplies' ? 'consumable' : 'reusable'));
+    const legacyVehicleId = raw.vehicleId || null;
+    const legacyVehicleNumber = raw.vehicleNumber || null;
+    let assignments: EquipmentAssignment[] = Array.isArray(raw.assignments)
+      ? raw.assignments
+          .filter(a => a && a.vehicleId)
+          .map(a => ({
+            vehicleId: a.vehicleId,
+            vehicleNumber: a.vehicleNumber || 'Vehicle',
+            quantity: Math.max(0, Number(a.quantity) || 0)
+          }))
+          .filter(a => a.quantity > 0)
+      : [];
+    if (assignments.length === 0 && legacyVehicleId) {
+      assignments = [{ vehicleId: legacyVehicleId, vehicleNumber: legacyVehicleNumber || 'Vehicle', quantity: 1 }];
+    }
+    const rawTotal = Number(raw.totalQuantity);
+    const assignedQuantity = assignments.reduce((sum, assignment) => sum + assignment.quantity, 0);
+    const totalQuantity = kind === 'reusable' ? 1 : Math.max(assignedQuantity, Number.isFinite(rawTotal) ? rawTotal : 1);
+    const availableQuantity = Math.max(0, Number(raw.availableQuantity ?? totalQuantity - assignedQuantity));
+    return {
+      ...raw,
+      vehicleId: legacyVehicleId || assignments[0]?.vehicleId || null,
+      vehicleNumber: legacyVehicleNumber || assignments[0]?.vehicleNumber || 'Unassigned',
+      kind,
+      equipmentType: kind,
+      isConsumable: kind === 'consumable',
+      totalQuantity,
+      availableQuantity,
+      assignments,
+      qrCodeToken: raw.qrCodeToken || raw.qrToken || raw.qrCode || null,
+      qrCode: raw.qrCode || raw.qrCodeToken || raw.qrToken || null,
+      qrToken: raw.qrToken || raw.qrCodeToken || raw.qrCode || null
+    };
   }
 
   public init() {
@@ -365,6 +404,7 @@ class DataStore {
     role: UserRole;
     status?: 'active' | 'inactive';
     avatarUrl?: string;
+    avatarStyle?: User['avatarStyle'];
   }): Promise<User> {
     if (!this.isClient()) throw new Error('Client only');
     this.init();
@@ -376,7 +416,8 @@ class DataStore {
       email: userData.email.trim().toLowerCase(),
       role: userData.role,
       status: userData.status || 'active',
-      avatarUrl: userData.avatarUrl?.trim() || undefined
+      avatarUrl: userData.avatarUrl?.trim() || undefined,
+      avatarStyle: userData.avatarStyle || 'circle'
     };
 
     const currentUsers = this.getUsers();
@@ -581,6 +622,7 @@ class DataStore {
       lastInspectionId: vehicleData.lastInspectionId || null,
       lastInspectionStatus: vehicleData.lastInspectionStatus || null,
       lastInspectionAt: vehicleData.lastInspectionAt || null,
+      imageUrl: vehicleData.imageUrl?.trim() || null,
       createdAt: vehicleData.createdAt || nowIso,
     };
 
@@ -641,10 +683,13 @@ class DataStore {
 
     // Also update vehicleNumber on any assigned equipment
     const equipment = this.getEquipment().map(eq => {
-      if (eq.vehicleId === updated.id && eq.vehicleNumber !== updated.vehicleNumber) {
-        return { ...eq, vehicleNumber: updated.vehicleNumber };
+      const assignments = (eq.assignments || []).map(a =>
+        a.vehicleId === updated.id ? { ...a, vehicleNumber: updated.vehicleNumber } : a
+      );
+      if (eq.vehicleId === updated.id || assignments.some((a, i) => a.vehicleId === updated.id && a.vehicleNumber !== (eq.assignments || [])[i]?.vehicleNumber)) {
+        return { ...eq, vehicleNumber: updated.vehicleNumber, assignments };
       }
-      return eq;
+      return { ...eq, assignments };
     });
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(equipment));
 
@@ -668,8 +713,18 @@ class DataStore {
     const vehicles = this.getVehicles().filter(v => v.id !== vehicleId);
     localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(vehicles));
 
-    // Cleanup associated equipment
-    const equipment = this.getEquipment().filter(e => e.vehicleId !== vehicleId);
+    // Remove a vehicle's assignment but preserve shared inventory records.
+    const equipment = this.getEquipment().map(e => {
+      const assignments = (e.assignments || []).filter(a => a.vehicleId !== vehicleId);
+      const total = e.totalQuantity || (e.kind === 'reusable' ? 1 : 0);
+      return {
+        ...e,
+        assignments,
+        vehicleId: assignments[0]?.vehicleId || null,
+        vehicleNumber: assignments[0]?.vehicleNumber || 'Unassigned',
+        availableQuantity: Math.max(0, total - assignments.reduce((sum, a) => sum + a.quantity, 0))
+      };
+    });
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(equipment));
 
     // Cleanup associated inspections
@@ -699,7 +754,7 @@ class DataStore {
     if (!this.isClient()) return [];
     this.init();
     const data = localStorage.getItem(STORAGE_KEYS.EQUIPMENT);
-    return data ? JSON.parse(data) : [];
+    return data ? (JSON.parse(data) as Equipment[]).map(eq => this.normalizeEquipment(eq)) : [];
   }
 
   public getEquipmentItem(id: string): Equipment | undefined {
@@ -707,28 +762,42 @@ class DataStore {
   }
 
   public getEquipmentForVehicle(vehicleId: string): Equipment[] {
-    return this.getEquipment().filter(e => e.vehicleId === vehicleId);
+    return this.getEquipment().filter(e => e.vehicleId === vehicleId || e.assignments?.some(a => a.vehicleId === vehicleId));
   }
 
   public async createEquipment(equipmentData: {
     name: string;
-    vehicleId: string;
+    vehicleId?: string | null;
     category?: EquipmentCategory;
     status?: Equipment['status'];
+    kind?: EquipmentKind;
+    totalQuantity?: number;
+    qrCodeToken?: string | null;
+    qrCode?: string | null;
   }): Promise<Equipment> {
     if (!this.isClient()) throw new Error('Client only');
     this.init();
 
     const timestamp = Date.now();
-    const targetVehicle = this.getVehicle(equipmentData.vehicleId);
+    const targetVehicle = equipmentData.vehicleId ? this.getVehicle(equipmentData.vehicleId) : undefined;
     const nowIso = new Date().toISOString();
+    const kind = equipmentData.kind || (equipmentData.category === 'supplies' ? 'consumable' : 'reusable');
+    const requestedTotal = Number(equipmentData.totalQuantity);
+    const totalQuantity = kind === 'reusable' ? 1 : Math.max(0, Number.isFinite(requestedTotal) ? requestedTotal : 1);
+    const assignments = targetVehicle ? [{ vehicleId: targetVehicle.id, vehicleNumber: targetVehicle.vehicleNumber, quantity: kind === 'reusable' ? 1 : totalQuantity }] : [];
 
     const newEq: Equipment = {
       id: `eq-${timestamp}`,
-      vehicleId: equipmentData.vehicleId,
+      vehicleId: targetVehicle?.id || null,
       vehicleNumber: targetVehicle ? targetVehicle.vehicleNumber : 'Unassigned',
       name: equipmentData.name.trim(),
       category: equipmentData.category || 'equipment',
+      kind,
+      totalQuantity,
+      availableQuantity: Math.max(0, totalQuantity - assignments.reduce((sum, a) => sum + a.quantity, 0)),
+      assignments,
+      qrCodeToken: equipmentData.qrCodeToken?.trim() || null,
+      qrCode: equipmentData.qrCode?.trim() || equipmentData.qrCodeToken?.trim() || null,
       status: equipmentData.status || 'working',
       activeIssueId: null,
       createdAt: nowIso,
@@ -755,10 +824,12 @@ class DataStore {
     if (!this.isClient()) throw new Error('Client only');
     this.init();
 
-    const targetVehicle = this.getVehicle(updated.vehicleId);
+    const targetVehicle = updated.vehicleId ? this.getVehicle(updated.vehicleId) : undefined;
+    const normalized = this.normalizeEquipment(updated);
     const enriched: Equipment = {
-      ...updated,
+      ...normalized,
       vehicleNumber: targetVehicle ? targetVehicle.vehicleNumber : updated.vehicleNumber || 'Unassigned',
+      vehicleId: targetVehicle?.id || normalized.vehicleId || null,
       updatedAt: new Date().toISOString()
     };
 
@@ -777,6 +848,115 @@ class DataStore {
 
     window.dispatchEvent(new Event('sunny_db_update'));
     return sanitized;
+  }
+
+  public getEquipmentByQR(token: string): Equipment | undefined {
+    const raw = decodeURIComponent((token || '').trim());
+    let clean = raw
+      .replace(/^https?:\/\/[^/]+\/equipment\/scan\?id=/i, '')
+      .replace(/^\/equipment\/scan\?id=/i, '')
+      .replace(/^sunny:\/\/equipment\//i, '')
+      .split('&')[0];
+    try {
+      const parsed = new URL(raw);
+      clean = parsed.searchParams.get('id') || parsed.searchParams.get('equipment') || parsed.pathname.split('/').filter(Boolean).pop() || clean;
+    } catch {
+      // Token is commonly a short ID rather than a full URL.
+    }
+    return this.getEquipment().find(eq =>
+      [eq.id, eq.qrCodeToken, eq.qrCode].filter(Boolean).some(value => String(value).toLowerCase() === clean.toLowerCase())
+    );
+  }
+
+  public async fetchEquipmentAsync(idOrToken: string): Promise<Equipment | null> {
+    this.init();
+    const cached = this.getEquipmentItem(idOrToken) || this.getEquipmentByQR(idOrToken);
+    if (cached) return cached;
+    if (!db) return null;
+    try {
+      await Promise.race([ensureAuth(), new Promise((_, reject) => setTimeout(() => reject(new Error('Auth timeout')), 5000))]);
+      const direct = await getDoc(doc(db, 'equipment', idOrToken));
+      if (direct.exists()) {
+        const item = this.normalizeEquipment(direct.data() as Equipment);
+        const current = this.getEquipment().filter(eq => eq.id !== item.id);
+        localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify([...current, item]));
+        window.dispatchEvent(new Event('sunny_db_update'));
+        return item;
+      }
+      const snapshot = await getDocs(collection(db, 'equipment'));
+      const items: Equipment[] = [];
+      snapshot.forEach(d => items.push(this.normalizeEquipment(d.data() as Equipment)));
+      const needle = idOrToken.toLowerCase();
+      const match = items.find(item => [item.id, item.qrCodeToken, item.qrCode, item.qrToken].filter(Boolean).some(value => String(value).toLowerCase() === needle));
+      if (items.length) localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(items));
+      return match || null;
+    } catch (error) {
+      console.warn('Direct Firestore equipment query failed:', error);
+      return null;
+    }
+  }
+
+  public async transferEquipmentQuantity(
+    equipmentId: string,
+    targetVehicleId: string,
+    quantity: number,
+    sourceVehicleId?: string | null
+  ): Promise<Equipment> {
+    if (!this.isClient()) throw new Error('Client only');
+    const equipment = this.getEquipmentItem(equipmentId);
+    const vehicle = this.getVehicle(targetVehicleId);
+    if (!equipment || !vehicle) throw new Error('Equipment or target vehicle not found.');
+    const amount = Number(quantity);
+    if (!Number.isInteger(amount) || amount <= 0) throw new Error('Quantity must be a positive whole number.');
+
+    const kind = equipment.kind || 'reusable';
+    const assignments = [...(equipment.assignments || [])];
+    const sourceIndex = sourceVehicleId ? assignments.findIndex(a => a.vehicleId === sourceVehicleId) : -1;
+    const sourceAvailable = sourceVehicleId
+      ? (sourceIndex >= 0 ? assignments[sourceIndex].quantity : 0)
+      : (equipment.availableQuantity ?? 0);
+    if (amount > sourceAvailable) throw new Error('Not enough available equipment quantity.');
+    if (kind === 'reusable' && amount !== 1) throw new Error('Reusable equipment is limited to one unit.');
+    if (kind === 'reusable' && !sourceVehicleId && assignments.length > 0) {
+      throw new Error('This item is assigned. Choose its current vehicle to explicitly transfer it.');
+    }
+
+    if (sourceVehicleId && sourceIndex >= 0) {
+      assignments[sourceIndex] = { ...assignments[sourceIndex], quantity: assignments[sourceIndex].quantity - amount };
+    }
+    const targetIndex = assignments.findIndex(a => a.vehicleId === targetVehicleId);
+    if (targetIndex >= 0) {
+      assignments[targetIndex] = { ...assignments[targetIndex], vehicleNumber: vehicle.vehicleNumber, quantity: assignments[targetIndex].quantity + amount };
+    } else {
+      assignments.push({ vehicleId: vehicle.id, vehicleNumber: vehicle.vehicleNumber, quantity: amount });
+    }
+    const cleanAssignments = assignments.filter(a => a.quantity > 0);
+    const totalQuantity = equipment.totalQuantity || (kind === 'reusable' ? 1 : amount);
+    const assignedQuantity = cleanAssignments.reduce((sum, a) => sum + a.quantity, 0);
+    return this.updateEquipment({
+      ...equipment,
+      kind,
+      totalQuantity: Math.max(totalQuantity, assignedQuantity),
+      availableQuantity: Math.max(0, totalQuantity - assignedQuantity),
+      assignments: cleanAssignments,
+      vehicleId: cleanAssignments[0]?.vehicleId || null,
+      vehicleNumber: cleanAssignments[0]?.vehicleNumber || 'Unassigned'
+    });
+  }
+
+  public async assignEquipmentToVehicle(equipmentId: string, vehicleId: string, quantity = 1): Promise<Equipment> {
+    return this.transferEquipmentQuantity(equipmentId, vehicleId, quantity);
+  }
+
+  public async reassignEquipment(equipmentId: string, vehicleId: string, sourceVehicleId?: string | null): Promise<Equipment> {
+    const equipment = this.getEquipmentItem(equipmentId);
+    if (!equipment) throw new Error('Equipment not found.');
+    return this.transferEquipmentQuantity(
+      equipmentId,
+      vehicleId,
+      equipment.kind === 'consumable' ? 1 : 1,
+      sourceVehicleId || equipment.assignments?.[0]?.vehicleId || null
+    );
   }
 
   public async deleteEquipment(equipmentId: string): Promise<void> {

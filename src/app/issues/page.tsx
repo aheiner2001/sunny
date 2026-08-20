@@ -36,6 +36,17 @@ export default function IssuesPage() {
     return () => window.removeEventListener('sunny_db_update', loadData);
   }, []);
 
+  useEffect(() => {
+    const issueId = new URLSearchParams(window.location.search).get('issue');
+    if (!issueId) return;
+    const target = issues.find(issue => issue.id === issueId);
+    if (target) {
+      setSelectedIssue(target);
+      setStatusFilter(target.status === 'fixed' ? 'fixed' : 'all');
+      window.setTimeout(() => document.getElementById(`issue-${issueId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
+    }
+  }, [issues]);
+
   const activeIssues = (statusFilter === 'fixed'
     ? issues.filter(iss => iss.status === 'fixed')
     : issues.filter(iss => iss.status !== 'fixed')
@@ -126,11 +137,13 @@ export default function IssuesPage() {
       {/* Main Issue Cards with Built-in Timeline */}
       <div className="space-y-6">
         {filteredIssues.map((issue) => (
-          <IssueTimeline
+          <div
             key={issue.id}
-            issue={issue}
-            onStatusUpdated={() => loadData()}
-          />
+            id={`issue-${issue.id}`}
+            className={selectedIssue?.id === issue.id ? 'rounded-3xl ring-2 ring-sky-500 ring-offset-2' : ''}
+          >
+            <IssueTimeline issue={issue} onStatusUpdated={() => loadData()} />
+          </div>
         ))}
 
         {filteredIssues.length === 0 && (

@@ -23,6 +23,11 @@ export function SPARedirectHandler() {
       router.replace(`/inspect?id=${encodeURIComponent(directInspect)}`);
       return;
     }
+    const directEquipment = urlParams.get('equipment') || urlParams.get('eq');
+    if (directEquipment) {
+      router.replace(`/equipment/scan?id=${encodeURIComponent(directEquipment)}`);
+      return;
+    }
 
     // 2. 404.html redirect parameter (?p=/inspect/van-1234 or ?p=/vehicles/van-1234)
     const pParam = urlParams.get('p');
@@ -49,6 +54,11 @@ export function SPARedirectHandler() {
       if (appPath.startsWith('/vehicles/') && !appPath.startsWith('/vehicles/detail')) {
         const id = appPath.replace('/vehicles/', '').split('?')[0];
         router.replace(`/vehicles/detail?id=${encodeURIComponent(id)}`);
+        return;
+      }
+      if (appPath.startsWith('/equipment/scan/')) {
+        const id = appPath.replace('/equipment/scan/', '').split('?')[0];
+        router.replace(`/equipment/scan?id=${encodeURIComponent(id)}`);
         return;
       }
 

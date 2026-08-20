@@ -53,12 +53,14 @@ export default function VehiclesPage() {
     licensePlate: string;
     qrCodeToken: string;
     status: VehicleStatus;
+    imageUrl: string;
   }>({
     vehicleNumber: '',
     name: '',
     licensePlate: '',
     qrCodeToken: '',
     status: 'active',
+    imageUrl: '',
   });
 
   const loadData = () => {
@@ -91,6 +93,7 @@ export default function VehiclesPage() {
       licensePlate: `${nextNum}U${Math.floor(Math.random() * 9 + 1)}-SUN`,
       qrCodeToken: `van-${nextNum}`,
       status: 'active',
+      imageUrl: '',
     });
     setSelectedEquipment(equipmentOptions.slice(0, 3).map(option => option.name));
     setCustomEquipment('');
@@ -111,6 +114,7 @@ export default function VehiclesPage() {
       licensePlate: v.licensePlate,
       qrCodeToken: v.qrCodeToken,
       status: v.status,
+      imageUrl: v.imageUrl || '',
     });
     setIsEditModalOpen(true);
   };
@@ -144,7 +148,8 @@ export default function VehiclesPage() {
           name: formData.name,
           licensePlate: formData.licensePlate,
           qrCodeToken: formData.qrCodeToken || formData.vehicleNumber.toLowerCase().replace(/\s+/g, '-'),
-          status: formData.status
+          status: formData.status,
+          imageUrl: formData.imageUrl
         },
         allEquipment
       );
@@ -169,7 +174,8 @@ export default function VehiclesPage() {
         name: formData.name.trim(),
         licensePlate: formData.licensePlate.trim().toUpperCase(),
         qrCodeToken: formData.qrCodeToken.trim() || selectedVehicle.qrCodeToken,
-        status: formData.status
+        status: formData.status,
+        imageUrl: formData.imageUrl.trim() || null
       });
 
       setIsEditModalOpen(false);
@@ -178,6 +184,18 @@ export default function VehiclesPage() {
     } finally {
       setModalLoading(false);
     }
+  };
+
+  const handleVehicleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      alert('Vehicle images must be PNG, JPG, or WebP files.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setFormData(current => ({ ...current, imageUrl: String(reader.result || '') }));
+    reader.readAsDataURL(file);
   };
 
   const handleDeleteVehicle = async () => {
@@ -269,9 +287,13 @@ export default function VehiclesPage() {
                 {/* Card Top */}
                 <div className="flex items-start justify-between gap-2 mb-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold text-sm">
-                      <Truck className="w-6 h-6" />
-                    </div>
+                    {vehicle.imageUrl ? (
+                      <img src={vehicle.imageUrl} alt="" className="w-12 h-12 rounded-2xl object-cover ring-1 ring-slate-200" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold text-sm">
+                        <Truck className="w-6 h-6" />
+                      </div>
+                    )}
                     <div>
                       <h2 className="text-base font-extrabold text-slate-900">{vehicle.vehicleNumber}</h2>
                       <span className="text-[11px] font-mono font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
@@ -387,6 +409,15 @@ export default function VehiclesPage() {
                     onChange={(e) => setFormData({ ...formData, vehicleNumber: e.target.value })}
                     className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Vehicle Image</label>
+                  <div className="flex items-center gap-3">
+                    {formData.imageUrl && <img src={formData.imageUrl} alt="Vehicle preview" className="w-14 h-14 rounded-xl object-cover border border-slate-200" />}
+                    <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleVehicleImageUpload} className="w-full text-xs text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-xs file:font-bold file:text-sky-700" />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">Saved with the vehicle record and synchronized through the existing Firebase data path.</p>
                 </div>
 
                 <div>
@@ -561,6 +592,14 @@ export default function VehiclesPage() {
                     onChange={(e) => setFormData({ ...formData, licensePlate: e.target.value })}
                     className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none uppercase font-mono"
                   />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Vehicle Image</label>
+                <div className="flex items-center gap-3">
+                  {formData.imageUrl && <img src={formData.imageUrl} alt="Vehicle preview" className="w-14 h-14 rounded-xl object-cover border border-slate-200" />}
+                  <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleVehicleImageUpload} className="w-full text-xs text-slate-500 file:mr-2 file:rounded-lg file:border-0 file:bg-sky-50 file:px-3 file:py-2 file:text-xs file:font-bold file:text-sky-700" />
                 </div>
               </div>
 

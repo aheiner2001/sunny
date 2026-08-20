@@ -31,8 +31,11 @@ There is no test script, test directory, or configured test runner. Consequently
 - `src/types/index.ts` is the shared domain model. Keep changes to Firestore/localStorage records aligned with these interfaces and with the checklist/issue schema described in `docs/superpowers/specs/2026-08-19-vehicle-equipment-accountability-design.md`.
 - `src/app/settings/page.tsx` edits the single `checklists/standard-detailing-checklist` document, including category order and question order. Inspection UI reads that configuration dynamically.
 - Settings also persists manager equipment options, per-question issue-reason presets, fleet tasks, and report metric selections through `dbService`; vehicle creation consumes the equipment-option list while still accepting custom one-off entries.
+- The Equipment route supports an equipment-first view and a collapsible vehicle-grouped view. Preserve both filtering modes when changing inventory UI.
+- Equipment records support optional QR tokens, reusable tools, consumable stock, per-vehicle quantity assignments, and shared/unassigned inventory. Use the equipment scan route and `dbService.transferEquipmentQuantity` for confirmed transfers; never decrement stock in the page directly.
 - Inspection submission is centralized in `dbService.submitInspection`: it creates an inspection, creates one issue and initial status log per flagged item, updates linked equipment status, and marks the vehicle `in_use` with the latest inspection fields.
 - Inspection records may carry `taskId`, `scheduleLabel`, and `scheduledAt`; a completed task is not a duplicate-prevention lock because the UI intentionally permits a second inspection when a manager selects an already-completed scheduled task.
+- User profile and vehicle images currently use browser data URLs or external URLs stored in their Firestore documents. This avoids requiring Firebase Storage for the current demo, but large production uploads should move to Firebase Storage rather than enlarging documents.
 
 ## Repository-specific conventions
 

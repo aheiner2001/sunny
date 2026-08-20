@@ -45,6 +45,11 @@ export const INITIAL_EQUIPMENT: Equipment[] = [
     name: 'Air Compressor 200 PSI', 
     category: 'equipment', 
     status: 'working',
+    kind: 'reusable',
+    totalQuantity: 1,
+    availableQuantity: 0,
+    assignments: [{ vehicleId: 'van-1', vehicleNumber: 'Van #1', quantity: 1 }],
+    qrCodeToken: 'eq-1',
     activeIssueId: null,
     createdAt: '2026-08-19T08:00:00Z',
     updatedAt: '2026-08-19T08:00:00Z'

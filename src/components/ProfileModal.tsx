@@ -16,6 +16,7 @@ export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
 
   const [name, setName] = useState(user?.name || '');
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
+  const [avatarStyle, setAvatarStyle] = useState(user?.avatarStyle || 'circle');
   const [isSaving, setIsSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState(false);
 
@@ -23,6 +24,7 @@ export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
     if (user && isOpen) {
       setName(user.name);
       setAvatarUrl(user.avatarUrl || '');
+      setAvatarStyle(user.avatarStyle || 'circle');
       setSuccessMessage(false);
     }
   }, [user, isOpen]);
@@ -37,7 +39,8 @@ export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
       setIsSaving(true);
       await updateProfile({
         name: name.trim(),
-        avatarUrl: avatarUrl.trim()
+        avatarUrl: avatarUrl.trim(),
+        avatarStyle
       });
       setSuccessMessage(true);
       setTimeout(() => {
@@ -90,7 +93,9 @@ export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
                 <img
                   src={avatarUrl}
                   alt="Profile Preview"
-                  className="w-24 h-24 rounded-3xl object-cover ring-4 ring-sky-500/20 shadow-md transition-transform group-hover:scale-105"
+                  className={`w-24 h-24 object-cover ring-4 ring-sky-500/20 shadow-md transition-transform group-hover:scale-105 ${
+                    avatarStyle === 'circle' ? 'rounded-full' : avatarStyle === 'square' ? 'rounded-none' : 'rounded-3xl'
+                  }`}
                 />
               ) : (
                 <div className="w-24 h-24 rounded-3xl bg-slate-100 text-slate-400 ring-4 ring-sky-500/20 shadow-md flex items-center justify-center">
@@ -106,15 +111,41 @@ export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
                 <input
                   id="avatar-upload"
                   type="file"
-                  accept="image/*"
+                  accept="image/png,image/jpeg,image/webp"
                   onChange={handleFileUpload}
                   className="hidden"
                 />
               </label>
             </div>
             <p className="text-[11px] font-medium text-slate-400">
-              Upload a photo or provide an image URL:
+              Upload a PNG, JPG, or WebP photo, or provide an image URL:
             </p>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+              Photo Style
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                ['circle', 'Circle'],
+                ['rounded', 'Rounded'],
+                ['square', 'Square']
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setAvatarStyle(value)}
+                  className={`px-3 py-2 rounded-xl border text-xs font-bold ${
+                    avatarStyle === value
+                      ? 'border-sky-500 bg-sky-50 text-sky-700'
+                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Custom URL Input */}

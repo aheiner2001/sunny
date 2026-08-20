@@ -106,11 +106,16 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
                 <span className="text-xs bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full">{issues.length} unread</span>
               </div>
               <div className="space-y-2">
-                {issues.slice(0, 5).map(issue => <div key={issue.id} className="p-2 rounded-xl bg-amber-50/70 border border-amber-100 text-xs">
+                {issues.slice(0, 5).map(issue => <Link
+                  key={issue.id}
+                  href={`/issues?issue=${encodeURIComponent(issue.id)}`}
+                  onClick={() => setNotifMenuOpen(false)}
+                  className="block p-2 rounded-xl bg-amber-50/70 border border-amber-100 text-xs hover:bg-amber-100/70 transition-colors"
+                >
                   <div className="font-semibold text-slate-800">Issue Reported: {issue.vehicleNumber}</div>
                   <div className="text-slate-600">{issue.title || issue.equipmentName}</div>
                   <div className="text-[10px] text-amber-700 font-medium mt-1">{new Date(issue.reportedAt).toLocaleString()}</div>
-                </div>)}
+                </Link>)}
                 {issues.length === 0 && <p className="p-2 text-xs text-slate-400">No unread notifications.</p>}
               </div>
             </div>
@@ -130,7 +135,9 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
               <img
                 src={user.avatarUrl}
                 alt={user.name || 'User'}
-                className="w-9 h-9 rounded-full object-cover ring-2 ring-sky-500/20 shadow-sm"
+                className={`w-9 h-9 object-cover ring-2 ring-sky-500/20 shadow-sm ${
+                  user.avatarStyle === 'circle' || !user.avatarStyle ? 'rounded-full' : user.avatarStyle === 'square' ? 'rounded-none' : 'rounded-xl'
+                }`}
               />
             ) : (
               <div className="w-9 h-9 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center ring-2 ring-sky-500/20 shadow-sm">
@@ -196,7 +203,9 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
                           <img
                             src={u.avatarUrl}
                             alt={u.name}
-                            className="w-6 h-6 rounded-full object-cover ring-1 ring-slate-200"
+                            className={`w-6 h-6 object-cover ring-1 ring-slate-200 ${
+                              u.avatarStyle === 'circle' || !u.avatarStyle ? 'rounded-full' : u.avatarStyle === 'square' ? 'rounded-none' : 'rounded-lg'
+                            }`}
                           />
                         ) : (
                           <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center ring-1 ring-slate-200">

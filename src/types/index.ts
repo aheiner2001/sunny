@@ -7,6 +7,7 @@ export interface User {
   role: UserRole;
   status: 'active' | 'inactive';
   avatarUrl?: string;
+  avatarStyle?: 'circle' | 'rounded' | 'square';
 }
 
 export type VehicleStatus = 'active' | 'in_use' | 'maintenance' | 'inactive';
@@ -25,18 +26,38 @@ export interface Vehicle {
   lastInspectionId?: string | null;
   lastInspectionStatus?: InspectionStatus | null;
   lastInspectionAt?: string | null;
+  imageUrl?: string | null;
   createdAt?: string;
 }
 
 export type EquipmentCategory = 'equipment' | 'supplies' | 'vehicle_condition';
 export type EquipmentStatus = 'working' | 'flagged' | 'needs_repair' | 'being_repaired' | 'fixed';
+export type EquipmentKind = 'reusable' | 'consumable';
+
+export interface EquipmentAssignment {
+  vehicleId: string;
+  vehicleNumber: string;
+  quantity: number;
+}
 
 export interface Equipment {
   id: string;
-  vehicleId: string;
-  vehicleNumber: string;
+  /** Legacy single assignment fields. New shared inventory may leave these empty. */
+  vehicleId?: string | null;
+  vehicleNumber?: string | null;
   name: string;
   category: EquipmentCategory;
+  kind?: EquipmentKind;
+  equipmentType?: EquipmentKind;
+  isConsumable?: boolean;
+  /** Optional QR token/code used by the equipment scan flow. */
+  qrCodeToken?: string | null;
+  qrCode?: string | null;
+  qrToken?: string | null;
+  /** Total stock for consumables (reusable items default to one). */
+  totalQuantity?: number;
+  availableQuantity?: number;
+  assignments?: EquipmentAssignment[];
   status: EquipmentStatus;
   activeIssueId?: string | null;
   lastCheckedAt?: string;
