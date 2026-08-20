@@ -19,6 +19,7 @@ import {
 import Link from 'next/link';
 import { dbService } from '@/lib/db';
 import { ProfileModal } from '@/components/ProfileModal';
+import { getResolvedAvatarUrl } from '@/lib/avatarPresets';
 
 export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void }) {
   const { user, role, switchUser, availableUsers } = useAuth();
@@ -27,6 +28,7 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [issues, setIssues] = useState<any[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
+  const currentAvatarUrl = getResolvedAvatarUrl(user);
 
   useEffect(() => {
     const loadNotifications = () => setIssues(dbService.getIssues().filter(issue => issue.status !== 'fixed'));
@@ -131,9 +133,9 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
             }}
             className="flex items-center gap-3 p-1.5 pr-3 rounded-full hover:bg-slate-100/80 transition-colors border border-transparent hover:border-slate-200"
           >
-            {user?.avatarUrl ? (
+            {user ? (
               <img
-                src={user.avatarUrl}
+                src={currentAvatarUrl}
                 alt={user.name || 'User'}
                 className={`w-9 h-9 object-cover ring-2 ring-sky-500/20 shadow-sm ${
                   user.avatarStyle === 'circle' || !user.avatarStyle ? 'rounded-full' : user.avatarStyle === 'square' ? 'rounded-none' : 'rounded-xl'
@@ -208,9 +210,13 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
                             }`}
                           />
                         ) : (
-                          <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center ring-1 ring-slate-200">
-                            <UserIcon className="w-3 h-3" />
-                          </div>
+                          <img
+                            src={getResolvedAvatarUrl(u)}
+                            alt={`${u.name} default avatar`}
+                            className={`w-6 h-6 object-cover ring-1 ring-slate-200 ${
+                              u.avatarStyle === 'circle' || !u.avatarStyle ? 'rounded-full' : u.avatarStyle === 'square' ? 'rounded-none' : 'rounded-lg'
+                            }`}
+                          />
                         )}
                         <div className="flex-1 truncate">
                           <span className="block truncate">{u.name}</span>

@@ -5,13 +5,7 @@ import Link from 'next/link';
 import { 
   ClipboardCheck, 
   Search, 
-  Filter, 
   Truck, 
-  User, 
-  Clock, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Calendar,
   ChevronDown,
   ChevronUp,
   Trash2
@@ -25,6 +19,7 @@ export default function InspectionsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [vehicleFilter, setVehicleFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'status' | 'vehicle' | 'driver'>('date_desc');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const loadData = () => {
@@ -55,6 +50,22 @@ export default function InspectionsPage() {
     const matchesVehicle = vehicleFilter === 'all' || insp.vehicleId === vehicleFilter;
 
     return matchesSearch && matchesStatus && matchesVehicle;
+  });
+
+  const sortedInspections = [...filteredInspections].sort((a, b) => {
+    if (sortBy === 'date_asc') {
+      return new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime();
+    }
+    if (sortBy === 'status') {
+      return a.status.localeCompare(b.status);
+    }
+    if (sortBy === 'vehicle') {
+      return a.vehicleNumber.localeCompare(b.vehicleNumber);
+    }
+    if (sortBy === 'driver') {
+      return a.userName.localeCompare(b.userName);
+    }
+    return new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime();
   });
 
   const vehicles = dbService.getVehicles();
@@ -119,12 +130,24 @@ export default function InspectionsPage() {
               </option>
             ))}
           </select>
+
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as 'date_desc' | 'date_asc' | 'status' | 'vehicle' | 'driver')}
+            className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500"
+          >
+            <option value="date_desc">Sort: Newest first</option>
+            <option value="date_asc">Sort: Oldest first</option>
+            <option value="status">Sort: Status</option>
+            <option value="vehicle">Sort: Vehicle</option>
+            <option value="driver">Sort: Driver</option>
+          </select>
         </div>
       </div>
 
       {/* Inspections List */}
       <div className="space-y-4">
-        {filteredInspections.map((insp) => {
+        {sortedInspections.map((insp) => {
           const isExpanded = expandedId === insp.id;
 
           return (
@@ -235,7 +258,7 @@ export default function InspectionsPage() {
           );
         })}
 
-        {filteredInspections.length === 0 && (
+        {sortedInspections.length === 0 && (
           <div className="bg-white rounded-3xl p-12 text-center border border-slate-200">
             <ClipboardCheck className="w-12 h-12 text-slate-300 mx-auto mb-2" />
             <h3 className="text-base font-bold text-slate-700">No inspections found</h3>

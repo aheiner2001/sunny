@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { 
   Truck, 
   CheckCircle2, 
@@ -20,6 +21,7 @@ import { Vehicle, Inspection, Issue } from '@/types';
 import { InspectionStatusBadge, IssueStatusBadge, VehicleStatusBadge } from '@/components/StatusBadges';
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -184,17 +186,20 @@ export default function DashboardPage() {
         </div>
 
         {/* Widget 2: Inspection Calendar */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+        <div
+          onClick={() => router.push('/calendar')}
+          className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm flex flex-col justify-between cursor-pointer hover:border-sky-300 transition-colors"
+        >
           <div>
             <div className="flex items-center justify-between pb-3 mb-2 border-b border-slate-100">
               <h2 className="font-bold text-slate-900 text-base">Inspection Calendar</h2>
               <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-700">{currentMonthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+                <span className="text-xs font-bold text-slate-700">{currentMonthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
                 <div className="flex items-center">
-                <button onClick={() => setCurrentMonthDate(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - 1, 1))} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+                  <button onClick={(e) => { e.stopPropagation(); setCurrentMonthDate(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - 1, 1)); }} className="p-1 rounded hover:bg-slate-100 text-slate-400">
                     <ChevronLeft className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => setCurrentMonthDate(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 1))} className="p-1 rounded hover:bg-slate-100 text-slate-400">
+                  <button onClick={(e) => { e.stopPropagation(); setCurrentMonthDate(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 1)); }} className="p-1 rounded hover:bg-slate-100 text-slate-400">
                     <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -237,6 +242,7 @@ export default function DashboardPage() {
               <span>Today</span>
             </div>
           </div>
+          <div className="pt-2 text-[11px] font-bold text-sky-600">Click calendar to open full view</div>
         </div>
 
         {/* Widget 3: Open Issues */}

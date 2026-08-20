@@ -125,6 +125,7 @@ class DataStore {
       ...raw,
       vehicleId: legacyVehicleId || assignments[0]?.vehicleId || null,
       vehicleNumber: legacyVehicleNumber || assignments[0]?.vehicleNumber || 'Unassigned',
+      assetTag: raw.assetTag?.trim() || null,
       kind,
       equipmentType: kind,
       isConsumable: kind === 'consumable',
@@ -765,8 +766,23 @@ class DataStore {
     return this.getEquipment().filter(e => e.vehicleId === vehicleId || e.assignments?.some(a => a.vehicleId === vehicleId));
   }
 
+  public getGlobalInventorySummary() {
+    const items = this.getEquipment();
+    const totalOwned = items.reduce((sum, item) => sum + (item.totalQuantity || 1), 0);
+    const assigned = items.reduce((sum, item) => sum + (item.assignments || []).reduce((qty, assignment) => qty + assignment.quantity, 0), 0);
+    const unassigned = Math.max(0, totalOwned - assigned);
+    return { totalOwned, assigned, unassigned };
+  }
+
+  public getAssignableFromShop(): Equipment[] {
+    return this.getEquipment()
+      .filter(item => (item.availableQuantity ?? 0) > 0)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   public async createEquipment(equipmentData: {
     name: string;
+    assetTag?: string | null;
     vehicleId?: string | null;
     category?: EquipmentCategory;
     status?: Equipment['status'];
@@ -791,6 +807,7 @@ class DataStore {
       vehicleId: targetVehicle?.id || null,
       vehicleNumber: targetVehicle ? targetVehicle.vehicleNumber : 'Unassigned',
       name: equipmentData.name.trim(),
+      assetTag: equipmentData.assetTag?.trim() || null,
       category: equipmentData.category || 'equipment',
       kind,
       totalQuantity,

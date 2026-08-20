@@ -46,6 +46,7 @@ export interface Equipment {
   vehicleId?: string | null;
   vehicleNumber?: string | null;
   name: string;
+  assetTag?: string | null;
   category: EquipmentCategory;
   kind?: EquipmentKind;
   equipmentType?: EquipmentKind;
