@@ -20,6 +20,25 @@ export default function EquipmentScanClient() {
   const [error, setError] = useState('');
   const [cameraError, setCameraError] = useState('');
   const scannerRef = useRef<any>(null);
+  const scannerContainerId = 'equipment-camera';
+
+  const stopScanner = async () => {
+    const scanner = scannerRef.current;
+    if (!scanner) return;
+    scannerRef.current = null;
+    try {
+      if (scanner.isScanning) {
+        await scanner.stop();
+      }
+    } catch {
+      // Ignore stop race conditions during route changes or fast rescans.
+    }
+    try {
+      scanner.clear();
+    } catch {
+      // Ignore teardown errors from already disposed scanners.
+    }
+  };
 
   const resolve = async (value: string) => {
     const found = dbService.getEquipmentByQR(value) || dbService.getEquipmentItem(value) || await dbService.fetchEquipmentAsync(value);
@@ -49,11 +68,11 @@ export default function EquipmentScanClient() {
       try {
         const { Html5Qrcode } = await import('html5-qrcode');
         if (!mounted) return;
-        const scanner = new Html5Qrcode('equipment-camera');
+        const scanner = new Html5Qrcode(scannerContainerId);
         scannerRef.current = scanner;
         await scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 230, height: 230 } },
-          (code: string) => {
-            scanner.stop().catch(() => undefined);
+          async (code: string) => {
+            await stopScanner();
             const parsed = code.includes('?id=') ? code.split('?id=')[1].split('&')[0] : code;
             router.replace(`/equipment/scan?id=${encodeURIComponent(parsed)}`);
           }, () => undefined);
@@ -65,10 +84,7 @@ export default function EquipmentScanClient() {
     return () => {
       mounted = false;
       window.clearTimeout(timer);
-      if (scannerRef.current) {
-        scannerRef.current.stop?.().catch?.(() => undefined);
-        scannerRef.current.clear?.();
-      }
+      void stopScanner();
     };
   }, [router]);
 
@@ -106,7 +122,7 @@ export default function EquipmentScanClient() {
           <div className="w-10 h-10 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center"><Package className="w-5 h-5" /></div>
           <div><h1 className="text-xl font-extrabold">Equipment QR Scan</h1><p className="text-xs text-slate-500">Review the transfer, then explicitly confirm or cancel.</p></div>
         </div>
-        <div className="relative aspect-video rounded-2xl bg-slate-950 overflow-hidden mb-4"><div id="equipment-camera" className="w-full h-full" />{cameraError && <p className="absolute inset-0 flex items-center justify-center p-5 text-center text-xs text-slate-300">{cameraError}</p>}</div>
+        <div className="relative aspect-video rounded-2xl bg-slate-950 overflow-hidden mb-4"><div id={scannerContainerId} className="w-full h-full" />{cameraError && <p className="absolute inset-0 flex items-center justify-center p-5 text-center text-xs text-slate-300">{cameraError}</p>}</div>
         <form className="flex gap-2 mb-5" onSubmit={e => { e.preventDefault(); resolve(manualCode.trim()); }}>
           <input value={manualCode} onChange={e => setManualCode(e.target.value)} placeholder="Equipment QR token or ID" className="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 text-xs" />
           <button className="px-4 rounded-xl bg-slate-900 text-white text-xs font-bold">Find</button>
