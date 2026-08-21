@@ -4,13 +4,13 @@ import React, { useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Printer, Download, QrCode, Sparkles, ExternalLink } from 'lucide-react';
 import { Vehicle } from '@/types';
+import { BASE_PATH, asset } from '@/lib/basePath';
 
 export function QRCodeDisplay({ vehicle }: { vehicle: Vehicle }) {
   const qrRef = useRef<HTMLDivElement>(null);
-  const isProd = process.env.NODE_ENV === 'production';
-  const basePath = process.env.NEXT_PUBLIC_BASE_PATH || (isProd ? '/sunny' : '');
+  const basePath = BASE_PATH;
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://aheiner2001.github.io';
-  const logoUrl = `${origin}${basePath}/sunny-logo.png`;
+  const logoUrl = `${origin}${asset('/sunny-logo.png')}`;
   // Use /inspect?id= format which routes cleanly to static inspect.html on static hosts
   const scanUrl = `${origin}${basePath}/inspect?id=${encodeURIComponent(vehicle.id)}`;
 

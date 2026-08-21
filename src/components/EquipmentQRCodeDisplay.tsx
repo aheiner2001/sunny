@@ -5,10 +5,11 @@ import { QRCodeSVG } from 'qrcode.react';
 import Link from 'next/link';
 import { Download, Printer, QrCode } from 'lucide-react';
 import { Equipment } from '@/types';
+import { BASE_PATH } from '@/lib/basePath';
 
 export function EquipmentQRCodeDisplay({ equipment }: { equipment: Equipment }) {
   const qrRef = useRef<HTMLDivElement>(null);
-  const basePath = process.env.NEXT_PUBLIC_BASE_PATH || (process.env.NODE_ENV === 'production' ? '/sunny' : '');
+  const basePath = BASE_PATH;
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://aheiner2001.github.io';
   const token = equipment.qrCodeToken || equipment.qrCode;
   if (!token) {

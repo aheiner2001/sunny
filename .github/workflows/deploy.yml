@@ -33,6 +33,10 @@ jobs:
         run: npm ci
       - name: Build with Next.js
         run: npm run build
+        env:
+          # Served from https://aheiner2001.github.io/sunny/ — inlined into the
+          # client bundle so hand-built URLs resolve under the subpath.
+          NEXT_PUBLIC_BASE_PATH: /sunny
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

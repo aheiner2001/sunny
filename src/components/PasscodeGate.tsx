@@ -3,10 +3,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Delete, Lock, ShieldCheck, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { asset } from '@/lib/basePath';
 
 const MAX_LENGTH = 8;
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
-const LOGO_SRC = `${process.env.NEXT_PUBLIC_BASE_PATH || ''}/sunny-logo.png`;
+const LOGO_SRC = asset('/sunny-logo.png');
 
 /**
  * Numeric keypad shared by the lock screen and the mid-scan re-auth prompt.

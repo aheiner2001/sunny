@@ -17,6 +17,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { asset } from '@/lib/basePath';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, managerOnly: false },
@@ -40,7 +41,7 @@ export function Sidebar() {
         {/* Brand Header */}
         <div className="px-6 py-5 border-b border-slate-100">
           <img
-            src={`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/sunny-logo.png`}
+            src={asset('/sunny-logo.png')}
             alt="Sunny logo"
             className="h-12 w-36 object-contain object-left"
           />

@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { dbService } from '@/lib/db';
 import { ProfileModal } from '@/components/ProfileModal';
 import { getResolvedAvatarUrl } from '@/lib/avatarPresets';
+import { asset } from '@/lib/basePath';
 
 export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void }) {
   const { user, role, switchUser, availableUsers, canSwitchUser, logout, managerGrantUntil } = useAuth();
@@ -61,7 +62,7 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
         )}
         {/* Brand mark. Mobile only: the sidebar (and its logo) is hidden below lg. */}
         <img
-          src={`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/sunny-logo.png`}
+          src={asset('/sunny-logo.png')}
           alt="Sunny logo"
           className="lg:hidden h-9 w-28 shrink-0 object-contain object-left"
         />

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { BASE_PATH } from '@/lib/basePath';
 
 /**
  * This component handles the SPA redirect for GitHub Pages.
@@ -17,8 +18,7 @@ export default function NotFoundRedirect() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const path = window.location.pathname;
-    const isProd = process.env.NODE_ENV === 'production';
-    const basePath = process.env.NEXT_PUBLIC_BASE_PATH || (isProd ? '/sunny' : '');
+    const basePath = BASE_PATH;
     
     // Strip basePath to get the app-relative path
     let appPath = path;

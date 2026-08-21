@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { BASE_PATH } from '@/lib/basePath';
 
 /**
  * Handles the GitHub Pages SPA redirect trick.
@@ -36,7 +37,7 @@ export function SPARedirectHandler() {
     if (redirectPath) {
       sessionStorage.removeItem('spa-redirect-path');
       
-      const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '/sunny';
+      const basePath = BASE_PATH;
       let appPath = redirectPath;
       if (appPath.startsWith(basePath)) {
         appPath = appPath.slice(basePath.length);
