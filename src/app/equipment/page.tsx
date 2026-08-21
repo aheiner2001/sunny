@@ -2,11 +2,12 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Edit2, Package, Plus, QrCode, Search, Trash2, Wrench, X } from 'lucide-react';
+import { AlertTriangle, Edit2, Package, PackagePlus, Plus, QrCode, Search, Trash2, Wrench, X } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Equipment, EquipmentCategory, EquipmentKind, EquipmentStatus, Vehicle } from '@/types';
 import { EquipmentStatusBadge } from '@/components/StatusBadges';
 import { EquipmentQRCodeDisplay } from '@/components/EquipmentQRCodeDisplay';
+import { ManagerOnly } from '@/components/ManagerOnly';
 
 const emptyForm = {
   name: '',
@@ -22,6 +23,14 @@ const emptyForm = {
 const ALL_STATUSES: Array<'all' | EquipmentStatus> = ['all', 'working', 'flagged', 'needs_repair', 'being_repaired', 'fixed'];
 
 export default function EquipmentPage() {
+  return (
+    <ManagerOnly>
+      <EquipmentPageContent />
+    </ManagerOnly>
+  );
+}
+
+function EquipmentPageContent() {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -46,8 +55,9 @@ export default function EquipmentPage() {
   }, []);
 
   const assignedQty = (eq: Equipment) => (eq.assignments || []).reduce((sum, assignment) => sum + assignment.quantity, 0);
-  const unassignedQty = (eq: Equipment) => Math.max(0, eq.availableQuantity ?? ((eq.totalQuantity || 1) - assignedQty(eq)));
-  const totalQty = (eq: Equipment) => Math.max(eq.totalQuantity || 1, assignedQty(eq) + unassignedQty(eq));
+  // `?? 1` rather than `|| 1`: a fully consumed item really does hold 0.
+  const unassignedQty = (eq: Equipment) => Math.max(0, eq.availableQuantity ?? ((eq.totalQuantity ?? 1) - assignedQty(eq)));
+  const totalQty = (eq: Equipment) => Math.max(eq.totalQuantity ?? 1, assignedQty(eq) + unassignedQty(eq));
   const assignmentsLabel = (eq: Equipment) => (eq.assignments || []).map(a => `${a.vehicleNumber} (${a.quantity})`).join(', ') || 'In shop / unassigned';
   const globalSummary = dbService.getGlobalInventorySummary();
 
@@ -74,7 +84,7 @@ export default function EquipmentPage() {
       category: eq.category,
       kind: eq.kind || (eq.category === 'supplies' ? 'consumable' : 'reusable'),
       status: eq.status,
-      totalQuantity: String(eq.totalQuantity || 1),
+      totalQuantity: String(eq.totalQuantity ?? 1),
       qrCodeToken: eq.qrCodeToken || eq.qrCode || ''
     });
     setModal('edit');
@@ -84,17 +94,29 @@ export default function EquipmentPage() {
     event.preventDefault();
     if (!form.name.trim()) return;
 
-    const inputTotal = Number(form.totalQuantity);
-    const totalQuantity = form.kind === 'reusable' ? 1 : inputTotal;
+    const totalQuantity = Number(form.totalQuantity);
     if (!Number.isInteger(totalQuantity) || totalQuantity < 1) {
       alert('Total quantity must be a positive whole number.');
       return;
     }
 
     const vehicle = vehicles.find(v => v.id === form.vehicleId);
-    const assignments = vehicle
-      ? [{ vehicleId: vehicle.id, vehicleNumber: vehicle.vehicleNumber, quantity: form.kind === 'reusable' ? 1 : totalQuantity }]
-      : [];
+
+    // Preserve an existing multi-vehicle distribution. Rebuilding assignments
+    // from the single vehicle picker would silently drop every other truck's
+    // allocation, so only the picked vehicle's own entry is touched here.
+    const existing = selected?.assignments || [];
+    let assignments = existing;
+    if (modal === 'edit') {
+      if (vehicle && !existing.some(a => a.vehicleId === vehicle.id)) {
+        assignments = [...existing, { vehicleId: vehicle.id, vehicleNumber: vehicle.vehicleNumber, quantity: 1 }];
+      }
+      const assignedTotal = assignments.reduce((sum, a) => sum + a.quantity, 0);
+      if (assignedTotal > totalQuantity) {
+        alert(`${assignedTotal} units are already assigned to vehicles. Total cannot be lower than that.`);
+        return;
+      }
+    }
 
     try {
       setLoading(true);
@@ -144,6 +166,21 @@ export default function EquipmentPage() {
     setModal(null);
   };
 
+  const handleRestock = async (eq: Equipment) => {
+    const entered = prompt(`Add stock for ${eq.name}\n\nHow many units were received?`, '1');
+    if (entered === null) return;
+    const amount = Number(entered);
+    if (!Number.isInteger(amount) || amount <= 0) {
+      alert('Enter a positive whole number.');
+      return;
+    }
+    try {
+      await dbService.restockEquipment(eq.id, amount);
+    } catch (err: any) {
+      alert(err.message || 'Could not add stock.');
+    }
+  };
+
   const card = (eq: Equipment) => (
     <div key={eq.id} className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-sm">
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -174,6 +211,11 @@ export default function EquipmentPage() {
       <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
         <EquipmentQRCodeDisplay equipment={eq} />
         <div className="flex gap-1">
+          {eq.kind === 'consumable' && (
+            <button onClick={() => handleRestock(eq)} className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50" title="Add stock (new delivery)">
+              <PackagePlus className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button onClick={() => openEdit(eq)} className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100" title="Edit / reassign">
             <Edit2 className="w-3.5 h-3.5" />
           </button>
@@ -324,29 +366,50 @@ export default function EquipmentPage() {
                 className="w-full px-3 min-h-12 text-sm sm:text-xs rounded-xl border border-slate-200"
               />
               <div className="grid grid-cols-2 gap-2">
-                <select
-                  value={form.kind}
-                  onChange={e => setForm({ ...form, kind: e.target.value as EquipmentKind, totalQuantity: e.target.value === 'reusable' ? '1' : form.totalQuantity })}
-                  className="px-3 min-h-12 text-sm sm:text-xs rounded-xl border border-slate-200"
-                >
-                  <option value="reusable">Reusable equipment</option>
-                  <option value="consumable">Consumable stock</option>
-                </select>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={form.totalQuantity}
-                  disabled={form.kind === 'reusable'}
-                  onChange={e => setForm({ ...form, totalQuantity: e.target.value })}
-                  className="px-3 min-h-12 text-sm sm:text-xs rounded-xl border border-slate-200 disabled:bg-slate-100"
-                  placeholder="Total owned"
-                />
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Type</label>
+                  <select
+                    value={form.kind}
+                    onChange={e => setForm({ ...form, kind: e.target.value as EquipmentKind })}
+                    className="w-full px-3 min-h-12 text-sm sm:text-xs rounded-xl border border-slate-200"
+                  >
+                    <option value="reusable">Reusable equipment</option>
+                    <option value="consumable">Consumable stock</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Total quantity owned</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={form.totalQuantity}
+                    onChange={e => setForm({ ...form, totalQuantity: e.target.value })}
+                    className="w-full px-3 min-h-12 text-sm sm:text-xs rounded-xl border border-slate-200"
+                    placeholder="e.g. 12"
+                  />
+                </div>
               </div>
-              <select value={form.vehicleId} onChange={e => setForm({ ...form, vehicleId: e.target.value })} className="w-full px-3 min-h-12 text-sm sm:text-xs rounded-xl border border-slate-200">
-                <option value="">In shop / unassigned</option>
-                {vehicles.map(v => <option key={v.id} value={v.id}>{v.vehicleNumber} - {v.name}</option>)}
-              </select>
+              <p className="text-[11px] text-slate-500 -mt-1">
+                {form.kind === 'reusable'
+                  ? 'Reusable: units move between the shop and trucks and are never used up. Enter how many you own in total, then assign them out.'
+                  : 'Consumable: employees can mark stock as used, which removes it from the truck and from the fleet total.'}
+              </p>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  {modal === 'add' ? 'Starting location' : 'Assigned vehicle'}
+                </label>
+                <select value={form.vehicleId} onChange={e => setForm({ ...form, vehicleId: e.target.value })} className="w-full px-3 min-h-12 text-sm sm:text-xs rounded-xl border border-slate-200">
+                  <option value="">In shop / unassigned</option>
+                  {vehicles.map(v => <option key={v.id} value={v.id}>{v.vehicleNumber} - {v.name}</option>)}
+                </select>
+                {modal === 'add' && (
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    All {Number(form.totalQuantity) > 1 ? Number(form.totalQuantity) : ''} units start in the shop
+                    {form.vehicleId ? ' except one sent to the chosen truck' : ''}. Assign the rest per truck from the inventory list.
+                  </p>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value as EquipmentCategory })} className="px-3 min-h-12 text-sm sm:text-xs rounded-xl border border-slate-200">
                   <option value="equipment">Equipment</option>

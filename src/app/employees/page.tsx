@@ -19,15 +19,38 @@ import {
   UserCheck,
   UserX,
   X,
-  Plus
+  Plus,
+  Eye,
+  EyeOff,
+  Copy,
+  Check,
+  KeyRound,
+  RefreshCw
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { User, UserRole, Inspection, Issue, Vehicle } from '@/types';
 import { InspectionStatusBadge, VehicleStatusBadge } from '@/components/StatusBadges';
 import { useAuth } from '@/context/AuthContext';
 import { getResolvedAvatarUrl } from '@/lib/avatarPresets';
+import { ManagerOnly } from '@/components/ManagerOnly';
+
+const HOUR_MS = 60 * 60 * 1000;
+const GRANT_PRESETS = [
+  { label: '4h', ms: 4 * HOUR_MS },
+  { label: '8h', ms: 8 * HOUR_MS },
+  { label: '24h', ms: 24 * HOUR_MS },
+  { label: '7d', ms: 7 * 24 * HOUR_MS }
+];
 
 export default function EmployeesPage() {
+  return (
+    <ManagerOnly requireTrueManager>
+      <EmployeesPageContent />
+    </ManagerOnly>
+  );
+}
+
+function EmployeesPageContent() {
   const { user: currentUser } = useAuth();
   const [employees, setEmployees] = useState<User[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
@@ -42,6 +65,10 @@ export default function EmployeesPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
 
+  // Reveals the selected member's access code on demand; resets per selection.
+  const [codeRevealed, setCodeRevealed] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
+
   // Form states
   const [formData, setFormData] = useState<{
     name: string;
@@ -49,12 +76,14 @@ export default function EmployeesPage() {
     role: UserRole;
     status: 'active' | 'inactive';
     avatarUrl: string;
+    passcode: string;
   }>({
     name: '',
     email: '',
     role: 'employee',
     status: 'active',
-    avatarUrl: ''
+    avatarUrl: '',
+    passcode: ''
   });
 
   const loadData = () => {
@@ -81,6 +110,12 @@ export default function EmployeesPage() {
     return () => window.removeEventListener('sunny_db_update', loadData);
   }, []);
 
+  // Never carry a revealed code across to another member.
+  useEffect(() => {
+    setCodeRevealed(false);
+    setCodeCopied(false);
+  }, [selectedUser?.id]);
+
   const filteredEmployees = employees.filter(e =>
     e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     e.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -91,13 +126,23 @@ export default function EmployeesPage() {
   const userIssues = selectedUser ? issues.filter(iss => iss.reportedById === selectedUser.id || iss.reportedByName === selectedUser.name) : [];
   const currentAssignedVehicle = selectedUser ? vehicles.find(v => v.currentUserId === selectedUser.id || v.currentUserName === selectedUser.name) : undefined;
 
+  /** Shared rule for both modals: 4-6 digits, unique across the directory. */
+  const validatePasscode = (code: string, exceptUserId?: string): string | null => {
+    const trimmed = code.trim();
+    if (!/^\d{4,6}$/.test(trimmed)) return 'Passcode must be 4 to 6 digits.';
+    const conflict = dbService.findPasscodeConflict(trimmed, exceptUserId);
+    if (conflict) return `Passcode ${trimmed} is already assigned to ${conflict.name}.`;
+    return null;
+  };
+
   const handleOpenAdd = () => {
     setFormData({
       name: '',
       email: '',
       role: 'employee',
       status: 'active',
-      avatarUrl: ''
+      avatarUrl: '',
+      passcode: dbService.generateUniquePasscode()
     });
     setIsAddModalOpen(true);
   };
@@ -108,7 +153,8 @@ export default function EmployeesPage() {
       email: target.email,
       role: target.role,
       status: target.status,
-      avatarUrl: target.avatarUrl || ''
+      avatarUrl: target.avatarUrl || '',
+      passcode: target.passcode || dbService.generateUniquePasscode()
     });
     setIsEditModalOpen(true);
   };
@@ -119,6 +165,11 @@ export default function EmployeesPage() {
       alert('Please provide name and email');
       return;
     }
+    const codeError = validatePasscode(formData.passcode);
+    if (codeError) {
+      alert(codeError);
+      return;
+    }
     try {
       setModalLoading(true);
       const created = await dbService.createUser({
@@ -126,7 +177,8 @@ export default function EmployeesPage() {
         email: formData.email,
         role: formData.role,
         status: formData.status,
-        avatarUrl: formData.avatarUrl
+        avatarUrl: formData.avatarUrl,
+        passcode: formData.passcode.trim()
       });
       setSelectedUser(created);
       setIsAddModalOpen(false);
@@ -140,6 +192,11 @@ export default function EmployeesPage() {
   const handleUpdateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedUser) return;
+    const codeError = validatePasscode(formData.passcode, selectedUser.id);
+    if (codeError) {
+      alert(codeError);
+      return;
+    }
     try {
       setModalLoading(true);
       const updated = await dbService.updateUser({
@@ -148,7 +205,8 @@ export default function EmployeesPage() {
         email: formData.email.trim(),
         role: formData.role,
         status: formData.status,
-        avatarUrl: formData.avatarUrl.trim() || selectedUser.avatarUrl
+        avatarUrl: formData.avatarUrl.trim() || selectedUser.avatarUrl,
+        passcode: formData.passcode.trim()
       });
       setSelectedUser(updated);
       setIsEditModalOpen(false);
@@ -171,6 +229,26 @@ export default function EmployeesPage() {
       }
     } catch (err: any) {
       alert(err.message || 'Failed to toggle status');
+    }
+  };
+
+  const handleGrantAdmin = async (durationMs: number) => {
+    if (!currentUser || !selectedUser) return;
+    try {
+      const updated = await dbService.grantTemporaryManager(currentUser, selectedUser.id, durationMs);
+      setSelectedUser(updated);
+    } catch (err: any) {
+      alert(err.message || 'Failed to grant admin access');
+    }
+  };
+
+  const handleRevokeAdmin = async () => {
+    if (!currentUser || !selectedUser) return;
+    try {
+      const updated = await dbService.revokeTemporaryManager(currentUser, selectedUser.id);
+      setSelectedUser(updated);
+    } catch (err: any) {
+      alert(err.message || 'Failed to revoke admin access');
     }
   };
 
@@ -321,6 +399,88 @@ export default function EmployeesPage() {
                     </div>
                     <p className="text-xs text-slate-500 mt-1">{selectedUser.email}</p>
                     
+                    {/* Access passcode: masked until revealed, so an open
+                        directory does not broadcast every sign-in code. */}
+                    <div className="mt-2.5 flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        Access Code
+                      </span>
+                      {selectedUser.passcode ? (
+                        <>
+                          <code className="text-xs font-bold text-slate-900 bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 tracking-[0.2em] min-w-[68px] text-center">
+                            {codeRevealed ? selectedUser.passcode : '••••'}
+                          </code>
+                          <button
+                            onClick={() => setCodeRevealed(!codeRevealed)}
+                            title={codeRevealed ? 'Hide code' : 'Reveal code'}
+                            aria-label={codeRevealed ? 'Hide access code' : 'Reveal access code'}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                          >
+                            {codeRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard?.writeText(selectedUser.passcode || '');
+                              setCodeCopied(true);
+                              setTimeout(() => setCodeCopied(false), 1500);
+                            }}
+                            title="Copy code"
+                            aria-label="Copy access code"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                          >
+                            {codeCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => handleOpenEdit(selectedUser)}
+                          className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 hover:bg-amber-100 transition-colors"
+                        >
+                          No code set — assign one
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Temporary admin cover. Managers already have the rights,
+                        so the control only appears for employee accounts. */}
+                    {selectedUser.role === 'employee' && (
+                      <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                        {dbService.hasActiveManagerGrant(selectedUser) ? (
+                          <>
+                            <span className="text-[11px] font-bold text-sky-800 bg-sky-50 border border-sky-200 rounded-lg px-2 py-1 flex items-center gap-1.5">
+                              <Shield className="w-3 h-3 text-sky-600" />
+                              Admin until {new Date(selectedUser.tempManagerUntil as string).toLocaleString([], {
+                                weekday: 'short',
+                                hour: 'numeric',
+                                minute: '2-digit'
+                              })}
+                            </span>
+                            <button
+                              onClick={handleRevokeAdmin}
+                              className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline"
+                            >
+                              Revoke
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                              Grant Admin
+                            </span>
+                            {GRANT_PRESETS.map(preset => (
+                              <button
+                                key={preset.label}
+                                onClick={() => handleGrantAdmin(preset.ms)}
+                                className="text-[11px] font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 hover:bg-sky-50 hover:border-sky-300 hover:text-sky-700 transition-colors"
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    )}
+
                     <div className="mt-2 text-xs font-semibold text-slate-700">
                       Currently Operating:{' '}
                       {currentAssignedVehicle ? (
@@ -524,6 +684,38 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-sky-600" />
+                  Access Passcode
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="4-6 digits"
+                    value={formData.passcode}
+                    onChange={(e) => setFormData({ ...formData, passcode: e.target.value.replace(/\D/g, '') })}
+                    className="flex-1 px-3 py-2 text-xs font-bold tracking-[0.2em] rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, passcode: dbService.generateUniquePasscode() })}
+                    title="Generate a new unused code"
+                    className="px-3 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {formData.role === 'manager'
+                    ? 'This code signs in with full manager permissions.'
+                    : 'The employee enters this code to sign in and scan.'}
+                </p>
+              </div>
+
               <div className="pt-3 border-t border-slate-100 flex gap-2">
                 <button
                   type="button"
@@ -614,6 +806,36 @@ export default function EmployeesPage() {
                     <option value="inactive">Inactive</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-sky-600" />
+                  Access Passcode
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    required
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="4-6 digits"
+                    value={formData.passcode}
+                    onChange={(e) => setFormData({ ...formData, passcode: e.target.value.replace(/\D/g, '') })}
+                    className="flex-1 px-3 py-2 text-xs font-bold tracking-[0.2em] rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, passcode: dbService.generateUniquePasscode() })}
+                    title="Generate a new unused code"
+                    className="px-3 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Used to sign in. An already-signed-in session stays valid until it expires.
+                </p>
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex gap-2">

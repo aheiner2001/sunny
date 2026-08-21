@@ -21,16 +21,39 @@ import {
   FileText,
   HelpCircle,
   Save,
-  Check
+  Check,
+  AlertTriangle,
+  Lock,
+  KeyRound
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { ChecklistQuestion, ChecklistCategoryConfig, QuestionType, ChecklistConfig, EquipmentOption, FleetTask } from '@/types';
+import { useAuth } from '@/context/AuthContext';
+import { ManagerOnly } from '@/components/ManagerOnly';
+import { AiImportModal } from '@/components/AiImportModal';
 
 export default function SettingsPage() {
+  return (
+    <ManagerOnly message="Fleet configuration is restricted to manager accounts. Ask a manager if you need a checklist change.">
+      <SettingsPageContent />
+    </ManagerOnly>
+  );
+}
+
+function SettingsPageContent() {
+  const { isTrueManager, user: currentUser } = useAuth();
+
+  // Passcode change form (own account)
+  const [passcodeForm, setPasscodeForm] = useState({ current: '', next: '', confirm: '' });
+  const [passcodeBusy, setPasscodeBusy] = useState(false);
+  const [passcodeError, setPasscodeError] = useState<string | null>(null);
+  const [passcodeDone, setPasscodeDone] = useState(false);
   const [categories, setCategories] = useState<ChecklistCategoryConfig[]>([]);
   const [questions, setQuestions] = useState<ChecklistQuestion[]>([]);
   const [activeCategoryTab, setActiveCategoryTab] = useState<string>('all');
   const [isSaving, setIsSaving] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [isAiImportOpen, setIsAiImportOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [equipmentOptions, setEquipmentOptions] = useState<EquipmentOption[]>([]);
   const [newEquipmentOption, setNewEquipmentOption] = useState('');
@@ -156,6 +179,51 @@ export default function SettingsPage() {
       setSaveStatus('Checklist reset to standard baseline.');
       setTimeout(() => setSaveStatus(null), 3000);
     }
+  };
+
+  const handleChangePasscode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    setPasscodeError(null);
+    setPasscodeDone(false);
+
+    if (passcodeForm.next !== passcodeForm.confirm) {
+      setPasscodeError('New passcode and confirmation do not match.');
+      return;
+    }
+
+    try {
+      setPasscodeBusy(true);
+      await dbService.changeUserPasscode(currentUser.id, passcodeForm.current, passcodeForm.next);
+      setPasscodeForm({ current: '', next: '', confirm: '' });
+      setPasscodeDone(true);
+      setTimeout(() => setPasscodeDone(false), 4000);
+    } catch (err: any) {
+      // Cloud write failures surface here rather than silently diverging.
+      setPasscodeError(err?.message || 'Could not update passcode. Check your connection and try again.');
+    } finally {
+      setPasscodeBusy(false);
+    }
+  };
+
+  /**
+   * Wipes all fleet data back to the built-in starter set. Requires a typed
+   * confirmation because a stray click would destroy live records and every
+   * access passcode.
+   */
+  const handleFactoryReset = async () => {
+    const typed = prompt(
+      'This permanently replaces all fleet data and access passcodes with the factory defaults.\n\nType RESET to confirm.'
+    );
+    if (typed === null) return;
+    if (typed.trim().toUpperCase() !== 'RESET') {
+      alert('Reset cancelled — confirmation text did not match.');
+      return;
+    }
+    setIsResetting(true);
+    dbService.resetToDefaults({ syncToCloud: true });
+    dbService.clearSession();
+    window.location.reload();
   };
 
   // ==========================================
@@ -375,6 +443,14 @@ export default function SettingsPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setIsAiImportOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-bold transition-colors"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Generate / Import with AI</span>
+          </button>
+
           <button
             onClick={handleResetToBaseline}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold transition-colors"
@@ -646,6 +722,137 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      {/* ACCOUNT SECURITY — change own access passcode, synced to Firestore */}
+      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+          <KeyRound className="w-4 h-4 text-sky-600 shrink-0" />
+          <div>
+            <h2 className="text-sm font-extrabold text-slate-900">Your Access Passcode</h2>
+            <p className="text-[11px] text-slate-500">
+              Changes are written to Cloud Firestore, so the new code works on every device.
+            </p>
+          </div>
+        </div>
+
+        <div className="p-6">
+          {dbService.isUsingInitialPasscode(currentUser) && (
+            <div className="mb-5 flex items-start gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-[11px] font-semibold text-amber-900">
+                You are still signed in with the one-time setup code. It ships with the
+                application source, so anyone with the repository can use it. Replace it now.
+              </p>
+            </div>
+          )}
+
+          <form onSubmit={handleChangePasscode} className="space-y-4 max-w-sm">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Current Passcode
+              </label>
+              <input
+                type="password"
+                required
+                inputMode="numeric"
+                autoComplete="current-password"
+                maxLength={6}
+                value={passcodeForm.current}
+                onChange={(e) => setPasscodeForm({ ...passcodeForm, current: e.target.value.replace(/\D/g, '') })}
+                className="w-full px-3 py-2 text-xs font-bold tracking-[0.3em] rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  New Passcode
+                </label>
+                <input
+                  type="password"
+                  required
+                  inputMode="numeric"
+                  autoComplete="new-password"
+                  maxLength={6}
+                  placeholder="4-6 digits"
+                  value={passcodeForm.next}
+                  onChange={(e) => setPasscodeForm({ ...passcodeForm, next: e.target.value.replace(/\D/g, '') })}
+                  className="w-full px-3 py-2 text-xs font-bold tracking-[0.3em] rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Confirm New
+                </label>
+                <input
+                  type="password"
+                  required
+                  inputMode="numeric"
+                  autoComplete="new-password"
+                  maxLength={6}
+                  value={passcodeForm.confirm}
+                  onChange={(e) => setPasscodeForm({ ...passcodeForm, confirm: e.target.value.replace(/\D/g, '') })}
+                  className="w-full px-3 py-2 text-xs font-bold tracking-[0.3em] rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {passcodeError && (
+              <p className="text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">
+                {passcodeError}
+              </p>
+            )}
+            {passcodeDone && (
+              <p className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2 flex items-center gap-1.5">
+                <Check className="w-3.5 h-3.5" />
+                Passcode updated and synced to Firestore.
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={passcodeBusy}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-md transition-colors disabled:opacity-50"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>{passcodeBusy ? 'Updating...' : 'Update Passcode'}</span>
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* DANGER ZONE — true managers only; a day-admin must not wipe the fleet */}
+      {isTrueManager && <div className="bg-white rounded-3xl border border-rose-200 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-rose-100 bg-rose-50/60 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+          <div>
+            <h2 className="text-sm font-extrabold text-rose-900">Danger Zone</h2>
+            <p className="text-[11px] text-rose-700/80">Irreversible. Affects the entire fleet, not just this device.</p>
+          </div>
+        </div>
+
+        <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h3 className="text-xs font-bold text-slate-900">Restore factory defaults</h3>
+            <p className="text-[11px] text-slate-500 mt-0.5 max-w-md">
+              Replaces every vehicle, equipment item, inspection, issue, user, and access
+              passcode with the built-in starter set. Anyone signed in will be locked out
+              until a manager reissues codes.
+            </p>
+          </div>
+          <button
+            onClick={handleFactoryReset}
+            disabled={isResetting}
+            className="shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md shadow-rose-600/20 transition-colors disabled:opacity-50"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>{isResetting ? 'Resetting...' : 'Restore Defaults'}</span>
+          </button>
+        </div>
+      </div>}
+
+      <AiImportModal isOpen={isAiImportOpen} onClose={() => setIsAiImportOpen(false)} />
 
       {/* CATEGORY MODAL */}
       {isCategoryModalOpen && (

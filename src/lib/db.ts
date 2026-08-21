@@ -18,7 +18,8 @@ import {
   EquipmentAssignment,
   EquipmentOption,
   FleetTask,
-  ReportSettings
+  ReportSettings,
+  AuthSession
 } from '@/types';
 import { 
   INITIAL_VEHICLES, 
@@ -57,9 +58,13 @@ const STORAGE_KEYS = {
   EQUIPMENT_OPTIONS: 'sunny_equipment_options',
   TASKS: 'sunny_tasks',
   REPORT_SETTINGS: 'sunny_report_settings',
+  SESSION: 'sunny_session',
 };
 
 const DEFAULT_CHECKLIST_ID = 'standard-detailing-checklist';
+
+/** Passcode sessions last one work shift, so a scan mid-shift never re-prompts. */
+export const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 /**
  * Recursively sanitizes data before writing to Cloud Firestore.
@@ -119,7 +124,12 @@ class DataStore {
     }
     const rawTotal = Number(raw.totalQuantity);
     const assignedQuantity = assignments.reduce((sum, assignment) => sum + assignment.quantity, 0);
-    const totalQuantity = kind === 'reusable' ? 1 : Math.max(assignedQuantity, Number.isFinite(rawTotal) ? rawTotal : 1);
+    // Quantity is independent of kind: a pool of 12 identical reusable nozzles
+    // is as valid as 12 bottles of soap. `kind` only decides whether stock can
+    // be consumed. Never report a total below what is already assigned out.
+    // A fully consumed item legitimately has a total of 0, so only fall back to
+    // 1 when the stored value is missing entirely (legacy records).
+    const totalQuantity = Math.max(assignedQuantity, Number.isFinite(rawTotal) ? rawTotal : 1);
     const availableQuantity = Math.max(0, Number(raw.availableQuantity ?? totalQuantity - assignedQuantity));
     return {
       ...raw,
@@ -142,7 +152,10 @@ class DataStore {
     if (!this.isClient() || this.initialized) return;
 
     if (!localStorage.getItem(STORAGE_KEYS.SEEDED)) {
-      this.resetToDefaults();
+      // Local-only seed. A fresh browser must never push starter data to the
+      // cloud: that would overwrite the live fleet. Firestore listeners will
+      // replace this seed with real data moments later.
+      this.resetToDefaults({ syncToCloud: false });
     }
     this.initialized = true;
     this.setupFirestoreListeners();
@@ -162,7 +175,14 @@ class DataStore {
         if (!snapshot.empty) {
           const list: User[] = [];
           snapshot.forEach((d) => list.push(d.data() as User));
-          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(list));
+          // Keep any locally-seeded passcode when the remote doc predates the
+          // passcode field, otherwise a sync would lock everyone out.
+          const localById = new Map(this.getUsers().map(u => [u.id, u]));
+          const merged = list.map(remote => ({
+            ...remote,
+            passcode: remote.passcode || localById.get(remote.id)?.passcode
+          }));
+          localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(merged));
           window.dispatchEvent(new Event('sunny_db_update'));
         }
       }, (err) => {
@@ -329,9 +349,16 @@ class DataStore {
     }
   }
 
-  // Clean Slate default reset: 1 demo vehicle, 1 demo equipment, 1 demo employee, 1 demo manager
-  public resetToDefaults() {
+  /**
+   * Restores the built-in starter data.
+   *
+   * `syncToCloud` must stay false for the automatic first-run seed and true only
+   * for an explicit manager-triggered factory reset, so that simply opening the
+   * app on a new device cannot clobber the live Firestore fleet.
+   */
+  public resetToDefaults(options: { syncToCloud?: boolean } = {}) {
     if (!this.isClient()) return;
+    const { syncToCloud = true } = options;
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
     localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(INITIAL_VEHICLES));
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(INITIAL_EQUIPMENT));
@@ -366,8 +393,8 @@ class DataStore {
     }));
     localStorage.setItem(STORAGE_KEYS.SEEDED, 'true');
 
-    // Also sync to Firestore if connected
-    if (db) {
+    // Only an explicit factory reset propagates the starter set to the cloud.
+    if (db && syncToCloud) {
       this.syncAllToFirestore().catch((e) => console.warn('Sync to Firestore on reset fallback:', e));
     }
 
@@ -399,6 +426,194 @@ class DataStore {
     return this.getUsers().find(u => u.id === id);
   }
 
+  // ==========================================
+  // PASSCODE AUTH / SESSION
+  // ==========================================
+
+  /** Resolves a typed passcode to its active user. Role follows from that user. */
+  public getUserByPasscode(passcode: string): User | undefined {
+    const code = (passcode || '').trim();
+    if (!code) return undefined;
+    return this.getUsers().find(u => u.status !== 'inactive' && (u.passcode || '').trim() === code);
+  }
+
+  /**
+   * Returns the user already holding this passcode, ignoring `exceptUserId` so
+   * an edit does not collide with itself. Duplicates would make the second
+   * holder permanently unable to sign in, since lookup returns the first match.
+   */
+  public findPasscodeConflict(passcode: string, exceptUserId?: string): User | undefined {
+    const code = (passcode || '').trim();
+    if (!code) return undefined;
+    return this.getUsers().find(u => u.id !== exceptUserId && (u.passcode || '').trim() === code);
+  }
+
+  /** True when a temporary manager grant is present and not yet expired. */
+  public hasActiveManagerGrant(user?: User | null): boolean {
+    const until = user?.tempManagerUntil;
+    if (!until) return false;
+    const expiry = new Date(until).getTime();
+    return Number.isFinite(expiry) && expiry > Date.now();
+  }
+
+  /**
+   * Permission role: a true manager, or an employee holding an unexpired grant.
+   * Distinct from `user.role`, which stays the account's real role.
+   */
+  public getEffectiveRole(user?: User | null): UserRole {
+    if (!user) return 'employee';
+    if (user.role === 'manager') return 'manager';
+    return this.hasActiveManagerGrant(user) ? 'manager' : 'employee';
+  }
+
+  /**
+   * Grants temporary manager access. Only a true manager may call this; a
+   * day-admin extending their own grant would make elevation permanent.
+   */
+  public async grantTemporaryManager(
+    grantedBy: User,
+    targetUserId: string,
+    durationMs: number
+  ): Promise<User> {
+    if (grantedBy.role !== 'manager') {
+      throw new Error('Only a manager account can grant admin access.');
+    }
+    const target = this.getUser(targetUserId);
+    if (!target) throw new Error('Account not found.');
+    if (target.role === 'manager') throw new Error(`${target.name} is already a manager.`);
+    if (!Number.isFinite(durationMs) || durationMs <= 0) throw new Error('Invalid grant duration.');
+
+    return this.updateUser({
+      ...target,
+      tempManagerUntil: new Date(Date.now() + durationMs).toISOString()
+    });
+  }
+
+  public async revokeTemporaryManager(revokedBy: User, targetUserId: string): Promise<User> {
+    if (revokedBy.role !== 'manager') {
+      throw new Error('Only a manager account can revoke admin access.');
+    }
+    const target = this.getUser(targetUserId);
+    if (!target) throw new Error('Account not found.');
+    return this.updateUser({ ...target, tempManagerUntil: null });
+  }
+
+  /** True while the account still uses a code shipped in the initial seed. */
+  public isUsingInitialPasscode(user?: User | null): boolean {
+    const code = (user?.passcode || '').trim();
+    if (!code) return false;
+    return INITIAL_USERS.some(seed => (seed.passcode || '').trim() === code);
+  }
+
+  /**
+   * Changes an account's own passcode, verifying the current one first.
+   *
+   * Writes to Firestore BEFORE localStorage and deliberately does not swallow
+   * cloud errors: a passcode that only changed locally would leave the old code
+   * working on every other device, which is worse than a visible failure.
+   */
+  public async changeUserPasscode(
+    userId: string,
+    currentPasscode: string,
+    newPasscode: string
+  ): Promise<User> {
+    if (!this.isClient()) throw new Error('Client only');
+    this.init();
+
+    const account = this.getUser(userId);
+    if (!account) throw new Error('Account not found.');
+    if ((account.passcode || '').trim() !== (currentPasscode || '').trim()) {
+      throw new Error('Current passcode is incorrect.');
+    }
+
+    const next = (newPasscode || '').trim();
+    if (!/^\d{4,6}$/.test(next)) throw new Error('New passcode must be 4 to 6 digits.');
+    if (next === (account.passcode || '').trim()) {
+      throw new Error('New passcode must be different from the current one.');
+    }
+    const conflict = this.findPasscodeConflict(next, userId);
+    if (conflict) throw new Error(`Passcode ${next} is already assigned to ${conflict.name}.`);
+
+    const updated: User = { ...account, passcode: next };
+
+    if (db) {
+      await ensureAuth();
+      await setDoc(doc(db, 'users', userId), sanitizeForFirestore(updated), { merge: true });
+    }
+
+    const users = this.getUsers().map(u => (u.id === userId ? updated : u));
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return updated;
+  }
+
+  /** Random unused 4-digit code, avoiding trivially guessable repeats. */
+  public generateUniquePasscode(): string {
+    const taken = new Set(this.getUsers().map(u => (u.passcode || '').trim()).filter(Boolean));
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const code = String(Math.floor(1000 + Math.random() * 9000));
+      if (!taken.has(code) && !/^(\d)\1{3}$/.test(code)) return code;
+    }
+    // Fall back to the first free code in range rather than returning a duplicate.
+    for (let n = 1000; n <= 9999; n++) {
+      const code = String(n);
+      if (!taken.has(code)) return code;
+    }
+    throw new Error('No passcodes remain available.');
+  }
+
+  /**
+   * Reads the persisted session, returning null when it is missing, expired,
+   * or points at a user who no longer exists.
+   */
+  public getSession(): AuthSession | null {
+    if (!this.isClient()) return null;
+    const raw = localStorage.getItem(STORAGE_KEYS.SESSION);
+    if (!raw) return null;
+
+    let session: AuthSession;
+    try {
+      session = JSON.parse(raw);
+    } catch {
+      this.clearSession();
+      return null;
+    }
+
+    if (!session?.userId || !session.expiresAt || new Date(session.expiresAt).getTime() <= Date.now()) {
+      this.clearSession();
+      return null;
+    }
+
+    const owner = this.getUser(session.userId);
+    if (!owner || owner.status === 'inactive') {
+      this.clearSession();
+      return null;
+    }
+
+    // Role can change from the employees page after the session was issued.
+    return { ...session, role: owner.role };
+  }
+
+  public createSession(user: User): AuthSession {
+    const now = Date.now();
+    const session: AuthSession = {
+      userId: user.id,
+      role: user.role,
+      issuedAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + SESSION_TTL_MS).toISOString()
+    };
+    if (this.isClient()) {
+      localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session));
+    }
+    return session;
+  }
+
+  public clearSession(): void {
+    if (!this.isClient()) return;
+    localStorage.removeItem(STORAGE_KEYS.SESSION);
+    localStorage.removeItem('sunny_current_user_id');
+  }
+
   public async createUser(userData: {
     name: string;
     email: string;
@@ -406,9 +621,16 @@ class DataStore {
     status?: 'active' | 'inactive';
     avatarUrl?: string;
     avatarStyle?: User['avatarStyle'];
+    passcode?: string;
   }): Promise<User> {
     if (!this.isClient()) throw new Error('Client only');
     this.init();
+
+    const requestedCode = userData.passcode?.trim();
+    if (requestedCode) {
+      const conflict = this.findPasscodeConflict(requestedCode);
+      if (conflict) throw new Error(`Passcode ${requestedCode} is already assigned to ${conflict.name}.`);
+    }
 
     const timestamp = Date.now();
     const newUser: User = {
@@ -418,7 +640,8 @@ class DataStore {
       role: userData.role,
       status: userData.status || 'active',
       avatarUrl: userData.avatarUrl?.trim() || undefined,
-      avatarStyle: userData.avatarStyle || 'circle'
+      avatarStyle: userData.avatarStyle || 'circle',
+      passcode: userData.passcode?.trim() || undefined
     };
 
     const currentUsers = this.getUsers();
@@ -440,6 +663,12 @@ class DataStore {
   public async updateUser(updated: User): Promise<User> {
     if (!this.isClient()) throw new Error('Client only');
     this.init();
+
+    const requestedCode = updated.passcode?.trim();
+    if (requestedCode) {
+      const conflict = this.findPasscodeConflict(requestedCode, updated.id);
+      if (conflict) throw new Error(`Passcode ${requestedCode} is already assigned to ${conflict.name}.`);
+    }
 
     const currentUsers = this.getUsers();
     const updatedUsers = currentUsers.map(u => u.id === updated.id ? { ...u, ...updated } : u);
@@ -717,7 +946,7 @@ class DataStore {
     // Remove a vehicle's assignment but preserve shared inventory records.
     const equipment = this.getEquipment().map(e => {
       const assignments = (e.assignments || []).filter(a => a.vehicleId !== vehicleId);
-      const total = e.totalQuantity || (e.kind === 'reusable' ? 1 : 0);
+      const total = e.totalQuantity ?? 0;
       return {
         ...e,
         assignments,
@@ -768,7 +997,7 @@ class DataStore {
 
   public getGlobalInventorySummary() {
     const items = this.getEquipment();
-    const totalOwned = items.reduce((sum, item) => sum + (item.totalQuantity || 1), 0);
+    const totalOwned = items.reduce((sum, item) => sum + (item.totalQuantity ?? 1), 0);
     const assigned = items.reduce((sum, item) => sum + (item.assignments || []).reduce((qty, assignment) => qty + assignment.quantity, 0), 0);
     const unassigned = Math.max(0, totalOwned - assigned);
     return { totalOwned, assigned, unassigned };
@@ -799,8 +1028,11 @@ class DataStore {
     const nowIso = new Date().toISOString();
     const kind = equipmentData.kind || (equipmentData.category === 'supplies' ? 'consumable' : 'reusable');
     const requestedTotal = Number(equipmentData.totalQuantity);
-    const totalQuantity = kind === 'reusable' ? 1 : Math.max(0, Number.isFinite(requestedTotal) ? requestedTotal : 1);
-    const assignments = targetVehicle ? [{ vehicleId: targetVehicle.id, vehicleNumber: targetVehicle.vehicleNumber, quantity: kind === 'reusable' ? 1 : totalQuantity }] : [];
+    const totalQuantity = Math.max(1, Number.isFinite(requestedTotal) ? Math.floor(requestedTotal) : 1);
+    // New stock lands in the shop; the manager distributes it per vehicle after.
+    const assignments = targetVehicle
+      ? [{ vehicleId: targetVehicle.id, vehicleNumber: targetVehicle.vehicleNumber, quantity: 1 }]
+      : [];
 
     const newEq: Equipment = {
       id: `eq-${timestamp}`,
@@ -933,10 +1165,6 @@ class DataStore {
       ? (sourceIndex >= 0 ? assignments[sourceIndex].quantity : 0)
       : (equipment.availableQuantity ?? 0);
     if (amount > sourceAvailable) throw new Error('Not enough available equipment quantity.');
-    if (kind === 'reusable' && amount !== 1) throw new Error('Reusable equipment is limited to one unit.');
-    if (kind === 'reusable' && !sourceVehicleId && assignments.length > 0) {
-      throw new Error('This item is assigned. Choose its current vehicle to explicitly transfer it.');
-    }
 
     if (sourceVehicleId && sourceIndex >= 0) {
       assignments[sourceIndex] = { ...assignments[sourceIndex], quantity: assignments[sourceIndex].quantity - amount };
@@ -948,7 +1176,7 @@ class DataStore {
       assignments.push({ vehicleId: vehicle.id, vehicleNumber: vehicle.vehicleNumber, quantity: amount });
     }
     const cleanAssignments = assignments.filter(a => a.quantity > 0);
-    const totalQuantity = equipment.totalQuantity || (kind === 'reusable' ? 1 : amount);
+    const totalQuantity = equipment.totalQuantity ?? amount;
     const assignedQuantity = cleanAssignments.reduce((sum, a) => sum + a.quantity, 0);
     return this.updateEquipment({
       ...equipment,
@@ -958,6 +1186,77 @@ class DataStore {
       assignments: cleanAssignments,
       vehicleId: cleanAssignments[0]?.vehicleId || null,
       vehicleNumber: cleanAssignments[0]?.vehicleNumber || 'Unassigned'
+    });
+  }
+
+  /**
+   * Records consumable stock as used up on a vehicle. The amount leaves both the
+   * vehicle's allocation and the global total, because it is physically gone —
+   * so global inventory keeps reflecting what the fleet actually owns.
+   *
+   * Pass a null vehicleId to consume straight from shop stock.
+   */
+  public async consumeEquipmentQuantity(
+    equipmentId: string,
+    vehicleId: string | null,
+    quantity: number
+  ): Promise<Equipment> {
+    if (!this.isClient()) throw new Error('Client only');
+    const equipment = this.getEquipmentItem(equipmentId);
+    if (!equipment) throw new Error('Equipment not found.');
+    if ((equipment.kind || 'reusable') !== 'consumable') {
+      throw new Error('Only consumable stock can be marked as used. Reusable equipment is transferred instead.');
+    }
+
+    const amount = Number(quantity);
+    if (!Number.isInteger(amount) || amount <= 0) {
+      throw new Error('Quantity used must be a positive whole number.');
+    }
+
+    const assignments = [...(equipment.assignments || [])];
+    const total = equipment.totalQuantity || 0;
+
+    if (vehicleId) {
+      const index = assignments.findIndex(a => a.vehicleId === vehicleId);
+      const held = index >= 0 ? assignments[index].quantity : 0;
+      if (amount > held) throw new Error(`Only ${held} on that vehicle.`);
+      assignments[index] = { ...assignments[index], quantity: held - amount };
+    } else {
+      const shop = Math.max(0, total - assignments.reduce((sum, a) => sum + a.quantity, 0));
+      if (amount > shop) throw new Error(`Only ${shop} in shop stock.`);
+    }
+
+    const cleanAssignments = assignments.filter(a => a.quantity > 0);
+    const newTotal = Math.max(0, total - amount);
+    const assignedQuantity = cleanAssignments.reduce((sum, a) => sum + a.quantity, 0);
+
+    return this.updateEquipment({
+      ...equipment,
+      totalQuantity: newTotal,
+      availableQuantity: Math.max(0, newTotal - assignedQuantity),
+      assignments: cleanAssignments,
+      vehicleId: cleanAssignments[0]?.vehicleId || null,
+      vehicleNumber: cleanAssignments[0]?.vehicleNumber || 'Unassigned'
+    });
+  }
+
+  /** Adds newly purchased stock into the shop pool. */
+  public async restockEquipment(equipmentId: string, quantity: number): Promise<Equipment> {
+    if (!this.isClient()) throw new Error('Client only');
+    const equipment = this.getEquipmentItem(equipmentId);
+    if (!equipment) throw new Error('Equipment not found.');
+
+    const amount = Number(quantity);
+    if (!Number.isInteger(amount) || amount <= 0) {
+      throw new Error('Restock amount must be a positive whole number.');
+    }
+
+    const newTotal = (equipment.totalQuantity || 0) + amount;
+    const assignedQuantity = (equipment.assignments || []).reduce((sum, a) => sum + a.quantity, 0);
+    return this.updateEquipment({
+      ...equipment,
+      totalQuantity: newTotal,
+      availableQuantity: Math.max(0, newTotal - assignedQuantity)
     });
   }
 
@@ -974,6 +1273,79 @@ class DataStore {
       equipment.kind === 'consumable' ? 1 : 1,
       sourceVehicleId || equipment.assignments?.[0]?.vehicleId || null
     );
+  }
+
+  /**
+   * Bulk-imports equipment in one pass, so a 40-item AI import is a single
+   * localStorage write plus one Firestore batch rather than 40 round trips.
+   *
+   * 'append' keeps existing stock and renames colliding ids; 'replace' discards
+   * the current inventory outright, including every per-vehicle assignment.
+   */
+  public async importEquipment(
+    items: Array<Partial<Equipment> & { name: string }>,
+    mode: 'append' | 'replace'
+  ): Promise<Equipment[]> {
+    if (!this.isClient()) throw new Error('Client only');
+    this.init();
+
+    const existing = mode === 'append' ? this.getEquipment() : [];
+    const usedIds = new Set(existing.map(eq => eq.id));
+    const nowIso = new Date().toISOString();
+    const stamp = Date.now();
+
+    const created: Equipment[] = items.map((item, index) => {
+      let id = item.id?.trim() || `eq-${stamp}-${index}`;
+      if (usedIds.has(id)) id = `${id}-${stamp}-${index}`;
+      usedIds.add(id);
+
+      const kind: EquipmentKind = item.kind || (item.category === 'supplies' ? 'consumable' : 'reusable');
+      const totalQuantity = Math.max(1, Number(item.totalQuantity) || 1);
+
+      return this.normalizeEquipment({
+        id,
+        name: item.name.trim(),
+        assetTag: item.assetTag?.trim() || null,
+        category: item.category || 'equipment',
+        kind,
+        totalQuantity,
+        // Imported stock starts unassigned; the manager distributes it per truck.
+        availableQuantity: totalQuantity,
+        assignments: [],
+        vehicleId: null,
+        vehicleNumber: 'Unassigned',
+        qrCodeToken: item.qrCodeToken?.trim() || null,
+        qrCode: item.qrCode?.trim() || null,
+        status: item.status || 'working',
+        activeIssueId: null,
+        createdAt: nowIso,
+        updatedAt: nowIso
+      } as Equipment);
+    });
+
+    const merged = [...existing, ...created];
+    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(merged));
+
+    if (db) {
+      try {
+        const batch = writeBatch(db);
+        if (mode === 'replace') {
+          // Clear remote docs that the replacement no longer contains.
+          const keep = new Set(merged.map(eq => eq.id));
+          const remote = await getDocs(collection(db, 'equipment'));
+          remote.forEach(docSnap => {
+            if (!keep.has(docSnap.id)) batch.delete(doc(db, 'equipment', docSnap.id));
+          });
+        }
+        created.forEach(eq => batch.set(doc(db, 'equipment', eq.id), sanitizeForFirestore(eq)));
+        await batch.commit();
+      } catch (e) {
+        console.warn('Firestore equipment import write error:', e);
+      }
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return created;
   }
 
   public async deleteEquipment(equipmentId: string): Promise<void> {

@@ -18,8 +18,17 @@ import { dbService } from '@/lib/db';
 import { Issue, IssueStatus } from '@/types';
 import { IssueStatusBadge } from '@/components/StatusBadges';
 import { IssueTimeline } from '@/components/IssueTimeline';
+import { ManagerOnly } from '@/components/ManagerOnly';
 
 export default function IssuesPage() {
+  return (
+    <ManagerOnly>
+      <IssuesPageContent />
+    </ManagerOnly>
+  );
+}
+
+function IssuesPageContent() {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');

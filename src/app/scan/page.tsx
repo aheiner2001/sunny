@@ -16,13 +16,16 @@ import Link from 'next/link';
 import { dbService } from '@/lib/db';
 import { Vehicle } from '@/types';
 import { useAuth } from '@/context/AuthContext';
+import { PasscodePrompt } from '@/components/PasscodeGate';
 
 export default function ScanPage() {
   const router = useRouter();
-  const { role } = useAuth();
+  const { role, isSessionValid } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState('');
+  // Vehicle resolved from a scan that is waiting on a fresh passcode.
+  const [pendingVehicle, setPendingVehicle] = useState<Vehicle | null>(null);
   const scannerRef = useRef<any>(null);
   const roleRef = useRef(role);
 
@@ -91,12 +94,27 @@ export default function ScanPage() {
     }
 
     const vehicle = dbService.getVehicleByQR(token) || dbService.getVehicle(token);
-    if (vehicle) {
-      const mode = roleRef.current === 'manager' ? '' : '&mode=employee';
-      router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}${mode}`);
-    } else {
+    if (!vehicle) {
       alert(`Vehicle with QR token "${rawCode}" was not found.`);
+      return;
     }
+
+    // Active shift session: straight into the inspection. Lapsed: ask for the
+    // passcode first, then continue to the vehicle we already resolved.
+    if (!isSessionValid()) {
+      setPendingVehicle(vehicle);
+      return;
+    }
+
+    openVehicle(vehicle);
+  };
+
+  const openVehicle = (vehicle: Vehicle) => {
+    // Read the role from the live session: after a re-auth the context role
+    // has not propagated to roleRef yet.
+    const activeRole = dbService.getSession()?.role || roleRef.current;
+    const mode = activeRole === 'manager' ? '' : '&mode=employee';
+    router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}${mode}`);
   };
 
   return (
@@ -205,6 +223,17 @@ export default function ScanPage() {
           </button>
         </form>
       </div>
+
+      <PasscodePrompt
+        isOpen={pendingVehicle !== null}
+        targetLabel={pendingVehicle ? `${pendingVehicle.vehicleNumber} inspection` : null}
+        onClose={() => setPendingVehicle(null)}
+        onSuccess={() => {
+          const target = pendingVehicle;
+          setPendingVehicle(null);
+          if (target) openVehicle(target);
+        }}
+      />
     </div>
   );
 }

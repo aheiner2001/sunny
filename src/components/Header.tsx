@@ -9,12 +9,12 @@ import {
   QrCode, 
   UserCheck, 
   Shield, 
-  User as UserIcon, 
-  RotateCcw,
+  User as UserIcon,
   Sparkles,
   ExternalLink,
   Camera,
-  Settings
+  Settings,
+  LogOut
 } from 'lucide-react';
 import Link from 'next/link';
 import { dbService } from '@/lib/db';
@@ -22,7 +22,7 @@ import { ProfileModal } from '@/components/ProfileModal';
 import { getResolvedAvatarUrl } from '@/lib/avatarPresets';
 
 export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void }) {
-  const { user, role, switchUser, availableUsers } = useAuth();
+  const { user, role, switchUser, availableUsers, canSwitchUser, logout, managerGrantUntil } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notifMenuOpen, setNotifMenuOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -48,48 +48,31 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
   }, []);
 
   return (
-    <header className="h-18 bg-white border-b border-slate-200/80 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-20 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-      <div className="flex items-center gap-4">
+    <header className="h-18 bg-white border-b border-slate-200/80 px-4 sm:px-8 flex items-center justify-between gap-2 sm:gap-4 sticky top-0 z-20 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1 overflow-hidden">
         {onMobileMenuToggle && (
-          <button 
+          <button
             onClick={onMobileMenuToggle}
-            className="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            className="lg:hidden shrink-0 p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
             aria-label="Toggle menu"
           >
             <Menu className="w-5 h-5" />
           </button>
         )}
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
+        {/* Brand mark. Mobile only: the sidebar (and its logo) is hidden below lg. */}
+        <img
+          src={`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/sunny-logo.png`}
+          alt="Sunny logo"
+          className="lg:hidden h-9 w-28 shrink-0 object-contain object-left"
+        />
+        <div className="min-w-0 hidden lg:block">
+          <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight truncate">Dashboard</h1>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 sm:gap-4" ref={menuRef}>
-        {/* Mobile quick scan button */}
-        <Link
-          href="/scan"
-          className="lg:hidden flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 text-white font-medium text-xs shadow-sm hover:bg-sky-700"
-        >
-          <QrCode className="w-4 h-4" />
-          <span>Scan</span>
-        </Link>
-
-        {/* Reset / Demo seed button */}
-        <button
-          onClick={() => {
-            if (confirm('Reset fleet data to default initial state?')) {
-              dbService.resetToDefaults();
-              window.location.reload();
-            }
-          }}
-          title="Reset fleet database to original demo state"
-          className="p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-        >
-          <RotateCcw className="w-4 h-4" />
-        </button>
-
+      <div className="flex items-center gap-1 sm:gap-3 shrink-0" ref={menuRef}>
         {/* Notification Bell */}
-        <div className="relative">
+        <div className="relative shrink-0">
           <button
             onClick={() => {
               setNotifMenuOpen(!notifMenuOpen);
@@ -125,36 +108,40 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
         </div>
 
         {/* User profile with Role Switcher & Customize Profile */}
-        <div className="relative">
+        <div className="relative shrink-0">
           <button
             onClick={() => {
               setUserMenuOpen(!userMenuOpen);
               setNotifMenuOpen(false);
             }}
-            className="flex items-center gap-3 p-1.5 pr-3 rounded-full hover:bg-slate-100/80 transition-colors border border-transparent hover:border-slate-200"
+            className="flex items-center gap-2 sm:gap-3 p-1.5 sm:pr-3 rounded-full hover:bg-slate-100/80 transition-colors border border-transparent hover:border-slate-200 max-w-[220px]"
           >
             {user ? (
               <img
                 src={currentAvatarUrl}
                 alt={user.name || 'User'}
-                className={`w-9 h-9 object-cover ring-2 ring-sky-500/20 shadow-sm ${
+                className={`w-9 h-9 shrink-0 object-cover ring-2 ring-sky-500/20 shadow-sm ${
                   user.avatarStyle === 'circle' || !user.avatarStyle ? 'rounded-full' : user.avatarStyle === 'square' ? 'rounded-none' : 'rounded-xl'
                 }`}
               />
             ) : (
-              <div className="w-9 h-9 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center ring-2 ring-sky-500/20 shadow-sm">
+              <div className="w-9 h-9 shrink-0 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center ring-2 ring-sky-500/20 shadow-sm">
                 <UserIcon className="w-4 h-4" />
               </div>
             )}
-            <div className="hidden sm:block text-left">
-              <div className="text-sm font-bold text-slate-900 leading-tight flex items-center gap-1.5">
+            <div className="hidden sm:block text-left min-w-0">
+              <div className="text-sm font-bold text-slate-900 leading-tight truncate">
                 {user?.name}
               </div>
-              <div className="text-[11px] font-semibold text-slate-400 capitalize">
-                {user?.role}
+              <div className="text-[11px] font-semibold text-slate-400 capitalize truncate">
+                {managerGrantUntil ? (
+                  <span className="text-sky-600 font-bold normal-case">Admin (temporary)</span>
+                ) : (
+                  user?.role
+                )}
               </div>
             </div>
-            <ChevronDown className="w-4 h-4 text-slate-400 ml-0.5" />
+            <ChevronDown className="w-4 h-4 shrink-0 text-slate-400 hidden sm:block" />
           </button>
 
           {userMenuOpen && (
@@ -164,6 +151,16 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
                   <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Active Account</p>
                   <p className="text-sm font-bold text-slate-900 truncate">{user?.name}</p>
                   <p className="text-xs text-slate-500 truncate">{user?.email}</p>
+                  {managerGrantUntil && (
+                    <p className="text-[11px] font-bold text-sky-700 mt-1 flex items-center gap-1">
+                      <Shield className="w-3 h-3" />
+                      Admin access until {new Date(managerGrantUntil).toLocaleString([], {
+                        weekday: 'short',
+                        hour: 'numeric',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -181,7 +178,8 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
                 </button>
               </div>
 
-              <div className="py-2 border-t border-slate-100">
+              {/* Managers switch accounts freely; employees sign out instead. */}
+              {canSwitchUser && <div className="py-2 border-t border-slate-100">
                 <p className="px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                   Switch Account (RBAC)
                 </p>
@@ -231,9 +229,9 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
                     );
                   })}
                 </div>
-              </div>
+              </div>}
 
-              <div className="pt-2 border-t border-slate-100">
+              <div className="pt-2 border-t border-slate-100 space-y-1">
                 <Link
                   href="/scan"
                   onClick={() => setUserMenuOpen(false)}
@@ -242,6 +240,16 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
                   <QrCode className="w-4 h-4 text-sky-600" />
                   <span>Open Inspection Scanner</span>
                 </Link>
+                <button
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    logout();
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Sign Out</span>
+                </button>
               </div>
             </div>
           )}

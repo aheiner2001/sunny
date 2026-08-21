@@ -8,6 +8,26 @@ export interface User {
   status: 'active' | 'inactive';
   avatarUrl?: string;
   avatarStyle?: 'circle' | 'rounded' | 'square';
+  /**
+   * Per-user sign-in code. A manager's passcode unlocks the manager view;
+   * an employee's passcode signs in with employee permissions.
+   * Stored in plain text alongside the rest of the demo fleet data.
+   */
+  passcode?: string;
+  /**
+   * ISO expiry of a temporary manager grant. While in the future the account
+   * has an effective role of 'manager' without being a true manager, so it
+   * cannot manage accounts or grant elevation onward.
+   */
+  tempManagerUntil?: string | null;
+}
+
+/** Persisted passcode session. Expires after a work shift; see SESSION_TTL_MS. */
+export interface AuthSession {
+  userId: string;
+  role: UserRole;
+  issuedAt: string;
+  expiresAt: string;
 }
 
 export type VehicleStatus = 'active' | 'in_use' | 'maintenance' | 'inactive';

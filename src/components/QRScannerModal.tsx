@@ -6,6 +6,7 @@ import { Camera, X, RefreshCw, Sparkles, AlertCircle, ArrowRight, ShieldCheck } 
 import { dbService } from '@/lib/db';
 import { Vehicle } from '@/types';
 import { useAuth } from '@/context/AuthContext';
+import { PasscodePrompt } from '@/components/PasscodeGate';
 
 export function QRScannerModal({
   isOpen,
@@ -17,12 +18,14 @@ export function QRScannerModal({
   onScanSuccess?: (vehicle: Vehicle) => void;
 }) {
   const router = useRouter();
-  const { role } = useAuth();
+  const { role, isSessionValid } = useAuth();
   const roleRef = useRef(role);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [manualInput, setManualInput] = useState('');
+  // Vehicle resolved from a scan that is waiting on a fresh passcode.
+  const [pendingVehicle, setPendingVehicle] = useState<Vehicle | null>(null);
   const scannerRef = useRef<any>(null);
   const scannerContainerId = 'qr-reader-container';
 
@@ -121,17 +124,32 @@ export function QRScannerModal({
     }
 
     const vehicle = dbService.getVehicleByQR(token) || dbService.getVehicle(token);
-    if (vehicle) {
-      if (onScanSuccess) {
-        onScanSuccess(vehicle);
-      } else {
-        const mode = roleRef.current === 'manager' ? '' : '&mode=employee';
-        router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}${mode}`);
-      }
-      onClose();
-    } else {
+    if (!vehicle) {
       alert(`Vehicle with code "${scannedText}" not found in fleet.`);
+      return;
     }
+
+    // Active shift session: straight into the inspection. Lapsed: ask for the
+    // passcode first, then continue to the vehicle we already resolved.
+    if (!isSessionValid()) {
+      setPendingVehicle(vehicle);
+      return;
+    }
+
+    openVehicle(vehicle);
+  };
+
+  const openVehicle = (vehicle: Vehicle) => {
+    if (onScanSuccess) {
+      onScanSuccess(vehicle);
+    } else {
+      // Read the role from the live session: after a re-auth the context role
+      // has not propagated to roleRef yet.
+      const activeRole = dbService.getSession()?.role || roleRef.current;
+      const mode = activeRole === 'manager' ? '' : '&mode=employee';
+      router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}${mode}`);
+    }
+    onClose();
   };
 
   const handleManualSubmit = (e: React.FormEvent) => {
@@ -232,6 +250,17 @@ export function QRScannerModal({
           </form>
         </div>
       </div>
+
+      <PasscodePrompt
+        isOpen={pendingVehicle !== null}
+        targetLabel={pendingVehicle ? `${pendingVehicle.vehicleNumber} inspection` : null}
+        onClose={() => setPendingVehicle(null)}
+        onSuccess={() => {
+          const target = pendingVehicle;
+          setPendingVehicle(null);
+          if (target) openVehicle(target);
+        }}
+      />
     </div>
   );
 }

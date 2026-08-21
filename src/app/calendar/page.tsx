@@ -6,10 +6,19 @@ import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-reac
 import { dbService } from '@/lib/db';
 import { Inspection, Issue } from '@/types';
 import { InspectionStatusBadge, IssueStatusBadge } from '@/components/StatusBadges';
+import { ManagerOnly } from '@/components/ManagerOnly';
 
 const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 export default function CalendarPage() {
+  return (
+    <ManagerOnly>
+      <CalendarPageContent />
+    </ManagerOnly>
+  );
+}
+
+function CalendarPageContent() {
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [month, setMonth] = useState(() => new Date());

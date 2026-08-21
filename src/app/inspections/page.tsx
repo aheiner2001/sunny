@@ -13,8 +13,11 @@ import {
 import { dbService } from '@/lib/db';
 import { Inspection } from '@/types';
 import { InspectionStatusBadge } from '@/components/StatusBadges';
+import { useAuth } from '@/context/AuthContext';
 
 export default function InspectionsPage() {
+  // Employees read their inspection history here; only managers may delete.
+  const { role } = useAuth();
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -244,13 +247,15 @@ export default function InspectionsPage() {
                         View Vehicle History
                       </Link>
 
-                      <button
-                        onClick={(e) => handleDeleteInspection(e, insp.id, insp.vehicleNumber)}
-                        className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-xs flex items-center gap-1.5 transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Delete Record</span>
-                      </button>
+                      {role === 'manager' && (
+                        <button
+                          onClick={(e) => handleDeleteInspection(e, insp.id, insp.vehicleNumber)}
+                          className="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-xs flex items-center gap-1.5 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete Record</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}

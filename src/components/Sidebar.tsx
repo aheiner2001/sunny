@@ -42,7 +42,7 @@ export function Sidebar() {
           <img
             src={`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/sunny-logo.png`}
             alt="Sunny logo"
-            className="h-10 w-28 object-contain"
+            className="h-12 w-36 object-contain object-left"
           />
         </div>
 

@@ -14,8 +14,17 @@ import {
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Inspection, Issue, Vehicle, ReportSettings } from '@/types';
+import { ManagerOnly } from '@/components/ManagerOnly';
 
 export default function ReportsPage() {
+  return (
+    <ManagerOnly>
+      <ReportsPageContent />
+    </ManagerOnly>
+  );
+}
+
+function ReportsPageContent() {
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);

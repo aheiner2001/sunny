@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Camera, CheckCircle2, Package, X } from 'lucide-react';
+import { ArrowLeft, Camera, CheckCircle2, Package, Trash2, X } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Equipment, Vehicle } from '@/types';
 
@@ -14,6 +14,7 @@ export default function EquipmentScanClient() {
   const [equipment, setEquipment] = useState<Equipment | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [quantity, setQuantity] = useState('1');
+  const [usedQuantity, setUsedQuantity] = useState('1');
   const [targetVehicleId, setTargetVehicleId] = useState('');
   const [sourceVehicleId, setSourceVehicleId] = useState('');
   const [manualCode, setManualCode] = useState(token);
@@ -46,7 +47,13 @@ export default function EquipmentScanClient() {
     setError(found ? '' : `Equipment code "${value}" was not found.`);
     if (found) {
       const current = found.assignments?.[0]?.vehicleId || found.vehicleId || '';
-      setSourceVehicleId(found.kind === 'consumable' ? '' : current);
+      // Keep the chosen source across refreshes while it still holds stock,
+      // otherwise marking usage would bounce the picker back to shop each time.
+      setSourceVehicleId(prev =>
+        prev && found.assignments?.some(a => a.vehicleId === prev)
+          ? prev
+          : found.kind === 'consumable' ? '' : current
+      );
       setQuantity('1');
     }
   };
@@ -90,10 +97,36 @@ export default function EquipmentScanClient() {
 
   const assignments = equipment?.assignments || [];
   const assigned = assignments.reduce((sum, item) => sum + item.quantity, 0);
-  const available = equipment ? Math.max(0, equipment.availableQuantity ?? ((equipment.totalQuantity || 1) - assigned)) : 0;
+  const available = equipment ? Math.max(0, equipment.availableQuantity ?? ((equipment.totalQuantity ?? 1) - assigned)) : 0;
   const currentAssignment = sourceVehicleId ? assignments.find(a => a.vehicleId === sourceVehicleId) : undefined;
   const sourceAvailable = sourceVehicleId ? currentAssignment?.quantity || 0 : available;
   const isReusable = equipment?.kind !== 'consumable';
+  // Consumption comes out of the selected source: a truck's allocation, or shop.
+  const consumeFrom = assignments.find(a => a.vehicleId === sourceVehicleId);
+  const consumeAvailable = sourceVehicleId ? consumeFrom?.quantity || 0 : available;
+
+  const markUsed = async (amount: number) => {
+    if (!equipment) return;
+    if (!Number.isInteger(amount) || amount <= 0) return setError('Enter how many were used.');
+    if (amount > consumeAvailable) return setError(`Only ${consumeAvailable} available there.`);
+    const where = sourceVehicleId
+      ? vehicles.find(v => v.id === sourceVehicleId)?.vehicleNumber || 'that vehicle'
+      : 'shop stock';
+    if (!window.confirm(`Mark ${amount} x ${equipment.name} as used up on ${where}? This removes it from fleet inventory.`)) {
+      return;
+    }
+    try {
+      const updated = await dbService.consumeEquipmentQuantity(equipment.id, sourceVehicleId || null, amount);
+      setEquipment(updated);
+      setError('');
+      setUsedQuantity('1');
+      if (sourceVehicleId && !updated.assignments?.some(a => a.vehicleId === sourceVehicleId)) {
+        setSourceVehicleId('');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Could not record usage.');
+    }
+  };
 
   const confirm = async () => {
     if (!equipment || !targetVehicleId) return setError('Choose a receiving vehicle.');
@@ -135,10 +168,55 @@ export default function EquipmentScanClient() {
               {assignments.length > 0 && <p className="text-[11px] text-slate-500 mt-2">Assigned: {assignments.map(a => `${a.vehicleNumber} (${a.quantity})`).join(', ')}</p>}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="text-xs font-bold text-slate-700">Take quantity<input type="number" min="1" step="1" value={quantity} onChange={e => setQuantity(e.target.value)} disabled={isReusable} className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-200" /></label>
+              <label className="text-xs font-bold text-slate-700">Take quantity<input type="number" min="1" step="1" max={sourceAvailable} value={quantity} onChange={e => setQuantity(e.target.value)} className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-200" /></label>
               {assignments.length > 0 && <label className="text-xs font-bold text-slate-700">Take from<select value={sourceVehicleId} onChange={e => setSourceVehicleId(e.target.value)} className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-200"><option value="">Shared / unassigned stock ({available})</option>{assignments.map(a => <option key={a.vehicleId} value={a.vehicleId}>{a.vehicleNumber} ({a.quantity})</option>)}</select></label>}
               <label className="text-xs font-bold text-slate-700">Receiving vehicle<select value={targetVehicleId} onChange={e => setTargetVehicleId(e.target.value)} className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-200"><option value="">Choose vehicle...</option>{vehicles.map(v => <option key={v.id} value={v.id}>{v.vehicleNumber}</option>)}</select></label>
             </div>
+            {/* Consumables only: record stock that has been used up. */}
+            {!isReusable && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Trash2 className="w-4 h-4 text-amber-700 shrink-0" />
+                  <h3 className="text-xs font-extrabold text-amber-900">Mark stock as used</h3>
+                </div>
+                <p className="text-[11px] text-amber-800/90 mb-3">
+                  Removes it from {sourceVehicleId ? vehicles.find(v => v.id === sourceVehicleId)?.vehicleNumber || 'the vehicle' : 'shop stock'} and
+                  from the fleet total. {consumeAvailable} available there.
+                </p>
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="text-[11px] font-bold text-amber-900">
+                    Quantity used
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      max={consumeAvailable}
+                      value={usedQuantity}
+                      onChange={e => setUsedQuantity(e.target.value)}
+                      className="mt-1 w-24 px-3 py-2 rounded-xl border border-amber-300 bg-white text-xs font-bold"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={consumeAvailable === 0}
+                    onClick={() => markUsed(Number(usedQuantity))}
+                    className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-colors disabled:opacity-50"
+                  >
+                    Mark used
+                  </button>
+                  {consumeAvailable > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => markUsed(consumeAvailable)}
+                      className="px-4 py-2.5 rounded-xl border border-amber-300 bg-white text-amber-800 text-xs font-bold hover:bg-amber-100 transition-colors"
+                    >
+                      Used it all ({consumeAvailable})
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-2 pt-2 border-t border-slate-100">
               <button type="button" onClick={() => router.push('/equipment')} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600"><X className="w-4 h-4 inline mr-1" />Cancel</button>
               <button type="button" onClick={confirm} className="flex-1 py-2.5 rounded-xl bg-sky-600 text-white text-xs font-bold"><CheckCircle2 className="w-4 h-4 inline mr-1" />Confirm transfer</button>

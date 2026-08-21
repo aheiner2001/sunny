@@ -22,8 +22,17 @@ import { dbService } from '@/lib/db';
 import { Vehicle, VehicleStatus, EquipmentOption } from '@/types';
 import { VehicleStatusBadge, InspectionStatusBadge } from '@/components/StatusBadges';
 import { QRScannerModal } from '@/components/QRScannerModal';
+import { ManagerOnly } from '@/components/ManagerOnly';
 
 export default function VehiclesPage() {
+  return (
+    <ManagerOnly>
+      <VehiclesPageContent />
+    </ManagerOnly>
+  );
+}
+
+function VehiclesPageContent() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
