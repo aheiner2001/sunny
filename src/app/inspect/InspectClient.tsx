@@ -255,11 +255,17 @@ export default function InspectClient() {
 
       const flaggedList = Object.entries(flagIssues).map(([qId, issueData]) => {
         const question = questions.find(q => q.id === qId);
+        const response = responses[qId];
+        const quantities = issueData.description.match(/\d+(?:\.\d+)?/g)?.map(Number) || [];
         return {
           equipmentId: question?.equipmentId || null,
           equipmentName: question?.equipmentName || issueData.title || 'Equipment Item',
           title: issueData.title || 'Flagged Issue',
-          description: issueData.description || ''
+          description: issueData.description || '',
+          questionType: question?.type,
+          value: response?.value,
+          reportedQuantity: quantities.length >= 2 ? quantities[0] : null,
+          requiredQuantity: quantities.length >= 2 ? quantities[1] : null
         };
       });
 

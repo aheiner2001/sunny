@@ -11,6 +11,7 @@ import {
   IssueStatusLog,
   InspectionResponse,
   IssueStatus,
+  IssueType,
   User,
   UserRole,
   EquipmentCategory,
@@ -21,6 +22,7 @@ import {
   ReportSettings,
   AuthSession
 } from '@/types';
+import { classifyIssueType } from './issueClassification';
 import { 
   INITIAL_VEHICLES, 
   INITIAL_EQUIPMENT, 
@@ -1750,6 +1752,10 @@ class DataStore {
       equipmentName: string;
       title: string;
       description: string;
+      reportedQuantity?: number | null;
+      requiredQuantity?: number | null;
+      questionType?: string;
+      value?: string;
     }>;
     generalNotes?: string | null;
     taskId?: string | null;
@@ -1799,6 +1805,14 @@ class DataStore {
         inspectionId,
         title: flag.title || 'Flagged Inspection Item',
         description: flag.description || '',
+        type: classifyIssueType({
+          title: flag.title,
+          description: flag.description,
+          questionType: flag.questionType,
+          value: flag.value,
+        }),
+        reportedQuantity: flag.reportedQuantity ?? null,
+        requiredQuantity: flag.requiredQuantity ?? null,
         status: 'open',
         resolvedAt: null,
         resolvedById: null,
@@ -2015,6 +2029,47 @@ class DataStore {
     if (db) {
       setDoc(doc(db, 'issues', issueId), sanitizeForFirestore(updatedIssue), { merge: true }).catch((e) =>
         console.warn('Firestore update issue status error:', e)
+      );
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return updatedIssue;
+  }
+
+  public updateIssueType(
+    issueId: string,
+    type: IssueType,
+    changedBy: { id: string; name: string }
+  ): Issue {
+    if (!this.isClient()) throw new Error('Client only');
+    const issues = this.getIssues();
+    const targetIndex = issues.findIndex(i => i.id === issueId);
+    if (targetIndex === -1) throw new Error('Issue not found');
+
+    const issue = issues[targetIndex];
+    const oldType = issue.type || 'needs_repair';
+    const newLog: IssueStatusLog = {
+      id: `log-${Date.now()}`,
+      issueId,
+      changedById: changedBy.id,
+      changedByName: changedBy.name,
+      oldStatus: issue.status,
+      newStatus: issue.status,
+      notes: `Issue type changed from ${oldType} to ${type}`,
+      timestamp: new Date().toISOString()
+    };
+    const updatedIssue: Issue = {
+      ...issue,
+      type,
+      statusLogs: [...(issue.statusLogs || []), newLog]
+    };
+
+    issues[targetIndex] = updatedIssue;
+    localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(issues));
+
+    if (db) {
+      setDoc(doc(db, 'issues', issueId), sanitizeForFirestore(updatedIssue), { merge: true }).catch((e) =>
+        console.warn('Firestore update issue type error:', e)
       );
     }
 
