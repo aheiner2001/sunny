@@ -58,6 +58,7 @@ export interface EquipmentAssignment {
   vehicleId: string;
   vehicleNumber: string;
   quantity: number;
+  requiredQuantity?: number;
 }
 
 export interface Equipment {
@@ -190,6 +191,15 @@ export interface ReportSettings {
 
 export type IssueStatus = 'open' | 'needs_repair' | 'being_repaired' | 'fixed';
 
+export type IssueType =
+  | 'stock_low_inventory'
+  | 'equipment_replacement'
+  | 'needs_repair';
+
+export interface AppSettings {
+  recentInspectorsDepth: 1 | 3;
+}
+
 export interface IssueStatusLog {
   id: string;
   issueId: string;
@@ -220,4 +230,7 @@ export interface Issue {
   resolvedByName?: string | null;
   resolutionNotes?: string | null;
   statusLogs?: IssueStatusLog[];
+  type?: IssueType | null;
+  reportedQuantity?: number | null;
+  requiredQuantity?: number | null;
 }

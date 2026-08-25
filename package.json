@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build && cp public/404.html out/404.html",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -24,9 +26,13 @@
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^6.1.0",
     "autoprefixer": "^10.4.20",
+    "jsdom": "^30.0.1",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^4.1.11"
   }
 }
