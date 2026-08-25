@@ -115,7 +115,11 @@ class DataStore {
           .map(a => ({
             vehicleId: a.vehicleId,
             vehicleNumber: a.vehicleNumber || 'Vehicle',
-            quantity: Math.max(0, Number(a.quantity) || 0)
+            quantity: Math.max(0, Number(a.quantity) || 0),
+            requiredQuantity:
+              a.requiredQuantity !== undefined && a.requiredQuantity !== null
+                ? Math.max(0, Number(a.requiredQuantity) || 0)
+                : undefined,
           }))
           .filter(a => a.quantity > 0)
       : [];
@@ -158,7 +162,9 @@ class DataStore {
       this.resetToDefaults({ syncToCloud: false });
     }
     this.initialized = true;
-    this.setupFirestoreListeners();
+    if (process.env.NODE_ENV !== 'test') {
+      this.setupFirestoreListeners();
+    }
   }
 
   // Set up real-time bidirectional listeners with Cloud Firestore
@@ -936,39 +942,65 @@ class DataStore {
     return sanitized;
   }
 
-  public async deleteVehicle(vehicleId: string): Promise<void> {
+  public async deleteVehicle(
+    vehicleId: string,
+    options?: { equipmentMode: 'return_to_shop' | 'delete_associated' }
+  ): Promise<void> {
     if (!this.isClient()) return;
+    const mode = options?.equipmentMode || 'return_to_shop';
 
-    // Filter out vehicle
     const vehicles = this.getVehicles().filter(v => v.id !== vehicleId);
     localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(vehicles));
 
-    // Remove a vehicle's assignment but preserve shared inventory records.
-    const equipment = this.getEquipment().map(e => {
-      const assignments = (e.assignments || []).filter(a => a.vehicleId !== vehicleId);
-      const total = e.totalQuantity ?? 0;
-      return {
-        ...e,
-        assignments,
-        vehicleId: assignments[0]?.vehicleId || null,
-        vehicleNumber: assignments[0]?.vehicleNumber || 'Unassigned',
-        availableQuantity: Math.max(0, total - assignments.reduce((sum, a) => sum + a.quantity, 0))
-      };
-    });
+    let equipment = this.getEquipment();
+    const deletedEquipmentIds: string[] = [];
+    if (mode === 'return_to_shop') {
+      equipment = equipment.map(e => {
+        const assignments = (e.assignments || []).filter(a => a.vehicleId !== vehicleId);
+        const total = e.totalQuantity ?? 0;
+        return {
+          ...e,
+          assignments,
+          vehicleId: assignments[0]?.vehicleId || null,
+          vehicleNumber: assignments[0]?.vehicleNumber || 'Unassigned',
+          availableQuantity: Math.max(0, total - assignments.reduce((sum, a) => sum + a.quantity, 0)),
+        };
+      });
+    } else {
+      equipment = equipment.flatMap(e => {
+        const hadOnlyThis =
+          (e.assignments || []).length > 0 &&
+          (e.assignments || []).every(a => a.vehicleId === vehicleId);
+        if (hadOnlyThis) {
+          deletedEquipmentIds.push(e.id);
+          return [];
+        }
+        const assignments = (e.assignments || []).filter(a => a.vehicleId !== vehicleId);
+        const total = e.totalQuantity ?? 0;
+        return [{
+          ...e,
+          assignments,
+          vehicleId: assignments[0]?.vehicleId || null,
+          vehicleNumber: assignments[0]?.vehicleNumber || 'Unassigned',
+          availableQuantity: Math.max(0, total - assignments.reduce((sum, a) => sum + a.quantity, 0)),
+        }];
+      });
+    }
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(equipment));
 
-    // Cleanup associated inspections
     const inspections = this.getInspections().filter(i => i.vehicleId !== vehicleId);
     localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(inspections));
-
-    // Cleanup associated issues
     const issues = this.getIssues().filter(i => i.vehicleId !== vehicleId);
     localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(issues));
 
-    // Sync to Firestore
     if (db) {
       try {
         await deleteDoc(doc(db, 'vehicles', vehicleId));
+        if (mode === 'delete_associated') {
+          await Promise.all(
+            deletedEquipmentIds.map(equipmentId => deleteDoc(doc(db, 'equipment', equipmentId)))
+          );
+        }
       } catch (e) {
         console.warn('Firestore delete vehicle fallback to local cache:', e);
       }
@@ -1187,6 +1219,119 @@ class DataStore {
       vehicleId: cleanAssignments[0]?.vehicleId || null,
       vehicleNumber: cleanAssignments[0]?.vehicleNumber || 'Unassigned'
     });
+  }
+
+  public async returnEquipmentToShop(
+    equipmentId: string,
+    vehicleId: string,
+    quantity: number
+  ): Promise<Equipment> {
+    if (!this.isClient()) throw new Error('Client only');
+    const equipment = this.getEquipmentItem(equipmentId);
+    if (!equipment) throw new Error('Equipment not found.');
+    const amount = Number(quantity);
+    if (!Number.isInteger(amount) || amount <= 0) {
+      throw new Error('Quantity must be a positive whole number.');
+    }
+    const assignments = [...(equipment.assignments || [])];
+    const index = assignments.findIndex(a => a.vehicleId === vehicleId);
+    if (index < 0) throw new Error('No assignment on that vehicle.');
+    const held = assignments[index].quantity;
+    if (amount > held) throw new Error(`Only ${held} on that vehicle.`);
+    assignments[index] = { ...assignments[index], quantity: held - amount };
+    const cleanAssignments = assignments.filter(a => a.quantity > 0);
+    const totalQuantity = equipment.totalQuantity ?? 0;
+    const assignedQuantity = cleanAssignments.reduce((sum, a) => sum + a.quantity, 0);
+    return this.updateEquipment({
+      ...equipment,
+      assignments: cleanAssignments,
+      availableQuantity: Math.max(0, totalQuantity - assignedQuantity),
+      vehicleId: cleanAssignments[0]?.vehicleId || null,
+      vehicleNumber: cleanAssignments[0]?.vehicleNumber || 'Unassigned',
+    });
+  }
+
+  public async setVehicleAssignmentQuantity(
+    equipmentId: string,
+    vehicleId: string,
+    quantity: number
+  ): Promise<Equipment> {
+    if (!this.isClient()) throw new Error('Client only');
+    const equipment = this.getEquipmentItem(equipmentId);
+    const vehicle = this.getVehicle(vehicleId);
+    if (!equipment || !vehicle) throw new Error('Equipment or vehicle not found.');
+    const nextQty = Number(quantity);
+    if (!Number.isInteger(nextQty) || nextQty < 0) {
+      throw new Error('Quantity must be a whole number >= 0.');
+    }
+    const assignments = [...(equipment.assignments || [])];
+    const index = assignments.findIndex(a => a.vehicleId === vehicleId);
+    const current = index >= 0 ? assignments[index].quantity : 0;
+    const delta = nextQty - current;
+    const totalQuantity = equipment.totalQuantity ?? 0;
+    const assignedOthers = assignments
+      .filter(a => a.vehicleId !== vehicleId)
+      .reduce((sum, a) => sum + a.quantity, 0);
+    const shop = Math.max(0, totalQuantity - (assignedOthers + current));
+
+    if (delta > 0 && delta > shop) {
+      throw new Error(`Only ${shop} available in shop.`);
+    }
+
+    if (nextQty === 0) {
+      const clean = assignments.filter(a => a.vehicleId !== vehicleId);
+      const assignedQuantity = clean.reduce((sum, a) => sum + a.quantity, 0);
+      return this.updateEquipment({
+        ...equipment,
+        assignments: clean,
+        availableQuantity: Math.max(0, totalQuantity - assignedQuantity),
+        vehicleId: clean[0]?.vehicleId || null,
+        vehicleNumber: clean[0]?.vehicleNumber || 'Unassigned',
+      });
+    }
+
+    if (index >= 0) {
+      assignments[index] = {
+        ...assignments[index],
+        vehicleNumber: vehicle.vehicleNumber,
+        quantity: nextQty,
+      };
+    } else {
+      assignments.push({
+        vehicleId: vehicle.id,
+        vehicleNumber: vehicle.vehicleNumber,
+        quantity: nextQty,
+      });
+    }
+    const cleanAssignments = assignments.filter(a => a.quantity > 0);
+    const assignedQuantity = cleanAssignments.reduce((sum, a) => sum + a.quantity, 0);
+    return this.updateEquipment({
+      ...equipment,
+      assignments: cleanAssignments,
+      availableQuantity: Math.max(0, totalQuantity - assignedQuantity),
+      vehicleId: cleanAssignments[0]?.vehicleId || null,
+      vehicleNumber: cleanAssignments[0]?.vehicleNumber || 'Unassigned',
+    });
+  }
+
+  public async setAssignmentRequiredQuantity(
+    equipmentId: string,
+    vehicleId: string,
+    requiredQuantity: number
+  ): Promise<Equipment> {
+    const equipment = this.getEquipmentItem(equipmentId);
+    if (!equipment) throw new Error('Equipment not found.');
+    const req = Number(requiredQuantity);
+    if (!Number.isInteger(req) || req < 0) {
+      throw new Error('Required quantity must be a whole number >= 0.');
+    }
+    const assignments = (equipment.assignments || []).map(a =>
+      a.vehicleId === vehicleId ? { ...a, requiredQuantity: req } : a
+    );
+    if (!assignments.some(a => a.vehicleId === vehicleId)) {
+      throw new Error('No assignment on that vehicle.');
+    }
+    return this.updateEquipment({ ...equipment, assignments });
   }
 
   /**
