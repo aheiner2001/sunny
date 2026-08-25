@@ -231,4 +231,44 @@ describe('inventory sync', () => {
     expect(updated.assignments?.find(a => a.vehicleId === 'van-test-1')?.quantity).toBe(5);
     expect(updated.availableQuantity).toBe(25);
   });
+
+  it('resolveStockIssue update_stock sets assignment and fixes issue', async () => {
+    const created = await dbService.createEquipment({
+      name: 'Towels',
+      kind: 'consumable',
+      totalQuantity: 30,
+      category: 'supplies',
+    });
+    await dbService.transferEquipmentQuantity(created.id, 'van-test-1', 30, null);
+
+    const issues = [{
+      id: 'issue-stock-1',
+      vehicleId: 'van-test-1',
+      vehicleNumber: 'Van #T1',
+      equipmentId: created.id,
+      equipmentName: 'Towels',
+      reportedById: 'u1',
+      reportedByName: 'Tester',
+      reportedAt: new Date().toISOString(),
+      dateString: '2026-08-25',
+      title: 'Low towels',
+      description: 'actual 5 need 30',
+      status: 'open' as const,
+      type: 'stock_low_inventory' as const,
+      reportedQuantity: 5,
+      requiredQuantity: 30,
+      statusLogs: [],
+    }];
+    localStorage.setItem('sunny_issues', JSON.stringify(issues));
+
+    await dbService.resolveStockIssue(
+      'issue-stock-1',
+      'update_stock',
+      { id: 'mgr', name: 'Manager' },
+    );
+    const eq = dbService.getEquipmentItem(created.id)!;
+    expect(eq.assignments?.find(a => a.vehicleId === 'van-test-1')?.quantity).toBe(5);
+    expect(eq.availableQuantity).toBe(25);
+    expect(dbService.getIssue('issue-stock-1')?.status).toBe('fixed');
+  });
 });

@@ -1975,6 +1975,47 @@ class DataStore {
       .sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime());
   }
 
+  public async resolveStockIssue(
+    issueId: string,
+    action: 'update_stock' | 'remove_from_van',
+    changedBy: { id: string; name: string },
+    opts?: { quantity?: number }
+  ): Promise<Issue> {
+    const issue = this.getIssue(issueId);
+    if (!issue) throw new Error('Issue not found');
+    if (!issue.equipmentId) throw new Error('Issue has no linked equipment.');
+    if (!issue.vehicleId) throw new Error('Issue has no linked vehicle.');
+
+    if (action === 'update_stock') {
+      const qty = opts?.quantity ?? issue.reportedQuantity;
+      if (qty === undefined || qty === null || !Number.isInteger(Number(qty)) || Number(qty) < 0) {
+        throw new Error('Provide the actual quantity to set on the vehicle.');
+      }
+      await this.setVehicleAssignmentQuantity(issue.equipmentId, issue.vehicleId, Number(qty));
+      return this.updateIssueStatus(
+        issueId,
+        'fixed',
+        changedBy,
+        `Update Stock: set van quantity to ${qty}`
+      );
+    }
+
+    const equipment = this.getEquipmentItem(issue.equipmentId);
+    const held =
+      equipment?.assignments?.find(a => a.vehicleId === issue.vehicleId)?.quantity ?? 0;
+    const amount = opts?.quantity ?? held;
+    if (!Number.isInteger(amount) || amount <= 0) {
+      throw new Error('Nothing to remove from van.');
+    }
+    await this.returnEquipmentToShop(issue.equipmentId, issue.vehicleId, amount);
+    return this.updateIssueStatus(
+      issueId,
+      'fixed',
+      changedBy,
+      `Remove from Van: returned ${amount} to shop`
+    );
+  }
+
   // Append-only Status Transition
   public updateIssueStatus(
     issueId: string, 

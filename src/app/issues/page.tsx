@@ -4,21 +4,21 @@ import React, { useState, useEffect } from 'react';
 import { 
   AlertTriangle, 
   Search, 
-  Filter, 
-  Wrench, 
-  Truck, 
-  User, 
-  Clock, 
-  Calendar, 
-  ArrowRight,
-  ShieldCheck,
-  CheckCircle2
+  CheckCircle2,
+  PackageCheck,
+  PackageMinus
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
-import { Issue, IssueStatus } from '@/types';
-import { IssueStatusBadge } from '@/components/StatusBadges';
+import { Issue, IssueType } from '@/types';
 import { IssueTimeline } from '@/components/IssueTimeline';
 import { ManagerOnly } from '@/components/ManagerOnly';
+import { useAuth } from '@/context/AuthContext';
+
+const ISSUE_TYPES: Array<{ value: IssueType; label: string }> = [
+  { value: 'stock_low_inventory', label: 'Stock / Low Inventory' },
+  { value: 'equipment_replacement', label: 'Equipment Replacement' },
+  { value: 'needs_repair', label: 'Needs Repair' },
+];
 
 export default function IssuesPage() {
   return (
@@ -29,11 +29,13 @@ export default function IssuesPage() {
 }
 
 function IssuesPageContent() {
+  const { user } = useAuth();
   const [issues, setIssues] = useState<Issue[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [vehicleFilter, setVehicleFilter] = useState<string>('all');
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [pendingAction, setPendingAction] = useState<'update_stock' | 'remove_from_van' | null>(null);
 
   const loadData = () => {
     setIssues(dbService.getIssues());
@@ -55,6 +57,64 @@ function IssuesPageContent() {
       window.setTimeout(() => document.getElementById(`issue-${issueId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);
     }
   }, [issues]);
+
+  const managerIdentity = {
+    id: user?.id || 'manager',
+    name: user?.name || 'Manager',
+  };
+
+  const handleTypeChange = (issue: Issue, type: IssueType) => {
+    try {
+      const updated = dbService.updateIssueType(issue.id, type, managerIdentity);
+      setSelectedIssue(updated);
+      loadData();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to update issue type.');
+    }
+  };
+
+  const handleStockAction = async (
+    issue: Issue,
+    action: 'update_stock' | 'remove_from_van',
+  ) => {
+    if (!issue.equipmentId) {
+      alert('This issue has no linked equipment; update inventory manually.');
+      return;
+    }
+
+    let quantity: number | undefined;
+    if (action === 'update_stock' && issue.reportedQuantity == null) {
+      const response = window.prompt('Enter the actual quantity currently on the van:');
+      if (response === null) return;
+      quantity = Number(response);
+    }
+
+    if (action === 'remove_from_van') {
+      if (!window.confirm('Return this equipment from the van to shop inventory?')) return;
+      const response = window.prompt(
+        'Quantity to remove (leave blank to remove everything assigned to this van):',
+        '',
+      );
+      if (response === null) return;
+      if (response.trim()) quantity = Number(response);
+    }
+
+    try {
+      setPendingAction(action);
+      const updated = await dbService.resolveStockIssue(
+        issue.id,
+        action,
+        managerIdentity,
+        quantity === undefined ? undefined : { quantity },
+      );
+      setSelectedIssue(updated);
+      loadData();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to resolve stock issue.');
+    } finally {
+      setPendingAction(null);
+    }
+  };
 
   const activeIssues = (statusFilter === 'fixed'
     ? issues.filter(iss => iss.status === 'fixed')
@@ -149,9 +209,61 @@ function IssuesPageContent() {
           <div
             key={issue.id}
             id={`issue-${issue.id}`}
-            className={selectedIssue?.id === issue.id ? 'rounded-3xl ring-2 ring-sky-500 ring-offset-2' : ''}
+            onClick={() => setSelectedIssue(issue)}
+            className={`rounded-3xl transition-shadow ${
+              selectedIssue?.id === issue.id ? 'ring-2 ring-sky-500 ring-offset-2' : ''
+            }`}
           >
             <IssueTimeline issue={issue} onStatusUpdated={() => loadData()} />
+            {selectedIssue?.id === issue.id && (
+              <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                  <div className="w-full lg:max-w-xs">
+                    <label
+                      htmlFor={`issue-type-${issue.id}`}
+                      className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500"
+                    >
+                      Issue Type
+                    </label>
+                    <select
+                      id={`issue-type-${issue.id}`}
+                      value={issue.type || 'needs_repair'}
+                      onChange={(event) => handleTypeChange(issue, event.target.value as IssueType)}
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    >
+                      {ISSUE_TYPES.map((type) => (
+                        <option key={type.value} value={type.value}>
+                          {type.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {issue.type === 'stock_low_inventory' && issue.status !== 'fixed' && (
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <button
+                        type="button"
+                        disabled={pendingAction !== null}
+                        onClick={() => handleStockAction(issue, 'update_stock')}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-sky-700 disabled:opacity-50"
+                      >
+                        <PackageCheck className="h-4 w-4" />
+                        {pendingAction === 'update_stock' ? 'Updating...' : 'Update Stock'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pendingAction !== null}
+                        onClick={() => handleStockAction(issue, 'remove_from_van')}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100 disabled:opacity-50"
+                      >
+                        <PackageMinus className="h-4 w-4" />
+                        {pendingAction === 'remove_from_van' ? 'Removing...' : 'Remove from Van'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         ))}
 
