@@ -167,9 +167,7 @@ class DataStore {
       this.resetToDefaults({ syncToCloud: false });
     }
     this.initialized = true;
-    if (process.env.NODE_ENV !== 'test') {
-      this.setupFirestoreListeners();
-    }
+    this.setupFirestoreListeners();
   }
 
   // Set up real-time bidirectional listeners with Cloud Firestore
@@ -1009,21 +1007,34 @@ class DataStore {
     localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(issues));
 
     if (db) {
-      try {
-        await deleteDoc(doc(db, 'vehicles', vehicleId));
-        await Promise.all(
-          modifiedEquipment.map(item =>
-            setDoc(doc(db, 'equipment', item.id), sanitizeForFirestore(item), { merge: true })
-          )
-        );
-        if (mode === 'delete_associated') {
-          await Promise.all(
-            deletedEquipmentIds.map(equipmentId => deleteDoc(doc(db, 'equipment', equipmentId)))
-          );
+      const writes: Array<{ label: string; operation: Promise<unknown> }> = [
+        {
+          label: `delete vehicle ${vehicleId}`,
+          operation: deleteDoc(doc(db, 'vehicles', vehicleId)),
+        },
+        ...modifiedEquipment.map(item => ({
+          label: `update equipment ${item.id}`,
+          operation: setDoc(
+            doc(db, 'equipment', item.id),
+            sanitizeForFirestore(item),
+            { merge: true },
+          ),
+        })),
+        ...(
+          mode === 'delete_associated'
+            ? deletedEquipmentIds.map(equipmentId => ({
+                label: `delete equipment ${equipmentId}`,
+                operation: deleteDoc(doc(db, 'equipment', equipmentId)),
+              }))
+            : []
+        ),
+      ];
+      const results = await Promise.allSettled(writes.map(write => write.operation));
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.warn(`Firestore ${writes[index].label} failed:`, result.reason);
         }
-      } catch (e) {
-        console.warn('Firestore delete vehicle fallback to local cache:', e);
-      }
+      });
     }
 
     window.dispatchEvent(new Event('sunny_db_update'));

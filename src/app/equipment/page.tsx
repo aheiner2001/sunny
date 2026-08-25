@@ -106,6 +106,16 @@ function EquipmentPageContent() {
     let assignments = existing;
     if (modal === 'edit') {
       if (!vehicle) {
+        if (
+          existing.length > 1 &&
+          !window.confirm(
+            `Move all assignments to In Shop?\n\nAffected vehicles: ${existing
+              .map(assignment => assignment.vehicleNumber)
+              .join(', ')}`,
+          )
+        ) {
+          return;
+        }
         assignments = [];
       } else if (!existing.some(a => a.vehicleId === vehicle.id)) {
         assignments = [...existing, { vehicleId: vehicle.id, vehicleNumber: vehicle.vehicleNumber, quantity: 1 }];

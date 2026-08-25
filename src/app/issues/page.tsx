@@ -84,10 +84,19 @@ function IssuesPageContent() {
     }
 
     let quantity: number | undefined;
-    if (action === 'update_stock' && issue.reportedQuantity == null) {
-      const response = window.prompt('Enter the actual quantity currently on the van:');
+    if (action === 'update_stock') {
+      const response = window.prompt(
+        'Enter the actual quantity currently on the van:',
+        issue.reportedQuantity == null ? '' : String(issue.reportedQuantity),
+      );
       if (response === null) return;
-      quantity = Number(response);
+      if (!response.trim()) return;
+      const qty = Number(response);
+      if (!Number.isInteger(qty) || qty < 0) {
+        alert('Quantity must be a whole number greater than or equal to 0.');
+        return;
+      }
+      quantity = qty;
     }
 
     if (action === 'remove_from_van') {
@@ -137,6 +146,11 @@ function IssuesPageContent() {
   });
 
   const vehicles = dbService.getVehicles();
+  const getHeldQuantity = (issue: Issue) =>
+    dbService
+      .getEquipmentItem(issue.equipmentId || '')
+      ?.assignments?.find(assignment => assignment.vehicleId === issue.vehicleId)
+      ?.quantity ?? issue.reportedQuantity ?? 0;
 
   return (
     <div className="space-y-6">
@@ -241,7 +255,20 @@ function IssuesPageContent() {
                   </div>
 
                   {issue.type === 'stock_low_inventory' && issue.status !== 'fixed' && (
-                    <div className="flex flex-col gap-2 sm:flex-row">
+                    <div className="flex flex-col gap-2">
+                      {issue.requiredQuantity != null && (
+                        <div
+                          className={`rounded-xl border px-3 py-2 text-xs font-bold ${
+                            getHeldQuantity(issue) < issue.requiredQuantity
+                              ? 'border-rose-200 bg-rose-50 text-rose-700'
+                              : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                          }`}
+                        >
+                          Held {getHeldQuantity(issue)} / Required {issue.requiredQuantity}
+                          {getHeldQuantity(issue) < issue.requiredQuantity && ' — Low stock'}
+                        </div>
+                      )}
+                      <div className="flex flex-col gap-2 sm:flex-row">
                       <button
                         type="button"
                         disabled={pendingAction !== null}
@@ -260,6 +287,7 @@ function IssuesPageContent() {
                         <PackageMinus className="h-4 w-4" />
                         {pendingAction === 'remove_from_van' ? 'Removing...' : 'Remove from Van'}
                       </button>
+                      </div>
                     </div>
                   )}
                 </div>

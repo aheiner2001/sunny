@@ -23,6 +23,7 @@ import {
 import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { Vehicle, ChecklistQuestion, ChecklistCategoryConfig, InspectionResponse, FleetTask } from '@/types';
+import { canSubmitInspection } from './inspectionValidation';
 
 export default function InspectClient() {
   const searchParams = useSearchParams();
@@ -204,12 +205,7 @@ export default function InspectClient() {
   };
 
   const flaggedCount = Object.keys(flagIssues).length;
-  const isAnswered = (q: ChecklistQuestion) => {
-    const resp = responses[q.id];
-    return Boolean(resp && resp.value !== undefined && resp.value !== null && resp.value !== '');
-  };
-  const requiredQuestions = questions.filter(q => q.required);
-  const allRequiredAnswered = requiredQuestions.every(isAnswered);
+  const allRequiredAnswered = canSubmitInspection(questions, responses);
   const flaggedMissingNotes = questions.some(q => {
     const resp = responses[q.id];
     return resp?.isFlagged && !(resp.notes || '').trim();

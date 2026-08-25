@@ -219,6 +219,33 @@ describe('inventory sync', () => {
     );
   });
 
+  it('deleteVehicle continues equipment writes when the vehicle delete fails', async () => {
+    const shared = await dbService.createEquipment({
+      name: 'Shared Item',
+      kind: 'reusable',
+      totalQuantity: 2,
+      category: 'equipment',
+    });
+    await dbService.transferEquipmentQuantity(shared.id, 'van-test-1', 1, null);
+    await dbService.transferEquipmentQuantity(shared.id, 'van-test-2', 1, null);
+
+    firestoreMocks.setDoc.mockClear();
+    firestoreMocks.deleteDoc.mockClear();
+    firestoreMocks.deleteDoc.mockImplementation(ref =>
+      ref.collectionName === 'vehicles'
+        ? Promise.reject(new Error('vehicle delete failed'))
+        : Promise.resolve(undefined),
+    );
+
+    await dbService.deleteVehicle('van-test-1', { equipmentMode: 'delete_associated' });
+
+    expect(firestoreMocks.setDoc).toHaveBeenCalledWith(
+      expect.objectContaining({ collectionName: 'equipment', id: shared.id }),
+      expect.anything(),
+      { merge: true },
+    );
+  });
+
   it('setVehicleAssignmentQuantity moves surplus to shop', async () => {
     const created = await dbService.createEquipment({
       name: 'Towels',
