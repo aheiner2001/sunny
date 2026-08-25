@@ -1,6 +1,28 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { dbService } from '@/lib/db';
 import type { Equipment, Vehicle } from '@/types';
+
+const firestoreMocks = vi.hoisted(() => ({
+  setDoc: vi.fn().mockResolvedValue(undefined),
+  deleteDoc: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@/lib/firebase', () => ({
+  db: {},
+  ensureAuth: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock('firebase/firestore', () => ({
+  collection: vi.fn(),
+  doc: vi.fn((_db, collectionName, id) => ({ collectionName, id })),
+  setDoc: firestoreMocks.setDoc,
+  deleteDoc: firestoreMocks.deleteDoc,
+  getDoc: vi.fn(),
+  getDocs: vi.fn(),
+  updateDoc: vi.fn(),
+  onSnapshot: vi.fn(),
+  writeBatch: vi.fn(),
+}));
 
 async function seedMinimal() {
   localStorage.clear();
@@ -32,7 +54,14 @@ async function seedMinimal() {
 
 describe('inventory sync', () => {
   beforeEach(async () => {
+    vi.clearAllMocks();
+    let timestamp = 1_800_000_000_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => timestamp++);
     await seedMinimal();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('tracks reusable totalOwned=5 across assign and return', async () => {
@@ -131,12 +160,63 @@ describe('inventory sync', () => {
     await dbService.transferEquipmentQuantity(shared.id, 'van-test-1', 1, null);
     await dbService.transferEquipmentQuantity(shared.id, 'van-test-2', 1, null);
 
+    firestoreMocks.setDoc.mockClear();
+    firestoreMocks.deleteDoc.mockClear();
     await dbService.deleteVehicle('van-test-1', { equipmentMode: 'delete_associated' });
     expect(dbService.getEquipmentItem(sole.id)).toBeUndefined();
     const still = dbService.getEquipmentItem(shared.id)!;
     expect(still.assignments?.some(a => a.vehicleId === 'van-test-1')).toBe(false);
     expect(still.assignments?.find(a => a.vehicleId === 'van-test-2')?.quantity).toBe(1);
     expect(still.availableQuantity).toBe(1);
+    expect(firestoreMocks.setDoc).toHaveBeenCalledWith(
+      expect.objectContaining({ collectionName: 'equipment', id: shared.id }),
+      expect.objectContaining({
+        assignments: expect.arrayContaining([
+          expect.objectContaining({ vehicleId: 'van-test-2', quantity: 1 }),
+        ]),
+        availableQuantity: 1,
+      }),
+      { merge: true },
+    );
+    expect(firestoreMocks.deleteDoc).toHaveBeenCalledWith(
+      expect.objectContaining({ collectionName: 'equipment', id: sole.id }),
+    );
+  });
+
+  it('deleteVehicle persists only modified surviving equipment to Firestore', async () => {
+    const assigned = await dbService.createEquipment({
+      name: 'Assigned Item',
+      kind: 'reusable',
+      totalQuantity: 2,
+      category: 'equipment',
+    });
+    await dbService.transferEquipmentQuantity(assigned.id, 'van-test-1', 1, null);
+    const untouched = await dbService.createEquipment({
+      name: 'Untouched Item',
+      kind: 'reusable',
+      totalQuantity: 1,
+      category: 'equipment',
+    });
+    firestoreMocks.setDoc.mockClear();
+
+    await dbService.deleteVehicle('van-test-1');
+
+    expect(firestoreMocks.setDoc).toHaveBeenCalledTimes(1);
+    expect(firestoreMocks.setDoc).toHaveBeenCalledWith(
+      expect.objectContaining({ collectionName: 'equipment', id: assigned.id }),
+      expect.objectContaining({
+        assignments: [],
+        vehicleId: null,
+        vehicleNumber: 'Unassigned',
+        availableQuantity: 2,
+      }),
+      { merge: true },
+    );
+    expect(firestoreMocks.setDoc).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: untouched.id }),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it('setVehicleAssignmentQuantity moves surplus to shop', async () => {

@@ -50,3 +50,18 @@ Result: exit 0; 7 passed, 0 failed.
 ## Concerns
 
 Vitest emits a non-failing Vite configuration warning about ESM syntax being loaded as CommonJS. npm also emits a non-failing warning for the unknown `devdir` environment configuration.
+
+## Important Review Fix: Vehicle Deletion Cloud Sync
+
+- Updated `deleteVehicle` to track surviving equipment whose assignments changed and persist each modified document to Firestore with `setDoc(..., { merge: true })`.
+- Kept `delete_associated` catalog removals synchronized with Firestore via `deleteDoc`.
+- Avoided rewriting untouched surviving equipment documents.
+- Added Firestore regression coverage for both deletion modes and confirmed the no-options default remains `return_to_shop`.
+
+Test command:
+
+`npm test -- src/lib/__tests__/inventory.test.ts`
+
+Result: exit 0; 1 test file passed, 8 tests passed, 0 failed.
+
+Non-failing output warnings remained unchanged: npm reports the unknown `devdir` configuration, and Vitest reports the Vite native config-loader compatibility warning.

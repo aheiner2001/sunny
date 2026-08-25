@@ -954,17 +954,21 @@ class DataStore {
 
     let equipment = this.getEquipment();
     const deletedEquipmentIds: string[] = [];
+    const modifiedEquipment: Equipment[] = [];
     if (mode === 'return_to_shop') {
       equipment = equipment.map(e => {
+        if (!(e.assignments || []).some(a => a.vehicleId === vehicleId)) return e;
         const assignments = (e.assignments || []).filter(a => a.vehicleId !== vehicleId);
         const total = e.totalQuantity ?? 0;
-        return {
+        const updated = {
           ...e,
           assignments,
           vehicleId: assignments[0]?.vehicleId || null,
           vehicleNumber: assignments[0]?.vehicleNumber || 'Unassigned',
           availableQuantity: Math.max(0, total - assignments.reduce((sum, a) => sum + a.quantity, 0)),
         };
+        modifiedEquipment.push(updated);
+        return updated;
       });
     } else {
       equipment = equipment.flatMap(e => {
@@ -975,15 +979,18 @@ class DataStore {
           deletedEquipmentIds.push(e.id);
           return [];
         }
+        if (!(e.assignments || []).some(a => a.vehicleId === vehicleId)) return [e];
         const assignments = (e.assignments || []).filter(a => a.vehicleId !== vehicleId);
         const total = e.totalQuantity ?? 0;
-        return [{
+        const updated = {
           ...e,
           assignments,
           vehicleId: assignments[0]?.vehicleId || null,
           vehicleNumber: assignments[0]?.vehicleNumber || 'Unassigned',
           availableQuantity: Math.max(0, total - assignments.reduce((sum, a) => sum + a.quantity, 0)),
-        }];
+        };
+        modifiedEquipment.push(updated);
+        return [updated];
       });
     }
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(equipment));
@@ -996,6 +1003,11 @@ class DataStore {
     if (db) {
       try {
         await deleteDoc(doc(db, 'vehicles', vehicleId));
+        await Promise.all(
+          modifiedEquipment.map(item =>
+            setDoc(doc(db, 'equipment', item.id), sanitizeForFirestore(item), { merge: true })
+          )
+        );
         if (mode === 'delete_associated') {
           await Promise.all(
             deletedEquipmentIds.map(equipmentId => deleteDoc(doc(db, 'equipment', equipmentId)))
