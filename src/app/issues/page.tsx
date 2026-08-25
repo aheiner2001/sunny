@@ -13,6 +13,7 @@ import { Issue, IssueType } from '@/types';
 import { IssueTimeline } from '@/components/IssueTimeline';
 import { ManagerOnly } from '@/components/ManagerOnly';
 import { useAuth } from '@/context/AuthContext';
+import { RecentInspectors } from '@/components/RecentInspectors';
 
 const ISSUE_TYPES: Array<{ value: IssueType; label: string }> = [
   { value: 'stock_low_inventory', label: 'Stock / Low Inventory' },
@@ -261,6 +262,9 @@ function IssuesPageContent() {
                       </button>
                     </div>
                   )}
+                </div>
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <RecentInspectors vehicleId={selectedIssue.vehicleId} />
                 </div>
               </div>
             )}

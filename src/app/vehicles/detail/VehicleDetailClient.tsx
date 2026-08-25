@@ -20,6 +20,7 @@ import { Vehicle, Equipment, Inspection, Issue } from '@/types';
 import { VehicleStatusBadge, InspectionStatusBadge, EquipmentStatusBadge, IssueStatusBadge } from '@/components/StatusBadges';
 import { QRCodeDisplay } from '@/components/QRCodeDisplay';
 import { IssueTimeline } from '@/components/IssueTimeline';
+import { RecentInspectors } from '@/components/RecentInspectors';
 
 export default function VehicleDetailClient() {
   const searchParams = useSearchParams();
@@ -325,6 +326,8 @@ export default function VehicleDetailClient() {
               </button>
             )}
           </div>
+
+          <RecentInspectors vehicleId={vehicle.id} />
 
           <div className="relative pl-6 space-y-6 before:content-[''] before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
             {visibleTimelineItems.map((item) => {

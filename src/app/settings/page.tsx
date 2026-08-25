@@ -24,7 +24,8 @@ import {
   Check,
   AlertTriangle,
   Lock,
-  KeyRound
+  KeyRound,
+  History
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { ChecklistQuestion, ChecklistCategoryConfig, QuestionType, ChecklistConfig, EquipmentOption, FleetTask } from '@/types';
@@ -59,6 +60,7 @@ function SettingsPageContent() {
   const [newEquipmentOption, setNewEquipmentOption] = useState('');
   const [tasks, setTasks] = useState<FleetTask[]>([]);
   const [taskForm, setTaskForm] = useState({ title: '', description: '', vehicleId: '', dueAt: '', scheduleLabel: '' });
+  const [recentInspectorsDepth, setRecentInspectorsDepth] = useState<1 | 3>(3);
 
   // Category Modal State
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -102,6 +104,12 @@ function SettingsPageContent() {
     setQuestions(config.questions || []);
     setEquipmentOptions(dbService.getEquipmentOptions());
     setTasks(dbService.getTasks());
+    setRecentInspectorsDepth(dbService.getAppSettings().recentInspectorsDepth);
+  };
+
+  const updateRecentInspectorsDepth = async (value: 1 | 3) => {
+    setRecentInspectorsDepth(value);
+    await dbService.saveAppSettings({ recentInspectorsDepth: value });
   };
 
   const saveEquipmentOption = async () => {
@@ -478,6 +486,40 @@ function SettingsPageContent() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <section className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+          <div>
+            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <History className="w-5 h-5 text-sky-600" />
+              Recent Inspector History
+            </h2>
+            <p className="text-xs text-slate-400">
+              How many recent inspectors to show on issues and vehicle detail.
+            </p>
+          </div>
+          <fieldset className="flex gap-3">
+            <legend className="sr-only">Recent inspectors to show</legend>
+            {([1, 3] as const).map(value => (
+              <label
+                key={value}
+                className={`flex flex-1 cursor-pointer items-center gap-2 rounded-xl border px-4 py-3 text-xs font-bold ${
+                  recentInspectorsDepth === value
+                    ? 'border-sky-500 bg-sky-50 text-sky-800'
+                    : 'border-slate-200 bg-slate-50 text-slate-600'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="recentInspectorsDepth"
+                  value={value}
+                  checked={recentInspectorsDepth === value}
+                  onChange={() => updateRecentInspectorsDepth(value)}
+                  className="text-sky-600 focus:ring-sky-500"
+                />
+                Last {value}
+              </label>
+            ))}
+          </fieldset>
+        </section>
         <section className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
           <div><h2 className="text-base font-bold text-slate-900 flex items-center gap-2"><Wrench className="w-5 h-5 text-sky-600" />Default Equipment Options</h2><p className="text-xs text-slate-400">Managers control the quick-select list used when creating vehicles. Custom one-off entries remain supported.</p></div>
           <div className="flex gap-2"><input value={newEquipmentOption} onChange={e => setNewEquipmentOption(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), saveEquipmentOption())} placeholder="Add equipment option" className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-200" /><button onClick={saveEquipmentOption} className="px-3 py-2 rounded-xl bg-sky-600 text-white text-xs font-bold">Add</button></div>

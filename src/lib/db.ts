@@ -20,7 +20,9 @@ import {
   EquipmentOption,
   FleetTask,
   ReportSettings,
-  AuthSession
+  AuthSession,
+  AppSettings,
+  InspectionStatus
 } from '@/types';
 import { classifyIssueType } from './issueClassification';
 import { 
@@ -60,6 +62,7 @@ const STORAGE_KEYS = {
   EQUIPMENT_OPTIONS: 'sunny_equipment_options',
   TASKS: 'sunny_tasks',
   REPORT_SETTINGS: 'sunny_report_settings',
+  APP_SETTINGS: 'sunny_app_settings',
   SESSION: 'sunny_session',
 };
 
@@ -398,6 +401,9 @@ class DataStore {
     localStorage.setItem(STORAGE_KEYS.REPORT_SETTINGS, JSON.stringify({
       enabledMetrics: ['pass_rate', 'issues', 'fleet_size'],
       updatedAt: nowIso
+    }));
+    localStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify({
+      recentInspectorsDepth: 3
     }));
     localStorage.setItem(STORAGE_KEYS.SEEDED, 'true');
 
@@ -1625,6 +1631,29 @@ class DataStore {
     window.dispatchEvent(new Event('sunny_db_update'));
   }
 
+  public getAppSettings(): AppSettings {
+    if (!this.isClient()) return { recentInspectorsDepth: 3 };
+    this.init();
+    const raw = localStorage.getItem(STORAGE_KEYS.APP_SETTINGS);
+    if (!raw) return { recentInspectorsDepth: 3 };
+    try {
+      const parsed = JSON.parse(raw) as AppSettings;
+      return {
+        recentInspectorsDepth: parsed.recentInspectorsDepth === 1 ? 1 : 3
+      };
+    } catch {
+      return { recentInspectorsDepth: 3 };
+    }
+  }
+
+  public async saveAppSettings(settings: AppSettings): Promise<void> {
+    if (!this.isClient()) return;
+    localStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify({
+      recentInspectorsDepth: settings.recentInspectorsDepth === 1 ? 1 : 3
+    }));
+    window.dispatchEvent(new Event('sunny_db_update'));
+  }
+
   // ==========================================
   // CHECKLIST & CATEGORIES CONFIGURATION
   // ==========================================
@@ -1735,6 +1764,28 @@ class DataStore {
     return this.getInspections()
       .filter(i => i.vehicleId === vehicleId)
       .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+  }
+
+  public getRecentInspectors(
+    vehicleId: string,
+    depth?: 1 | 3
+  ): Array<{
+    userName: string;
+    submittedAt: string;
+    status: InspectionStatus;
+    inspectionId: string;
+  }> {
+    const limit = depth ?? this.getAppSettings().recentInspectorsDepth;
+    return this.getInspections()
+      .filter(inspection => inspection.vehicleId === vehicleId && inspection.status !== 'in_progress')
+      .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
+      .slice(0, limit)
+      .map(inspection => ({
+        userName: inspection.userName,
+        submittedAt: inspection.submittedAt,
+        status: inspection.status,
+        inspectionId: inspection.id
+      }));
   }
 
   public getInspectionsForDate(dateStr: string): Inspection[] {
