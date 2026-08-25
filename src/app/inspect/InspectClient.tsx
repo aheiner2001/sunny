@@ -35,7 +35,6 @@ export default function InspectClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [categories, setCategories] = useState<ChecklistCategoryConfig[]>([]);
   const [questions, setQuestions] = useState<ChecklistQuestion[]>([]);
-  const [activeTab, setActiveTab] = useState<string>('equipment');
   const [responses, setResponses] = useState<Record<string, { value: string; isFlagged: boolean; notes?: string }>>({});
   const [flagIssues, setFlagIssues] = useState<Record<string, { title: string; description: string }>>({});
   const [generalNotes, setGeneralNotes] = useState('');
@@ -75,25 +74,6 @@ export default function InspectClient() {
       setTasks(vehicleTasks);
       const openTask = vehicleTasks.find(task => task.status === 'open');
       setSelectedTaskId(prev => prev || openTask?.id || '');
-
-      if (cats.length > 0 && !cats.some(c => c.id === activeTab)) {
-        setActiveTab(cats[0].id);
-      }
-
-      // Initialize default responses
-      setResponses(prev => {
-        const initial: Record<string, { value: string; isFlagged: boolean; notes?: string }> = { ...prev };
-        qList.forEach(q => {
-          if (!initial[q.id]) {
-            if (q.type === 'pass_fail') initial[q.id] = { value: 'pass', isFlagged: false };
-            else if (q.type === 'yes_no') initial[q.id] = { value: 'yes', isFlagged: false };
-            else if (q.type === 'equipment_status') initial[q.id] = { value: 'working', isFlagged: false };
-            else if (q.type === 'text') initial[q.id] = { value: '', isFlagged: false, notes: '' };
-            else initial[q.id] = { value: 'pass', isFlagged: false };
-          }
-        });
-        return initial;
-      });
     } catch (error) {
       console.error('Error loading inspection data:', error);
     } finally {
@@ -178,7 +158,11 @@ export default function InspectClient() {
   const handleSetResponse = (q: ChecklistQuestion, value: string, isFlagged: boolean, notes?: string) => {
     setResponses(prev => ({
       ...prev,
-      [q.id]: { value, isFlagged, notes: notes !== undefined ? notes : prev[q.id]?.notes || '' }
+      [q.id]: {
+        value,
+        isFlagged,
+        notes: isFlagged ? (notes !== undefined ? notes : prev[q.id]?.notes || '') : ''
+      }
     }));
 
     if (isFlagged && !flagIssues[q.id]) {
@@ -206,12 +190,43 @@ export default function InspectClient() {
         [field]: val
       }
     }));
+    if (field === 'description') {
+      setResponses(prev => ({
+        ...prev,
+        [questionId]: {
+          ...prev[questionId],
+          value: prev[questionId]?.value || '',
+          isFlagged: Boolean(prev[questionId]?.isFlagged),
+          notes: val
+        }
+      }));
+    }
   };
 
   const flaggedCount = Object.keys(flagIssues).length;
+  const isAnswered = (q: ChecklistQuestion) => {
+    const resp = responses[q.id];
+    return Boolean(resp && resp.value !== undefined && resp.value !== null && resp.value !== '');
+  };
+  const requiredQuestions = questions.filter(q => q.required);
+  const allRequiredAnswered = requiredQuestions.every(isAnswered);
+  const flaggedMissingNotes = questions.some(q => {
+    const resp = responses[q.id];
+    return resp?.isFlagged && !(resp.notes || '').trim();
+  });
+  const canSubmit = allRequiredAnswered && !flaggedMissingNotes && !isSubmitting;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!allRequiredAnswered) {
+      return;
+    }
+
+    if (flaggedMissingNotes) {
+      alert('Please provide a problem description for all flagged items before submitting.');
+      return;
+    }
 
     // Check if any flagged item lacks description
     for (const [qId, issue] of Object.entries(flagIssues)) {
@@ -230,7 +245,7 @@ export default function InspectClient() {
           questionId: q.id,
           questionText: q.text,
           category: q.category,
-          value: resp?.value || (q.type === 'text' ? '' : 'pass'),
+          value: resp?.value || '',
           isFlagged: Boolean(resp?.isFlagged),
           notes: resp?.notes || '',
           equipmentId: q.equipmentId || null as any,
@@ -326,10 +341,6 @@ export default function InspectClient() {
     );
   }
 
-  // Active Category Questions
-  const categoryQuestions = questions.filter(q => q.category === activeTab);
-  const activeCategoryObj = categories.find(c => c.id === activeTab);
-
   return (
     <div className="max-w-2xl mx-auto space-y-5 pb-12">
       {/* Top Navigation */}
@@ -407,51 +418,36 @@ export default function InspectClient() {
         </div>
       </div>
 
-      {/* Category Tabs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {categories.map((cat, idx) => {
-          const isActive = activeTab === cat.id;
-          const catQuestions = questions.filter(q => q.category === cat.id);
-          const hasFlags = catQuestions.some(q => responses[q.id]?.isFlagged);
-
-          return (
-            <button
-              key={cat.id}
-              onClick={() => setActiveTab(cat.id)}
-              className={`p-3 rounded-2xl text-left border transition-all relative ${
-                isActive
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-md'
-                  : 'bg-white text-slate-700 border-slate-200/80 hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className={`text-[10px] font-extrabold uppercase tracking-wider ${isActive ? 'text-sky-400' : 'text-slate-400'}`}>
-                  Step {idx + 1}
-                </span>
-                {hasFlags && (
-                  <span className="w-2 h-2 rounded-full bg-amber-400" />
-                )}
-              </div>
-              <div className="text-xs font-bold truncate">{cat.title}</div>
-            </button>
-          );
-        })}
-      </div>
-
       {/* Checklist Section Body */}
       <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-6">
         <div className="border-b border-slate-100 pb-3">
           <h2 className="text-base font-bold text-slate-900">
-            {activeCategoryObj?.title || 'Inspection'} Checklist
+            Inspection Checklist
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
-            {activeCategoryObj?.subtitle || 'Complete all items before vehicle checkout.'}
+            Complete all required items before vehicle checkout.
           </p>
         </div>
 
-        {/* Questions list */}
-        <div className="space-y-4">
-          {categoryQuestions.map((q) => {
+        <div className="space-y-8">
+          {categories.map(cat => {
+            const categoryQuestions = questions
+              .filter(q => q.category === cat.id)
+              .sort((a, b) => a.order - b.order);
+
+            return (
+              <section key={cat.id} className="space-y-3">
+                <div>
+                  <h2 className="text-sm font-extrabold text-slate-900 uppercase tracking-wide">
+                    {cat.title}
+                  </h2>
+                  {cat.subtitle && (
+                    <p className="text-xs text-slate-500 mt-0.5">{cat.subtitle}</p>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  {categoryQuestions.map((q) => {
             const resp = responses[q.id];
             const isFlagged = Boolean(resp?.isFlagged);
             const currentIssue = flagIssues[q.id];
@@ -626,44 +622,17 @@ export default function InspectClient() {
                 )}
               </div>
             );
+                  })}
+
+                  {categoryQuestions.length === 0 && (
+                    <div className="text-center py-6 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-400">
+                      No questions configured in this category yet.
+                    </div>
+                  )}
+                </div>
+              </section>
+            );
           })}
-
-          {categoryQuestions.length === 0 && (
-            <div className="text-center py-6 bg-slate-50 rounded-2xl border border-slate-100 text-xs text-slate-400">
-              No questions configured in this category yet.
-            </div>
-          )}
-        </div>
-
-        {/* Tab Navigation Footer */}
-        <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => {
-              const curIdx = categories.findIndex(c => c.id === activeTab);
-              if (curIdx > 0) setActiveTab(categories[curIdx - 1].id);
-            }}
-            disabled={categories.length === 0 || activeTab === categories[0]?.id}
-            className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 border border-slate-200 hover:bg-slate-50 disabled:opacity-30"
-          >
-            Previous Section
-          </button>
-
-          {categories.length > 0 && activeTab !== categories[categories.length - 1]?.id ? (
-            <button
-              type="button"
-              onClick={() => {
-                const curIdx = categories.findIndex(c => c.id === activeTab);
-                if (curIdx < categories.length - 1) setActiveTab(categories[curIdx + 1].id);
-              }}
-              className="px-5 py-2.5 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 shadow-sm flex items-center gap-1.5"
-            >
-              <span>Next Section</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          ) : (
-            <span className="text-xs font-bold text-sky-600">Final Step: Review & Submit below</span>
-          )}
         </div>
       </div>
 
@@ -694,12 +663,22 @@ export default function InspectClient() {
 
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={!canSubmit}
           className="w-full py-4 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white font-extrabold text-sm shadow-lg shadow-sky-600/30 flex items-center justify-center gap-2 transition-all transform active:scale-[0.99] disabled:opacity-50"
         >
           <Send className="w-4 h-4" />
           <span>{isSubmitting ? 'Submitting to Fleet Log...' : 'Submit Vehicle Inspection'}</span>
         </button>
+        {!isSubmitting && !allRequiredAnswered && (
+          <p className="text-center text-xs text-slate-500">
+            Answer every required question before submitting.
+          </p>
+        )}
+        {!isSubmitting && allRequiredAnswered && flaggedMissingNotes && (
+          <p className="text-center text-xs text-amber-700">
+            Add a problem description for every flagged item before submitting.
+          </p>
+        )}
       </form>
     </div>
   );
