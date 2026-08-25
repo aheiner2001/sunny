@@ -129,16 +129,26 @@ export default function EquipmentScanClient() {
   };
 
   const confirm = async () => {
-    if (!equipment || !targetVehicleId) return setError('Choose a receiving vehicle.');
+    if (!equipment || !targetVehicleId) return setError('Choose a receiving location.');
+    const returningToShop = targetVehicleId === '__shop__';
+    if (returningToShop && !sourceVehicleId) return setError('Choose the vehicle returning this equipment.');
     const amount = Number(quantity);
     if (!Number.isInteger(amount) || amount <= 0 || amount > sourceAvailable) {
       return setError(`Enter a whole number from 1 to ${sourceAvailable}.`);
     }
     if (isReusable && sourceVehicleId === targetVehicleId) return setError('Choose a different target vehicle.');
     try {
-      await dbService.transferEquipmentQuantity(equipment.id, targetVehicleId, amount, sourceVehicleId || null);
+      if (returningToShop) {
+        await dbService.returnEquipmentToShop(equipment.id, sourceVehicleId, amount);
+      } else {
+        await dbService.transferEquipmentQuantity(equipment.id, targetVehicleId, amount, sourceVehicleId || null);
+      }
       setError('');
-      alert(`${equipment.name} transferred to ${vehicles.find(v => v.id === targetVehicleId)?.vehicleNumber}.`);
+      alert(
+        returningToShop
+          ? `${equipment.name} returned to In Shop / Unassigned.`
+          : `${equipment.name} transferred to ${vehicles.find(v => v.id === targetVehicleId)?.vehicleNumber}.`
+      );
       router.push('/equipment');
     } catch (err: any) {
       setError(err.message || 'Could not complete transfer.');
@@ -170,7 +180,7 @@ export default function EquipmentScanClient() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="text-xs font-bold text-slate-700">Take quantity<input type="number" min="1" step="1" max={sourceAvailable} value={quantity} onChange={e => setQuantity(e.target.value)} className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-200" /></label>
               {assignments.length > 0 && <label className="text-xs font-bold text-slate-700">Take from<select value={sourceVehicleId} onChange={e => setSourceVehicleId(e.target.value)} className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-200"><option value="">Shared / unassigned stock ({available})</option>{assignments.map(a => <option key={a.vehicleId} value={a.vehicleId}>{a.vehicleNumber} ({a.quantity})</option>)}</select></label>}
-              <label className="text-xs font-bold text-slate-700">Receiving vehicle<select value={targetVehicleId} onChange={e => setTargetVehicleId(e.target.value)} className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-200"><option value="">Choose vehicle...</option>{vehicles.map(v => <option key={v.id} value={v.id}>{v.vehicleNumber}</option>)}</select></label>
+              <label className="text-xs font-bold text-slate-700">Receiving location<select value={targetVehicleId} onChange={e => setTargetVehicleId(e.target.value)} className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-200"><option value="">Choose location...</option><option value="__shop__">In Shop / Unassigned</option>{vehicles.map(v => <option key={v.id} value={v.id}>{v.vehicleNumber}</option>)}</select></label>
             </div>
             {/* Consumables only: record stock that has been used up. */}
             {!isReusable && (

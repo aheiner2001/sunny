@@ -128,6 +128,41 @@ export default function VehicleDetailClient() {
     return item.assignments?.find(assignment => assignment.vehicleId === vehicle.id)?.quantity || (item.vehicleId === vehicle.id ? 1 : 0);
   };
 
+  const returnToShop = async (item: Equipment) => {
+    const heldQuantity = getVehicleAllocation(item);
+    const entered = prompt(`Return how many ${item.name} units to the shop?`, String(heldQuantity));
+    if (entered === null) return;
+    const amount = Number(entered);
+    if (!Number.isInteger(amount) || amount <= 0 || amount > heldQuantity) {
+      alert(`Enter a whole number from 1 to ${heldQuantity}.`);
+      return;
+    }
+    try {
+      await dbService.returnEquipmentToShop(item.id, vehicle.id, amount);
+    } catch (error: any) {
+      alert(error.message || 'Could not return equipment to the shop.');
+    }
+  };
+
+  const setRequiredQuantity = async (item: Equipment) => {
+    const assignment = item.assignments?.find(candidate => candidate.vehicleId === vehicle.id);
+    const entered = prompt(
+      `Set the required (par) quantity for ${item.name} on ${vehicle.vehicleNumber}.`,
+      String(assignment?.requiredQuantity ?? getVehicleAllocation(item))
+    );
+    if (entered === null) return;
+    const requiredQuantity = Number(entered);
+    if (!Number.isInteger(requiredQuantity) || requiredQuantity < 0) {
+      alert('Enter a non-negative whole number.');
+      return;
+    }
+    try {
+      await dbService.setAssignmentRequiredQuantity(item.id, vehicle.id, requiredQuantity);
+    } catch (error: any) {
+      alert(error.message || 'Could not update the required quantity.');
+    }
+  };
+
   const openAssignModal = () => {
     setAssignMode('existing');
     setSelectedInventoryId('');
@@ -392,29 +427,53 @@ export default function VehicleDetailClient() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {equipment.map((eq) => (
-              <div
-                key={eq.id}
-                className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 flex items-start justify-between gap-3"
-              >
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-700 font-bold">
-                    <Wrench className="w-4 h-4" />
+            {equipment.map((eq) => {
+              const assignment = eq.assignments?.find(candidate => candidate.vehicleId === vehicle.id);
+              return (
+                <div
+                  key={eq.id}
+                  className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-700 font-bold">
+                        <Wrench className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-sm sm:text-xs font-bold text-slate-900 break-words">{eq.name}</h3>
+                        <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">{eq.category}</p>
+                        <p className="text-xs sm:text-[11px] text-slate-600 mt-0.5 break-words">
+                          {eq.assetTag ? `Tag #${eq.assetTag}` : 'No serial / tag'}
+                        </p>
+                        <p className="text-xs sm:text-[11px] text-slate-600 break-words">
+                          {eq.status === 'working' ? 'Assigned to' : 'In use by'} {vehicle.vehicleNumber} ({getVehicleAllocation(eq)})
+                        </p>
+                        <p className="text-xs sm:text-[11px] text-slate-500">
+                          Required (par): {assignment?.requiredQuantity ?? 'Not set'}
+                        </p>
+                      </div>
+                    </div>
+                    <EquipmentStatusBadge status={eq.status} />
                   </div>
-                  <div className="min-w-0">
-                    <h3 className="text-sm sm:text-xs font-bold text-slate-900 break-words">{eq.name}</h3>
-                    <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">{eq.category}</p>
-                    <p className="text-xs sm:text-[11px] text-slate-600 mt-0.5 break-words">
-                      {eq.assetTag ? `Tag #${eq.assetTag}` : 'No serial / tag'}
-                    </p>
-                    <p className="text-xs sm:text-[11px] text-slate-600 break-words">
-                      {eq.status === 'working' ? 'Assigned to' : 'In use by'} {vehicle.vehicleNumber} ({getVehicleAllocation(eq)})
-                    </p>
+                  <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => setRequiredQuantity(eq)}
+                      className="px-3 min-h-11 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100"
+                    >
+                      Set required (par)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => returnToShop(eq)}
+                      className="px-3 min-h-11 rounded-xl bg-sky-600 text-white text-xs font-bold hover:bg-sky-700"
+                    >
+                      Return to shop
+                    </button>
                   </div>
                 </div>
-                <EquipmentStatusBadge status={eq.status} />
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {equipment.length === 0 && (
@@ -478,8 +537,9 @@ export default function VehicleDetailClient() {
                     type="number"
                     min="1"
                     step="1"
+                    max={selectedInventoryAvailable}
                     value={assignQuantity}
-                    disabled={assignMode !== 'existing' || selectedInventory?.kind === 'reusable'}
+                    disabled={assignMode !== 'existing'}
                     onChange={(e) => setAssignQuantity(e.target.value)}
                     className="mt-2 w-full px-3 min-h-12 rounded-xl border border-slate-200 text-sm sm:text-xs disabled:bg-slate-100"
                     placeholder="Quantity to assign"

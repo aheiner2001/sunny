@@ -44,6 +44,7 @@ function VehiclesPageContent() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
+  const [deleteEquipmentMode, setDeleteEquipmentMode] = useState<'return_to_shop' | 'delete_associated'>('return_to_shop');
 
   // Common standard equipment options
   const [equipmentOptions, setEquipmentOptions] = useState<EquipmentOption[]>([]);
@@ -130,6 +131,7 @@ function VehiclesPageContent() {
 
   const handleOpenDelete = (v: Vehicle) => {
     setSelectedVehicle(v);
+    setDeleteEquipmentMode('return_to_shop');
     setIsDeleteModalOpen(true);
   };
 
@@ -212,7 +214,7 @@ function VehiclesPageContent() {
 
     try {
       setModalLoading(true);
-      await dbService.deleteVehicle(selectedVehicle.id);
+      await dbService.deleteVehicle(selectedVehicle.id, { equipmentMode: deleteEquipmentMode });
       setIsDeleteModalOpen(false);
     } catch (err: any) {
       alert(err.message || 'Error deleting vehicle');
@@ -687,6 +689,37 @@ function VehiclesPageContent() {
             <p className="text-xs text-slate-500 mb-6">
               Are you sure you want to permanently delete <strong>{selectedVehicle.vehicleNumber}</strong> ({selectedVehicle.licensePlate}) and clean up its records?
             </p>
+
+            <div className="text-left space-y-2 mb-6">
+              <label className="flex gap-2 items-start text-xs text-slate-700">
+                <input
+                  type="radio"
+                  name="deleteEquipmentMode"
+                  checked={deleteEquipmentMode === 'return_to_shop'}
+                  onChange={() => setDeleteEquipmentMode('return_to_shop')}
+                  className="mt-0.5"
+                />
+                <span>
+                  <strong>Return equipment to shop</strong>
+                  <span className="block text-slate-500">Delete the vehicle and move its assigned quantities back to global inventory.</span>
+                </span>
+              </label>
+              <label className="flex gap-2 items-start text-xs text-slate-700">
+                <input
+                  type="radio"
+                  name="deleteEquipmentMode"
+                  checked={deleteEquipmentMode === 'delete_associated'}
+                  onChange={() => setDeleteEquipmentMode('delete_associated')}
+                  className="mt-0.5"
+                />
+                <span>
+                  <strong>Delete associated equipment records</strong>
+                  <span className="block text-slate-500">
+                    Removes catalog items that were only on this vehicle. Shared items keep other vehicles&apos; stock and only lose this van&apos;s assignment.
+                  </span>
+                </span>
+              </label>
+            </div>
 
             <div className="flex gap-2">
               <button

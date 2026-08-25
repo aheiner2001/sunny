@@ -102,14 +102,15 @@ function EquipmentPageContent() {
 
     const vehicle = vehicles.find(v => v.id === form.vehicleId);
 
-    // Preserve an existing multi-vehicle distribution. Rebuilding assignments
-    // from the single vehicle picker would silently drop every other truck's
-    // allocation, so only the picked vehicle's own entry is touched here.
     const existing = selected?.assignments || [];
     let assignments = existing;
     if (modal === 'edit') {
-      if (vehicle && !existing.some(a => a.vehicleId === vehicle.id)) {
+      if (!vehicle) {
+        assignments = [];
+      } else if (!existing.some(a => a.vehicleId === vehicle.id)) {
         assignments = [...existing, { vehicleId: vehicle.id, vehicleNumber: vehicle.vehicleNumber, quantity: 1 }];
+      } else {
+        assignments = existing;
       }
       const assignedTotal = assignments.reduce((sum, a) => sum + a.quantity, 0);
       if (assignedTotal > totalQuantity) {
