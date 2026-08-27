@@ -13,8 +13,7 @@ import {
   Users, 
   BarChart3, 
   Settings,
-  QrCode,
-  Sparkles
+  QrCode
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { asset } from '@/lib/basePath';
@@ -36,10 +35,10 @@ export function Sidebar() {
   const { role } = useAuth();
 
   return (
-    <aside className="w-64 bg-white border-r border-slate-200/80 min-h-screen flex flex-col justify-between shrink-0 select-none shadow-sm z-30">
+    <aside className="w-64 bg-surface border-r border-line min-h-screen flex flex-col justify-between shrink-0 select-none z-30">
       <div>
         {/* Brand Header */}
-        <div className="px-6 py-5 border-b border-slate-100">
+        <div className="px-6 py-5 border-b border-line">
           <img
             src={asset('/sunny-logo.png')}
             alt="Sunny logo"
@@ -57,13 +56,14 @@ export function Sidebar() {
               <Link
                 key={item.label}
                 href={item.href}
-                className={`flex items-center gap-3.5 px-4 py-2.5 rounded-xl font-medium text-sm transition-all duration-150 ${
+                aria-current={isActive ? 'page' : undefined}
+                className={`relative flex items-center gap-3.5 px-4 py-2.5 rounded-lg font-display text-sm transition-colors duration-150 ${
                   isActive
-                    ? 'bg-sky-50 text-sky-600 font-semibold shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                    ? 'bg-surface-sunk text-ink font-semibold before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-full before:bg-ink'
+                    : 'text-ink-muted font-medium hover:bg-surface-alt hover:text-ink'
                 }`}
               >
-                <Icon className={`w-5 h-5 ${isActive ? 'text-sky-600' : 'text-slate-400'}`} />
+                <Icon className={`w-5 h-5 ${isActive ? 'text-ink' : 'text-ink-faint'}`} />
                 {item.label}
               </Link>
             );
@@ -75,19 +75,18 @@ export function Sidebar() {
       <div className="p-4">
         <Link
           href="/scan"
-          className="group block p-4 rounded-2xl border-2 border-dashed border-sky-300 bg-sky-50/50 hover:bg-sky-100/70 transition-all text-left shadow-sm"
+          className="group block p-4 rounded-card border border-dashed border-line-strong bg-surface-alt hover:border-ink hover:bg-surface-sunk transition-colors text-left"
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-md shadow-sky-600/30 group-hover:scale-105 transition-transform">
+            <div className="icon-tile w-10 h-10 bg-ink text-ink-inverse">
               <QrCode className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-sm font-bold text-slate-900 group-hover:text-sky-700 flex items-center gap-1">
-                Scan Vehicle QR
-                <Sparkles className="w-3 h-3 text-amber-500" />
+              <div className="text-sm font-display font-semibold text-ink">
+                Scan vehicle QR
               </div>
-              <p className="text-xs text-sky-600 font-medium">
-                Start Inspection
+              <p className="text-xs text-ink-muted m-0">
+                Start an inspection
               </p>
             </div>
           </div>
