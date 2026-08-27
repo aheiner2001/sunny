@@ -24,11 +24,11 @@ export default function RootLayout({
         <title>Sunny Fleet - Vehicle & Equipment Accountability</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
       </head>
-      <body className="bg-slate-50 text-slate-900 min-h-screen">
+      <body className="min-h-screen">
         <AuthProvider>
           <SPARedirectHandler />
           <PasscodeGate>
-            <div className="flex min-h-screen bg-slate-50">
+            <div className="flex min-h-screen">
               {/* Desktop Sidebar */}
               <div className="hidden lg:block">
                 <Sidebar />
@@ -70,7 +70,7 @@ export default function RootLayout({
             <div className="fixed bottom-6 right-6 lg:hidden z-40">
               <button
                 onClick={() => setScannerOpen(true)}
-                className="flex items-center gap-2 px-5 py-3.5 rounded-full bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm shadow-xl shadow-sky-600/30 border-2 border-white transition-all transform active:scale-95"
+                className="btn btn-primary rounded-full px-5 shadow-panel border-2 border-white"
               >
                 <QrCode className="w-5 h-5" />
                 <span>Scan QR</span>
