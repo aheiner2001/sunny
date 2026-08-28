@@ -61,6 +61,31 @@ export function IssueStatusBadge({ status }: { status: IssueStatus }) {
   }
 }
 
+/** Audit log entries may use IssueStatus or the synthetic `created` opener. */
+export function IssueLogStatusBadge({ status }: { status: IssueStatus | 'created' }) {
+  if (status === 'created') {
+    return <Badge status="idle" label="Opened" />;
+  }
+  return <IssueStatusBadge status={status} />;
+}
+
+export function issueLogStatusDataStatus(
+  status: IssueStatus | 'created',
+): Status {
+  switch (status) {
+    case 'open':
+      return 'flagged';
+    case 'needs_repair':
+      return 'critical';
+    case 'being_repaired':
+      return 'info';
+    case 'fixed':
+      return 'ok';
+    default:
+      return 'idle';
+  }
+}
+
 export function VehicleStatusBadge({ status }: { status: VehicleStatus }) {
   switch (status) {
     case 'active':

@@ -2195,8 +2195,16 @@ class DataStore {
 
   public async deleteIssue(issueId: string): Promise<void> {
     if (!this.isClient()) return;
+    const issue = this.getIssue(issueId);
     const issues = this.getIssues().filter(i => i.id !== issueId);
     localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(issues));
+
+    if (issue?.equipmentId) {
+      const equipment = this.getEquipmentItem(issue.equipmentId);
+      if (equipment?.activeIssueId === issueId) {
+        await this.updateEquipmentStatus(issue.equipmentId, 'working', null);
+      }
+    }
 
     if (db) {
       try {

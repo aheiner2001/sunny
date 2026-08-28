@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   PackageCheck,
   PackageMinus,
+  Trash2,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Issue, IssueType } from '@/types';
@@ -45,6 +46,8 @@ function IssuesPageContent() {
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [pendingAction, setPendingAction] = useState<'update_stock' | 'remove_from_van' | null>(null);
   const [confirmRemoveIssue, setConfirmRemoveIssue] = useState<Issue | null>(null);
+  const [issueToDelete, setIssueToDelete] = useState<Issue | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [quantityModal, setQuantityModal] = useState<{
     action: 'update_stock' | 'remove_from_van';
     issue: Issue;
@@ -129,6 +132,23 @@ function IssuesPageContent() {
     const { issue } = quantityModal;
     closeQuantityModal();
     void submitStockAction(issue, 'remove_from_van', qty);
+  };
+
+  const handleDeleteIssue = async () => {
+    if (!issueToDelete) return;
+    try {
+      setDeleteLoading(true);
+      await dbService.deleteIssue(issueToDelete.id);
+      if (selectedIssue?.id === issueToDelete.id) {
+        setSelectedIssue(null);
+      }
+      setIssueToDelete(null);
+      loadData();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to delete issue.');
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const activeIssues = (statusFilter === 'fixed'
@@ -298,6 +318,19 @@ function IssuesPageContent() {
                       </div>
                     )}
                   </div>
+                  <div className="cluster justify-end pt-2 border-t border-line mt-4">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setIssueToDelete(issue);
+                      }}
+                      className="btn btn-ghost btn-sm text-[var(--critical)]"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                      Delete issue
+                    </button>
+                  </div>
                   <div className="divider mt-4 mb-4" />
                   <RecentInspectors vehicleId={selectedIssue.vehicleId} />
                 </div>
@@ -317,6 +350,17 @@ function IssuesPageContent() {
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        open={issueToDelete !== null}
+        title={issueToDelete ? `Delete “${issueToDelete.title}”?` : 'Delete issue?'}
+        message="This permanently removes the issue and its audit trail. Use this for accidental or duplicate reports. Linked equipment will be marked working again if this was its only open issue."
+        confirmLabel={deleteLoading ? 'Deleting...' : 'Delete issue'}
+        cancelLabel="Cancel"
+        variant="danger"
+        onCancel={() => !deleteLoading && setIssueToDelete(null)}
+        onConfirm={() => void handleDeleteIssue()}
+      />
 
       <ConfirmModal
         open={confirmRemoveIssue !== null}
