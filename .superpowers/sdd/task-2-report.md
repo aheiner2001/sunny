@@ -1,67 +1,109 @@
-# Task 2 Report: Inventory Core APIs
+# Task 2 Report: Shell fixes (layout, header, mobile drawer, FAB)
 
-## Status
+**Branch:** `styling`  
+**Commit:** `718e6cd` — `fix: dynamic header title and shell layout tokens`  
+**Status:** Complete
 
-Implemented the inventory synchronization APIs and vehicle deletion modes specified in the task brief.
+---
+
+## Summary
+
+Wired `getPageTitle` into the app shell so the header shows the current page title on all breakpoints, standardized main layout tokens, and updated mobile drawer and FAB styling to use design-system classes.
+
+---
 
 ## Changes
 
-- Replaced the inventory smoke test with the prescribed seven-test inventory suite.
-- Added `returnEquipmentToShop`.
-- Added `setVehicleAssignmentQuantity`.
-- Added `setAssignmentRequiredQuantity`.
-- Updated `deleteVehicle` with default `return_to_shop` and explicit `delete_associated` behavior.
-- Added best-effort Firestore deletion for catalog items removed by `delete_associated`.
-- Preserved assignment `requiredQuantity` during equipment normalization.
-- Prevented Firestore listeners from starting in `NODE_ENV=test`, keeping localStorage fixtures deterministic.
+### 1. Dynamic header title (`src/components/Header.tsx`)
 
-## TDD Evidence
+- Imported `usePathname` from `next/navigation` and `getPageTitle` from `@/lib/pageTitles`.
+- Replaced hardcoded `"Dashboard"` with `getPageTitle(pathname || '/dashboard')`.
+- Removed `hidden lg:block` from the title wrapper; title now shows on mobile alongside the logo.
+- Title wrapper uses `min-w-0 flex-1` so the `<h1>` truncates when space is tight (menu button + logo + title + actions).
 
-### RED
+### 2. Main container tokens (`src/app/layout.tsx`)
 
-Command:
+Replaced:
 
-`npm test -- src/lib/__tests__/inventory.test.ts`
+```tsx
+<main className="flex-1 p-4 sm:p-8 max-w-7xl w-full mx-auto pb-24 lg:pb-8">
+```
 
-Result: exit 1; 4 failed, 3 passed.
+With:
 
-Expected feature failures included:
+```tsx
+<main className="flex-1 w-full max-w-[1400px] mx-auto px-[var(--gutter)] py-4 sm:py-8 pb-24 lg:pb-8">
+```
 
-- `dbService.returnEquipmentToShop is not a function`
-- `dbService.setVehicleAssignmentQuantity is not a function`
-- `delete_associated` retained a sole-assignment catalog item
+Uses `--gutter` CSS variable for horizontal padding and widens max width to 1400px.
 
-One test also exposed asynchronous Firestore listeners replacing local test fixtures. After implementing the APIs, an isolated rerun confirmed the same listener race could remove the seeded vehicle before transfer.
+### 3. Mobile drawer tokens (`src/app/layout.tsx`)
 
-### GREEN
+| Element | Before | After |
+|---------|--------|-------|
+| Backdrop | `bg-slate-900/60` | `bg-ink/60` |
+| Panel | `bg-white shadow-2xl` | `bg-surface shadow-lg` |
+| Close button | `text-slate-400 hover:bg-slate-100` | `text-ink-muted hover:bg-surface-sunk` |
 
-After implementing the APIs and disabling live listener startup only in the test environment:
+### 4. FAB scan button (`src/app/layout.tsx`)
 
-`npm test -- src/lib/__tests__/inventory.test.ts`
+- Removed redundant wrapper `<div>`.
+- Positioning and visibility classes moved onto the button:
 
-Result: exit 0; 7 passed, 0 failed.
+```tsx
+className="btn btn-primary flex items-center gap-2 px-5 py-3.5 rounded-full shadow-lg lg:hidden fixed bottom-6 right-6 z-40"
+```
 
-## Final Verification
+---
 
-- `npm test`: exit 0; 1 test file passed, 7 tests passed.
-- `npx tsc --noEmit`: exit 0.
-- IDE diagnostics for the two edited TypeScript files: no errors.
+## Constraint compliance
 
-## Concerns
+No new `sky-*`, `slate-*`, or `rounded-3xl` classes were introduced in touched files. Legacy slate classes in the drawer were replaced with design-system tokens.
 
-Vitest emits a non-failing Vite configuration warning about ESM syntax being loaded as CommonJS. npm also emits a non-failing warning for the unknown `devdir` environment configuration.
+---
 
-## Important Review Fix: Vehicle Deletion Cloud Sync
+## Manual smoke (Step 5)
 
-- Updated `deleteVehicle` to track surviving equipment whose assignments changed and persist each modified document to Firestore with `setDoc(..., { merge: true })`.
-- Kept `delete_associated` catalog removals synchronized with Firestore via `deleteDoc`.
-- Avoided rewriting untouched surviving equipment documents.
-- Added Firestore regression coverage for both deletion modes and confirmed the no-options default remains `return_to_shop`.
+Dev server was not started in this session. Verified via code review:
 
-Test command:
+- `getPageTitle('/vehicles')` → `"Vehicles"` (matches `NAV_ITEMS` label)
+- `getPageTitle('/issues')` → `"Issues"`
+- `getPageTitle('/vehicles/detail')` → `"Vehicle"` (from `PAGE_TITLES`)
+- `getPageTitle('/unknown')` → `"Sunny Fleet"` (fallback)
 
-`npm test -- src/lib/__tests__/inventory.test.ts`
+`usePathname()` updates on client navigation, so the header title will re-render when routes change.
 
-Result: exit 0; 1 test file passed, 8 tests passed, 0 failed.
+---
 
-Non-failing output warnings remained unchanged: npm reports the unknown `devdir` configuration, and Vitest reports the Vite native config-loader compatibility warning.
+## Test results
+
+```
+npm test
+ Test Files  5 passed (5)
+      Tests  21 passed (21)
+
+npm run build
+ ✓ Compiled successfully
+ ✓ Generating static pages (17/17)
+```
+
+Both commands exited 0.
+
+---
+
+## Smoke verification
+
+Unit tests in `src/lib/__tests__/pageTitles.test.ts` assert Step 5 route title checks:
+
+- `getPageTitle('/vehicles')` → `"Vehicles"`
+- `getPageTitle('/issues')` → `"Issues"`
+- `getPageTitle('/dashboard')` → `"Dashboard"`
+
+These replace manual code-review-only verification for the primary shell routes.
+
+---
+
+## Files modified
+
+- `src/components/Header.tsx`
+- `src/app/layout.tsx`
