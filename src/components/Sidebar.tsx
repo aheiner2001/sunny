@@ -18,7 +18,7 @@ import {
 import { useAuth } from '@/context/AuthContext';
 import { asset } from '@/lib/basePath';
 
-const NAV_ITEMS = [
+export const NAV_ITEMS = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, managerOnly: false },
   { label: 'Vehicles', href: '/vehicles', icon: Truck, managerOnly: true },
   { label: 'Inspections', href: '/inspections', icon: ClipboardCheck, managerOnly: false },
