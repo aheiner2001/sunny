@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Edit2, Package, PackagePlus, Plus, QrCode, Search, Trash2, Wrench } from 'lucide-react';
+import { AlertTriangle, Edit2, Package, PackagePlus, Plus, QrCode, Search, Trash2, Truck, Wrench } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Equipment, EquipmentCategory, EquipmentKind, EquipmentStatus, Vehicle } from '@/types';
 import { EquipmentStatusBadge } from '@/components/StatusBadges';
@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { QuantityModal } from '@/components/QuantityModal';
+import { EquipmentAllocationModal } from '@/components/EquipmentAllocationModal';
 
 const emptyForm = {
   name: '',
@@ -47,6 +48,7 @@ function EquipmentPageContent() {
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
   const [restockTarget, setRestockTarget] = useState<Equipment | null>(null);
+  const [allocationTarget, setAllocationTarget] = useState<Equipment | null>(null);
 
   const load = () => {
     setEquipment(dbService.getEquipment());
@@ -108,29 +110,22 @@ function EquipmentPageContent() {
 
     const existing = selected?.assignments || [];
     let assignments = existing;
-    if (modal === 'edit') {
-      if (!vehicle) {
-        if (
-          existing.length > 1 &&
-          !window.confirm(
-            `Move all assignments to In Shop?\n\nAffected vehicles: ${existing
-              .map(assignment => assignment.vehicleNumber)
-              .join(', ')}`,
-          )
-        ) {
-          return;
-        }
-        assignments = [];
-      } else if (!existing.some(a => a.vehicleId === vehicle.id)) {
-        assignments = [...existing, { vehicleId: vehicle.id, vehicleNumber: vehicle.vehicleNumber, quantity: 1 }];
-      } else {
-        assignments = existing;
+    if (modal === 'add') {
+      if (vehicle) {
+        assignments = [{ vehicleId: vehicle.id, vehicleNumber: vehicle.vehicleNumber, quantity: 1 }];
       }
       const assignedTotal = assignments.reduce((sum, a) => sum + a.quantity, 0);
+      if (assignedTotal > totalQuantity) {
+        alert('Total quantity must be at least the units you assign on create.');
+        return;
+      }
+    } else if (modal === 'edit') {
+      const assignedTotal = existing.reduce((sum, a) => sum + a.quantity, 0);
       if (assignedTotal > totalQuantity) {
         alert(`${assignedTotal} units are already assigned to vehicles. Total cannot be lower than that.`);
         return;
       }
+      assignments = existing;
     }
 
     try {
@@ -158,8 +153,8 @@ function EquipmentPageContent() {
           status: form.status,
           totalQuantity,
           assignments,
-          vehicleId: vehicle?.id || null,
-          vehicleNumber: vehicle?.vehicleNumber || 'Unassigned',
+          vehicleId: assignments[0]?.vehicleId || null,
+          vehicleNumber: assignments[0]?.vehicleNumber || 'Unassigned',
           availableQuantity: Math.max(0, totalQuantity - assignments.reduce((sum, a) => sum + a.quantity, 0)),
           qrCodeToken: form.qrCodeToken || null,
           qrCode: form.qrCodeToken || null
@@ -225,6 +220,14 @@ function EquipmentPageContent() {
           </div>
         </div>
         <p className="hint mt-2 break-words leading-relaxed">{assignmentsLabel(eq)}</p>
+        <button
+          type="button"
+          onClick={() => setAllocationTarget(eq)}
+          className="btn btn-secondary btn-sm btn-block mt-3"
+        >
+          <Truck className="h-3.5 w-3.5" aria-hidden />
+          View allocation &amp; transfer
+        </button>
       </div>
 
       <div className="card-foot mt-0 pt-3">
@@ -478,26 +481,42 @@ function EquipmentPageContent() {
                   ? 'Reusable: units move between the shop and trucks and are never used up. Enter how many you own in total, then assign them out.'
                   : 'Consumable: employees can mark stock as used, which removes it from the truck and from the fleet total.'}
               </p>
-              <div className="field">
-                <label className="label" htmlFor="equipment-vehicle">
-                  {modal === 'add' ? 'Starting location' : 'Assigned vehicle'}
-                </label>
-                <select
-                  id="equipment-vehicle"
-                  value={form.vehicleId}
-                  onChange={e => setForm({ ...form, vehicleId: e.target.value })}
-                  className="select"
-                >
-                  <option value="">In shop / unassigned</option>
-                  {vehicles.map(v => <option key={v.id} value={v.id}>{v.vehicleNumber} - {v.name}</option>)}
-                </select>
-                {modal === 'add' && (
+              {modal === 'add' ? (
+                <div className="field">
+                  <label className="label" htmlFor="equipment-vehicle">
+                    Starting location
+                  </label>
+                  <select
+                    id="equipment-vehicle"
+                    value={form.vehicleId}
+                    onChange={e => setForm({ ...form, vehicleId: e.target.value })}
+                    className="select"
+                  >
+                    <option value="">In shop / unassigned</option>
+                    {vehicles.map(v => <option key={v.id} value={v.id}>{v.vehicleNumber} - {v.name}</option>)}
+                  </select>
                   <p className="hint">
                     All {Number(form.totalQuantity) > 1 ? Number(form.totalQuantity) : ''} units start in the shop
-                    {form.vehicleId ? ' except one sent to the chosen truck' : ''}. Assign the rest per truck from the inventory list.
+                    {form.vehicleId ? ' except one sent to the chosen truck' : ''}. Use allocation on the card to split across trucks.
                   </p>
-                )}
-              </div>
+                </div>
+              ) : (
+                <div className="card card-pad bg-[var(--surface-alt)]">
+                  <p className="text-xs font-semibold text-ink mb-1">Vehicle assignments</p>
+                  <p className="hint mb-2">{assignmentsLabel(selected!)}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModal(null);
+                      setAllocationTarget(selected);
+                    }}
+                    className="btn btn-secondary btn-sm"
+                  >
+                    <Truck className="h-3.5 w-3.5" aria-hidden />
+                    Manage allocation &amp; transfer
+                  </button>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-2">
                 <select
                   value={form.category}
@@ -564,6 +583,13 @@ function EquipmentPageContent() {
         min={1}
         onConfirm={handleRestockConfirm}
         onCancel={() => setRestockTarget(null)}
+      />
+
+      <EquipmentAllocationModal
+        equipment={allocationTarget}
+        vehicles={vehicles}
+        open={allocationTarget !== null}
+        onClose={() => setAllocationTarget(null)}
       />
     </div>
   );

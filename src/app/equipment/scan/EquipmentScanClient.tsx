@@ -21,6 +21,7 @@ export default function EquipmentScanClient() {
   const [manualCode, setManualCode] = useState(token);
   const [error, setError] = useState('');
   const [cameraError, setCameraError] = useState('');
+  const [scannerActive, setScannerActive] = useState(() => !token);
   const scannerRef = useRef<any>(null);
   const scannerContainerId = 'equipment-camera';
 
@@ -47,6 +48,8 @@ export default function EquipmentScanClient() {
     setEquipment(found || null);
     setError(found ? '' : `Equipment code "${value}" was not found.`);
     if (found) {
+      setScannerActive(false);
+      void stopScanner();
       const current = found.assignments?.[0]?.vehicleId || found.vehicleId || '';
       setSourceVehicleId((prev) =>
         prev && found.assignments?.some((a) => a.vehicleId === prev)
@@ -69,6 +72,16 @@ export default function EquipmentScanClient() {
   }, [token]);
 
   useEffect(() => {
+    setScannerActive(!token);
+    if (token) {
+      setCameraError('');
+      void stopScanner();
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!scannerActive) return;
+
     let mounted = true;
     const start = async () => {
       try {
@@ -81,6 +94,7 @@ export default function EquipmentScanClient() {
           { fps: 10, qrbox: { width: 230, height: 230 } },
           async (code: string) => {
             await stopScanner();
+            setScannerActive(false);
             const parsed = code.includes('?id=') ? code.split('?id=')[1].split('&')[0] : code;
             router.replace(`/equipment/scan?id=${encodeURIComponent(parsed)}`);
           },
@@ -96,7 +110,16 @@ export default function EquipmentScanClient() {
       window.clearTimeout(timer);
       void stopScanner();
     };
-  }, [router]);
+  }, [scannerActive, router]);
+
+  const startScanning = () => {
+    setEquipment(null);
+    setError('');
+    setManualCode('');
+    setCameraError('');
+    router.replace('/equipment/scan');
+    setScannerActive(true);
+  };
 
   const assignments = equipment?.assignments || [];
   const assigned = assignments.reduce((sum, item) => sum + item.quantity, 0);
@@ -165,37 +188,73 @@ export default function EquipmentScanClient() {
       </Link>
 
       <PageHeader
-        title="Equipment QR Scan"
-        subtitle="Review the transfer, then explicitly confirm or cancel."
+        title={equipment ? equipment.name : 'Equipment QR Scan'}
+        subtitle={
+          equipment
+            ? 'You opened this item from its QR code. Review the transfer below, or scan another item.'
+            : scannerActive
+              ? 'Point your camera at an equipment QR sticker, or enter a code below.'
+              : 'Review the transfer, then explicitly confirm or cancel.'
+        }
+        actions={
+          equipment ? (
+            <button type="button" onClick={startScanning} className="btn btn-secondary btn-sm">
+              <Camera className="h-4 w-4" aria-hidden />
+              Scan another item
+            </button>
+          ) : !scannerActive ? (
+            <button type="button" onClick={startScanning} className="btn btn-primary btn-sm">
+              <Camera className="h-4 w-4" aria-hidden />
+              Open camera
+            </button>
+          ) : undefined
+        }
       />
 
       <div className="card card-pad">
-        <div className="relative aspect-video rounded-[var(--radius-lg)] bg-ink overflow-hidden mb-4">
-          <div id={scannerContainerId} className="w-full h-full" />
-          {cameraError && (
-            <p className="absolute inset-0 flex items-center justify-center p-5 text-center text-xs text-ink-inverse/80">
-              {cameraError}
-            </p>
-          )}
-        </div>
+        {scannerActive ? (
+          <div className="relative aspect-video rounded-[var(--radius-lg)] bg-ink overflow-hidden mb-4">
+            <div id={scannerContainerId} className="w-full h-full" />
+            {cameraError && (
+              <p className="absolute inset-0 flex items-center justify-center p-5 text-center text-xs text-ink-inverse/80">
+                {cameraError}
+              </p>
+            )}
+          </div>
+        ) : equipment ? (
+          <div
+            className="mb-4 flex flex-col items-center gap-2 rounded-[var(--radius-lg)] border border-line bg-[var(--ok-wash)] px-5 py-6 text-center"
+            data-status="ok"
+          >
+            <CheckCircle2 className="h-10 w-10 text-[var(--ok)]" aria-hidden />
+            <p className="text-sm font-semibold text-ink">Item identified</p>
+            <p className="text-xs text-ink-muted">No need to scan again — confirm the transfer or choose another item.</p>
+            <button type="button" onClick={startScanning} className="btn btn-secondary btn-sm mt-1">
+              <Camera className="h-4 w-4" aria-hidden />
+              Scan another item
+            </button>
+          </div>
+        ) : null}
 
-        <form
-          className="cluster mb-5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void resolve(manualCode.trim());
-          }}
-        >
-          <input
-            value={manualCode}
-            onChange={(e) => setManualCode(e.target.value)}
-            placeholder="Equipment QR token or ID"
-            className="input flex-1"
-          />
-          <button type="submit" className="btn btn-primary">
-            Find
-          </button>
-        </form>
+        {!equipment && (
+          <form
+            className="cluster mb-5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void resolve(manualCode.trim());
+            }}
+          >
+            <input
+              value={manualCode}
+              onChange={(e) => setManualCode(e.target.value)}
+              placeholder="Equipment QR token or ID"
+              className="input flex-1"
+            />
+            <button type="submit" className="btn btn-primary">
+              Find
+            </button>
+          </form>
+        )}
 
         {error && (
           <div className="mb-4 rounded-[var(--radius)] bg-[var(--critical-wash)] text-[var(--critical)] border border-[var(--critical)]/30 p-3 text-xs font-semibold">
