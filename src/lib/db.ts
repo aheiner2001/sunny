@@ -1643,24 +1643,26 @@ class DataStore {
   }
 
   public getAppSettings(): AppSettings {
-    if (!this.isClient()) return { recentInspectorsDepth: 3 };
+    if (!this.isClient()) return { recentInspectorsDepth: 3, theme: 'light' };
     this.init();
     const raw = localStorage.getItem(STORAGE_KEYS.APP_SETTINGS);
-    if (!raw) return { recentInspectorsDepth: 3 };
+    if (!raw) return { recentInspectorsDepth: 3, theme: 'light' };
     try {
       const parsed = JSON.parse(raw) as AppSettings;
       return {
-        recentInspectorsDepth: parsed.recentInspectorsDepth === 1 ? 1 : 3
+        recentInspectorsDepth: parsed.recentInspectorsDepth === 1 ? 1 : 3,
+        theme: parsed.theme === 'dark' ? 'dark' : 'light',
       };
     } catch {
-      return { recentInspectorsDepth: 3 };
+      return { recentInspectorsDepth: 3, theme: 'light' };
     }
   }
 
   public async saveAppSettings(settings: AppSettings): Promise<void> {
     if (!this.isClient()) return;
     localStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify({
-      recentInspectorsDepth: settings.recentInspectorsDepth === 1 ? 1 : 3
+      recentInspectorsDepth: settings.recentInspectorsDepth === 1 ? 1 : 3,
+      theme: settings.theme === 'dark' ? 'dark' : 'light',
     }));
     window.dispatchEvent(new Event('sunny_db_update'));
   }

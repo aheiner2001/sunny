@@ -9,6 +9,7 @@ import { QRScannerModal } from '@/components/QRScannerModal';
 import { QrCode, X } from 'lucide-react';
 import { SPARedirectHandler } from '@/components/SPARedirectHandler';
 import { PasscodeGate } from '@/components/PasscodeGate';
+import { ThemeInit } from '@/components/ThemeInit';
 
 export default function RootLayout({
   children,
@@ -25,6 +26,7 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
       </head>
       <body className="min-h-screen">
+        <ThemeInit />
         <AuthProvider>
           <SPARedirectHandler />
           <PasscodeGate>

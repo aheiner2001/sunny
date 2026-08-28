@@ -11,12 +11,32 @@ import {
   ArrowRight,
   Info,
   Clock,
-  Wrench
+  Wrench,
+  RotateCcw,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
-import { Vehicle, Inspection, Issue } from '@/types';
+import { Vehicle, Inspection, Issue, IssueType } from '@/types';
 import { InspectionStatusBadge, IssueStatusBadge, VehicleStatusBadge } from '@/components/StatusBadges';
 import { InspectionCalendar } from '@/components/InspectionCalendar';
+import { EmptyState } from '@/components/EmptyState';
+
+const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
+  stock_low_inventory: 'Stock / Low Inventory',
+  equipment_replacement: 'Equipment Replacement',
+  needs_repair: 'Needs Repair',
+};
+
+function formatStartTime(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function issueTypeLabel(issue: Issue): string {
+  const type = issue.type ?? 'needs_repair';
+  return ISSUE_TYPE_LABELS[type] ?? ISSUE_TYPE_LABELS.needs_repair;
+}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -50,10 +70,15 @@ export default function DashboardPage() {
   const inspectionStatusFor = (status: Inspection['status'] | null | undefined) =>
     status === 'passed' ? 'ok' : status === 'issues_found' ? 'flagged' : 'info';
 
+  const resetDemoHint = (
+    <Link href="/settings?tab=danger" className="btn btn-secondary btn-sm cluster gap-1.5">
+      <RotateCcw className="w-3.5 h-3.5" />
+      Reset demo data in Settings
+    </Link>
+  );
+
   return (
     <div className="page max-w-full overflow-x-hidden">
-      {/* Fleet at a glance. Only Open Issues carries a status rail, and only
-          when there is something to act on. */}
       <div className="grid-auto" style={{ '--min': '15rem' } as React.CSSProperties}>
         <div className="card card-pad flex flex-col">
           <div className="spread items-start">
@@ -131,7 +156,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Today's Activity | Inspection Calendar | Open Issues */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--gutter)]">
         <div className="card flex flex-col">
           <div className="card-head">
@@ -142,13 +166,13 @@ export default function DashboardPage() {
           </div>
 
           <div>
-            {[...todayInspections.map(insp => ({ type: 'inspection', insp, at: insp.submittedAt })),
-              ...todayIssues.map(issue => ({ type: 'issue', issue, at: issue.reportedAt }))]
+            {[...todayInspections.map(insp => ({ type: 'inspection' as const, insp, at: insp.submittedAt })),
+              ...todayIssues.map(issue => ({ type: 'issue' as const, issue, at: issue.reportedAt }))]
               .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
               .slice(0, 5)
-              .map((activity: any) => (
+              .map((activity) => (
                 <div
-                  key={activity.insp?.id || activity.issue?.id}
+                  key={activity.type === 'inspection' ? activity.insp.id : activity.issue.id}
                   className="row"
                   data-status={activity.type === 'inspection' ? 'ok' : 'flagged'}
                 >
@@ -174,10 +198,22 @@ export default function DashboardPage() {
               ))}
 
             {todayInspections.length === 0 && todayIssues.length === 0 && (
-              <div className="empty">
-                <p>Nothing logged yet today. Inspections appear here as crews submit them.</p>
-                <Link href="/inspect" className="btn btn-secondary btn-sm">Start an inspection</Link>
-              </div>
+              <EmptyState
+                icon={
+                  <span className="icon-tile icon-tile-lg" data-status="idle">
+                    <Clock className="w-6 h-6" />
+                  </span>
+                }
+                title="No activity yet today"
+                action={
+                  <>
+                    <Link href="/inspect" className="btn btn-secondary btn-sm">Start an inspection</Link>
+                    {totalVehiclesCount === 0 && resetDemoHint}
+                  </>
+                }
+              >
+                Inspections and issues appear here as crews submit them.
+              </EmptyState>
             )}
           </div>
         </div>
@@ -196,7 +232,6 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* Open Issues */}
         <div className="card flex flex-col">
           <div className="card-head">
             <h2 className="card-title">Open issues</h2>
@@ -217,19 +252,25 @@ export default function DashboardPage() {
                 </span>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold truncate m-0">{issue.equipmentName}</p>
-                  <p className="unit-tag truncate m-0">{issue.vehicleNumber}</p>
+                  <p className="unit-tag truncate m-0">
+                    {issue.vehicleNumber} · {issueTypeLabel(issue)}
+                  </p>
                 </div>
                 <IssueStatusBadge status={issue.status} />
               </div>
             ))}
 
             {openIssues.length === 0 && (
-              <div className="empty">
-                <span className="icon-tile icon-tile-lg" data-status="ok">
-                  <CheckCircle2 className="w-6 h-6" />
-                </span>
-                <p>No open issues. Every flagged item has been resolved.</p>
-              </div>
+              <EmptyState
+                icon={
+                  <span className="icon-tile icon-tile-lg" data-status="ok">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </span>
+                }
+                title="All clear"
+              >
+                No open issues. Every flagged item has been resolved.
+              </EmptyState>
             )}
           </div>
 
@@ -244,7 +285,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Vehicles In Use | Recent Inspections */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--gutter)]">
         <div className="card lg:col-span-2">
           <div className="card-head">
@@ -266,7 +306,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {vehicles.slice(0, 5).map((vehicle) => (
+                {vehiclesInUse.slice(0, 5).map((vehicle) => (
                   <tr key={vehicle.id}>
                     <td className="pl-5">
                       <span className="cluster gap-2.5">
@@ -282,7 +322,7 @@ export default function DashboardPage() {
                       </span>
                     </td>
                     <td>{vehicle.currentUserName || '—'}</td>
-                    <td className="text-ink-muted">{vehicle.currentUserStartTime || '—'}</td>
+                    <td className="text-ink-muted">{formatStartTime(vehicle.currentUserStartTime)}</td>
                     <td>
                       <span className="cluster gap-1.5">
                         <span className="text-ink-muted">
@@ -303,16 +343,31 @@ export default function DashboardPage() {
               </tbody>
             </table>
 
-            {vehicles.length === 0 && (
-              <div className="empty">
-                <p>No vehicles yet. Add one to start tracking inspections and equipment.</p>
-                <Link href="/vehicles" className="btn btn-secondary btn-sm">Add a vehicle</Link>
-              </div>
+            {vehiclesInUse.length === 0 && (
+              <EmptyState
+                icon={
+                  <span className="icon-tile icon-tile-lg" data-status="idle">
+                    <Truck className="w-6 h-6" />
+                  </span>
+                }
+                title="No vehicles in use"
+                action={
+                  vehicles.length === 0 ? (
+                    <>
+                      <Link href="/vehicles" className="btn btn-secondary btn-sm">Add a vehicle</Link>
+                      {resetDemoHint}
+                    </>
+                  ) : undefined
+                }
+              >
+                {vehicles.length === 0
+                  ? 'Add a vehicle to start tracking inspections and equipment.'
+                  : 'No vehicles are checked out right now.'}
+              </EmptyState>
             )}
           </div>
         </div>
 
-        {/* Recent Inspections */}
         <div className="card flex flex-col">
           <div className="card-head">
             <h2 className="card-title">Recent inspections</h2>
@@ -323,7 +378,12 @@ export default function DashboardPage() {
 
           <div>
             {inspections.slice(0, 5).map((insp) => (
-              <div key={insp.id} className="row" data-status={inspectionStatusFor(insp.status)}>
+              <Link
+                key={insp.id}
+                href="/inspections"
+                className="row block no-underline hover:bg-surface-alt transition-colors"
+                data-status={inspectionStatusFor(insp.status)}
+              >
                 <span className="icon-tile" data-status={inspectionStatusFor(insp.status)}>
                   {insp.status === 'passed' && <CheckCircle2 className="w-4 h-4" />}
                   {insp.status === 'issues_found' && <AlertTriangle className="w-4 h-4" />}
@@ -339,13 +399,21 @@ export default function DashboardPage() {
                   </time>
                   <InspectionStatusBadge status={insp.status} />
                 </div>
-              </div>
+              </Link>
             ))}
 
             {inspections.length === 0 && (
-              <div className="empty">
-                <p>No inspections recorded yet.</p>
-              </div>
+              <EmptyState
+                icon={
+                  <span className="icon-tile icon-tile-lg" data-status="idle">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </span>
+                }
+                title="No inspections yet"
+                action={resetDemoHint}
+              >
+                Completed inspections will show up here.
+              </EmptyState>
             )}
           </div>
 

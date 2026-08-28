@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { 
   Settings as SettingsIcon, 
   RotateCcw, 
@@ -25,13 +26,27 @@ import {
   AlertTriangle,
   Lock,
   KeyRound,
-  History
+  History,
+  Palette,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
+import { applyAppTheme } from '@/lib/theme';
 import { ChecklistQuestion, ChecklistCategoryConfig, QuestionType, ChecklistConfig, EquipmentOption, FleetTask } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { ManagerOnly } from '@/components/ManagerOnly';
 import { AiImportModal } from '@/components/AiImportModal';
+
+type SettingsTab = 'checklist' | 'equipment' | 'tasks' | 'appearance' | 'danger';
+
+const SETTINGS_TABS: Array<{ id: SettingsTab; label: string }> = [
+  { id: 'checklist', label: 'Checklist' },
+  { id: 'equipment', label: 'Equipment' },
+  { id: 'tasks', label: 'Tasks' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'danger', label: 'Danger zone' },
+];
 
 export default function SettingsPage() {
   return (
@@ -43,6 +58,9 @@ export default function SettingsPage() {
 
 function SettingsPageContent() {
   const { isTrueManager, user: currentUser } = useAuth();
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<SettingsTab>('checklist');
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   // Passcode change form (own account)
   const [passcodeForm, setPasscodeForm] = useState({ current: '', next: '', confirm: '' });
@@ -104,12 +122,20 @@ function SettingsPageContent() {
     setQuestions(config.questions || []);
     setEquipmentOptions(dbService.getEquipmentOptions());
     setTasks(dbService.getTasks());
-    setRecentInspectorsDepth(dbService.getAppSettings().recentInspectorsDepth);
+    const settings = dbService.getAppSettings();
+    setRecentInspectorsDepth(settings.recentInspectorsDepth);
+    setTheme(settings.theme ?? 'light');
   };
 
   const updateRecentInspectorsDepth = async (value: 1 | 3) => {
     setRecentInspectorsDepth(value);
-    await dbService.saveAppSettings({ recentInspectorsDepth: value });
+    await dbService.saveAppSettings({ recentInspectorsDepth: value, theme });
+  };
+
+  const updateTheme = async (value: 'light' | 'dark') => {
+    setTheme(value);
+    applyAppTheme(value);
+    await dbService.saveAppSettings({ recentInspectorsDepth, theme: value });
   };
 
   const saveEquipmentOption = async () => {
@@ -155,6 +181,13 @@ function SettingsPageContent() {
     window.addEventListener('sunny_db_update', loadData);
     return () => window.removeEventListener('sunny_db_update', loadData);
   }, []);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && SETTINGS_TABS.some(entry => entry.id === tab)) {
+      setActiveTab(tab as SettingsTab);
+    }
+  }, [searchParams]);
 
   // Save current state directly to Firestore
   const handleSaveToFirestore = async () => {
@@ -440,103 +473,74 @@ function SettingsPageContent() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Inspection Checklist Customization</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Configure inspection categories, questions, and response formats that employees see when scanning vehicles.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setIsAiImportOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-bold transition-colors"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Generate / Import with AI</span>
-          </button>
-
-          <button
-            onClick={handleResetToBaseline}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-bold transition-colors"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Baseline</span>
-          </button>
-
-          <button
-            onClick={handleSaveToFirestore}
-            disabled={isSaving}
-            className="flex items-center gap-2 px-5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-md shadow-sky-600/20 transition-all disabled:opacity-50"
-          >
-            <Save className="w-4 h-4" />
-            <span>{isSaving ? 'Saving to Cloud...' : 'Save Checklist to Firestore'}</span>
-          </button>
-        </div>
+    <div className="page stack max-w-5xl">
+      <div>
+        <h1 className="text-2xl font-extrabold tracking-tight">Fleet Settings</h1>
+        <p className="hint mt-0.5">
+          Configure checklists, equipment defaults, tasks, appearance, and fleet-wide options.
+        </p>
       </div>
 
-      {saveStatus && (
-        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-center gap-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span className="font-bold">{saveStatus}</span>
-        </div>
-      )}
+      <div className="cluster gap-2 flex-wrap">
+        {SETTINGS_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={`btn btn-sm ${activeTab === tab.id ? 'btn-primary' : 'btn-secondary'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <section className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
-          <div>
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <History className="w-5 h-5 text-sky-600" />
-              Recent Inspector History
-            </h2>
-            <p className="text-xs text-slate-400">
-              How many recent inspectors to show on issues and vehicle detail.
-            </p>
-          </div>
-          <fieldset className="flex gap-3">
-            <legend className="sr-only">Recent inspectors to show</legend>
-            {([1, 3] as const).map(value => (
-              <label
-                key={value}
-                className={`flex flex-1 cursor-pointer items-center gap-2 rounded-xl border px-4 py-3 text-xs font-bold ${
-                  recentInspectorsDepth === value
-                    ? 'border-sky-500 bg-sky-50 text-sky-800'
-                    : 'border-slate-200 bg-slate-50 text-slate-600'
-                }`}
+      {activeTab === 'checklist' && (
+        <div className="stack">
+          <div className="spread flex-col sm:flex-row gap-4">
+            <div>
+              <h2 className="card-title">Inspection Checklist</h2>
+              <p className="hint">
+                Configure categories, questions, and response formats for vehicle scans.
+              </p>
+            </div>
+
+            <div className="cluster gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setIsAiImportOpen(true)}
+                className="btn btn-secondary btn-sm cluster gap-1.5"
               >
-                <input
-                  type="radio"
-                  name="recentInspectorsDepth"
-                  value={value}
-                  checked={recentInspectorsDepth === value}
-                  onChange={() => updateRecentInspectorsDepth(value)}
-                  className="text-sky-600 focus:ring-sky-500"
-                />
-                Last {value}
-              </label>
-            ))}
-          </fieldset>
-        </section>
-        <section className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
-          <div><h2 className="text-base font-bold text-slate-900 flex items-center gap-2"><Wrench className="w-5 h-5 text-sky-600" />Default Equipment Options</h2><p className="text-xs text-slate-400">Managers control the quick-select list used when creating vehicles. Custom one-off entries remain supported.</p></div>
-          <div className="flex gap-2"><input value={newEquipmentOption} onChange={e => setNewEquipmentOption(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), saveEquipmentOption())} placeholder="Add equipment option" className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-200" /><button onClick={saveEquipmentOption} className="px-3 py-2 rounded-xl bg-sky-600 text-white text-xs font-bold">Add</button></div>
-          <div className="space-y-2">{equipmentOptions.map(option => <div key={option.id} className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs"><span className="font-semibold truncate">{option.name}</span><div className="flex gap-1"><button onClick={() => updateEquipmentOption(option)} className="p-1.5 text-slate-500 hover:text-slate-900"><Edit2 className="w-3.5 h-3.5" /></button><button onClick={() => deleteEquipmentOption(option.id)} className="p-1.5 text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button></div></div>)}</div>
-        </section>
-        <section className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
-          <div><h2 className="text-base font-bold text-slate-900 flex items-center gap-2"><Calendar className="w-5 h-5 text-sky-600" />Inspection Tasks & Scheduling</h2><p className="text-xs text-slate-400">Create intentional, repeatable inspection work with a label and due time.</p></div>
-          <form onSubmit={createManagerTask} className="space-y-2">
-            <input required value={taskForm.title} onChange={e => setTaskForm({ ...taskForm, title: e.target.value })} placeholder="Task or schedule title" className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200" />
-            <input value={taskForm.scheduleLabel} onChange={e => setTaskForm({ ...taskForm, scheduleLabel: e.target.value })} placeholder="Schedule label (e.g. Morning opening)" className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200" />
-            <div className="grid grid-cols-2 gap-2"><select value={taskForm.vehicleId} onChange={e => setTaskForm({ ...taskForm, vehicleId: e.target.value })} className="px-3 py-2 text-xs rounded-xl border border-slate-200"><option value="">Any vehicle</option>{dbService.getVehicles().map(v => <option key={v.id} value={v.id}>{v.vehicleNumber}</option>)}</select><input type="datetime-local" value={taskForm.dueAt} onChange={e => setTaskForm({ ...taskForm, dueAt: e.target.value })} className="px-3 py-2 text-xs rounded-xl border border-slate-200" /></div>
-            <input value={taskForm.description} onChange={e => setTaskForm({ ...taskForm, description: e.target.value })} placeholder="Instructions (optional)" className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200" />
-            <button className="w-full py-2 rounded-xl bg-slate-900 text-white text-xs font-bold">Create Task</button>
-          </form>
-          <div className="space-y-2 max-h-40 overflow-y-auto">{tasks.map(task => <div key={task.id} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs"><div><p className="font-bold">{task.title}</p><p className="text-slate-400">{task.scheduleLabel || 'Unscheduled'}{task.dueAt ? ` · ${new Date(task.dueAt).toLocaleString()}` : ''}</p></div><button onClick={() => dbService.deleteTask(task.id)} className="p-1.5 text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button></div>)}</div>
-        </section>
-      </div>
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Generate / Import with AI</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResetToBaseline}
+                className="btn btn-secondary btn-sm cluster gap-1.5"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset Baseline</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveToFirestore}
+                disabled={isSaving}
+                className="btn btn-primary btn-sm cluster gap-2"
+              >
+                <Save className="w-4 h-4" />
+                <span>{isSaving ? 'Saving to Cloud...' : 'Save Checklist to Firestore'}</span>
+              </button>
+            </div>
+          </div>
+
+          {saveStatus && (
+            <div className="card card-pad cluster gap-2 text-xs" data-status="ok">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span className="font-bold">{saveStatus}</span>
+            </div>
+          )}
 
       {/* Section 1: Checklist Categories Management */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm space-y-4">
@@ -764,6 +768,152 @@ function SettingsPageContent() {
           )}
         </div>
       </div>
+        </div>
+      )}
+
+      {activeTab === 'equipment' && (
+        <section className="card card-pad stack">
+          <div>
+            <h2 className="card-title cluster gap-2">
+              <Wrench className="w-5 h-5" />
+              Default Equipment Options
+            </h2>
+            <p className="hint">
+              Managers control the quick-select list used when creating vehicles. Custom one-off entries remain supported.
+            </p>
+          </div>
+          <div className="cluster gap-2">
+            <input
+              value={newEquipmentOption}
+              onChange={e => setNewEquipmentOption(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), saveEquipmentOption())}
+              placeholder="Add equipment option"
+              className="field flex-1"
+            />
+            <button type="button" onClick={saveEquipmentOption} className="btn btn-primary btn-sm">Add</button>
+          </div>
+          <div className="stack gap-2">
+            {equipmentOptions.map(option => (
+              <div key={option.id} className="spread gap-2 p-2.5 rounded-xl bg-surface-alt border border-line text-xs">
+                <span className="font-semibold truncate">{option.name}</span>
+                <div className="cluster gap-1">
+                  <button type="button" onClick={() => updateEquipmentOption(option)} className="btn btn-ghost btn-sm p-1.5">
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button type="button" onClick={() => deleteEquipmentOption(option.id)} className="btn btn-ghost btn-sm p-1.5 text-critical">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'tasks' && (
+        <section className="card card-pad stack">
+          <div>
+            <h2 className="card-title cluster gap-2">
+              <Calendar className="w-5 h-5" />
+              Inspection Tasks &amp; Scheduling
+            </h2>
+            <p className="hint">Create intentional, repeatable inspection work with a label and due time.</p>
+          </div>
+          <form onSubmit={createManagerTask} className="stack gap-2">
+            <input required value={taskForm.title} onChange={e => setTaskForm({ ...taskForm, title: e.target.value })} placeholder="Task or schedule title" className="field" />
+            <input value={taskForm.scheduleLabel} onChange={e => setTaskForm({ ...taskForm, scheduleLabel: e.target.value })} placeholder="Schedule label (e.g. Morning opening)" className="field" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <select value={taskForm.vehicleId} onChange={e => setTaskForm({ ...taskForm, vehicleId: e.target.value })} className="field">
+                <option value="">Any vehicle</option>
+                {dbService.getVehicles().map(v => <option key={v.id} value={v.id}>{v.vehicleNumber}</option>)}
+              </select>
+              <input type="datetime-local" value={taskForm.dueAt} onChange={e => setTaskForm({ ...taskForm, dueAt: e.target.value })} className="field" />
+            </div>
+            <input value={taskForm.description} onChange={e => setTaskForm({ ...taskForm, description: e.target.value })} placeholder="Instructions (optional)" className="field" />
+            <button type="submit" className="btn btn-primary">Create Task</button>
+          </form>
+          <div className="stack gap-2 max-h-60 overflow-y-auto">
+            {tasks.map(task => (
+              <div key={task.id} className="spread gap-2 p-2.5 rounded-xl bg-surface-alt border border-line text-xs">
+                <div className="min-w-0">
+                  <p className="font-bold">{task.title}</p>
+                  <p className="hint">{task.scheduleLabel || 'Unscheduled'}{task.dueAt ? ` · ${new Date(task.dueAt).toLocaleString()}` : ''}</p>
+                </div>
+                <button type="button" onClick={() => dbService.deleteTask(task.id)} className="btn btn-ghost btn-sm p-1.5 text-critical shrink-0">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'appearance' && (
+        <div className="stack">
+          <section className="card card-pad stack">
+            <div>
+              <h2 className="card-title cluster gap-2">
+                <Palette className="w-5 h-5" />
+                Theme
+              </h2>
+              <p className="hint">Choose light or dark appearance for the fleet dashboard.</p>
+            </div>
+            <fieldset className="cluster gap-3">
+              <legend className="sr-only">App theme</legend>
+              {([
+                { value: 'light' as const, label: 'Light', icon: Sun },
+                { value: 'dark' as const, label: 'Dark', icon: Moon },
+              ]).map(({ value, label, icon: Icon }) => (
+                <label
+                  key={value}
+                  className={`flex flex-1 cursor-pointer items-center gap-2 rounded-xl border px-4 py-3 text-xs font-bold ${
+                    theme === value ? 'border-ink bg-surface-alt' : 'border-line bg-surface'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="appTheme"
+                    value={value}
+                    checked={theme === value}
+                    onChange={() => updateTheme(value)}
+                    className="sr-only"
+                  />
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </label>
+              ))}
+            </fieldset>
+          </section>
+
+          <section className="card card-pad stack">
+            <div>
+              <h2 className="card-title cluster gap-2">
+                <History className="w-5 h-5" />
+                Recent Inspector History
+              </h2>
+              <p className="hint">How many recent inspectors to show on issues and vehicle detail.</p>
+            </div>
+            <fieldset className="cluster gap-3">
+              <legend className="sr-only">Recent inspectors to show</legend>
+              {([1, 3] as const).map(value => (
+                <label
+                  key={value}
+                  className={`flex flex-1 cursor-pointer items-center gap-2 rounded-xl border px-4 py-3 text-xs font-bold ${
+                    recentInspectorsDepth === value ? 'border-ink bg-surface-alt' : 'border-line bg-surface'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="recentInspectorsDepth"
+                    value={value}
+                    checked={recentInspectorsDepth === value}
+                    onChange={() => updateRecentInspectorsDepth(value)}
+                  />
+                  Last {value}
+                </label>
+              ))}
+            </fieldset>
+          </section>
 
       {/* ACCOUNT SECURITY — change own access passcode, synced to Firestore */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
@@ -863,36 +1013,48 @@ function SettingsPageContent() {
           </form>
         </div>
       </div>
+        </div>
+      )}
 
-      {/* DANGER ZONE — true managers only; a day-admin must not wipe the fleet */}
-      {isTrueManager && <div className="bg-white rounded-3xl border border-rose-200 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-rose-100 bg-rose-50/60 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-          <div>
-            <h2 className="text-sm font-extrabold text-rose-900">Danger Zone</h2>
-            <p className="text-[11px] text-rose-700/80">Irreversible. Affects the entire fleet, not just this device.</p>
+      {activeTab === 'danger' && isTrueManager && (
+      <div className="card overflow-hidden" data-status="critical">
+        <div className="card-head border-b border-line">
+          <div className="cluster gap-2">
+            <AlertTriangle className="w-4 h-4 text-critical shrink-0" />
+            <div>
+              <h2 className="card-title">Danger Zone</h2>
+              <p className="hint">Irreversible. Affects the entire fleet, not just this device.</p>
+            </div>
           </div>
         </div>
 
-        <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="card-pad spread flex-col sm:flex-row gap-4">
           <div className="min-w-0">
-            <h3 className="text-xs font-bold text-slate-900">Restore factory defaults</h3>
-            <p className="text-[11px] text-slate-500 mt-0.5 max-w-md">
+            <h3 className="text-xs font-bold">Restore factory defaults</h3>
+            <p className="hint mt-0.5 max-w-md">
               Replaces every vehicle, equipment item, inspection, issue, user, and access
               passcode with the built-in starter set. Anyone signed in will be locked out
               until a manager reissues codes.
             </p>
           </div>
           <button
+            type="button"
             onClick={handleFactoryReset}
             disabled={isResetting}
-            className="shrink-0 flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md shadow-rose-600/20 transition-colors disabled:opacity-50"
+            className="btn btn-sm shrink-0 cluster gap-1.5 bg-critical text-ink-inverse hover:opacity-90 disabled:opacity-50"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>{isResetting ? 'Resetting...' : 'Restore Defaults'}</span>
           </button>
         </div>
-      </div>}
+      </div>
+      )}
+
+      {activeTab === 'danger' && !isTrueManager && (
+        <div className="card card-pad">
+          <p className="hint">Factory reset is restricted to manager accounts.</p>
+        </div>
+      )}
 
       <AiImportModal isOpen={isAiImportOpen} onClose={() => setIsAiImportOpen(false)} />
 

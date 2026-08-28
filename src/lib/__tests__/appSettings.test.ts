@@ -46,24 +46,40 @@ describe('app settings and recent inspectors', () => {
     (dbService as any).initialized = true;
   });
 
-  it('defaults invalid or missing recent-inspector depth to three', () => {
-    expect(dbService.getAppSettings()).toEqual({ recentInspectorsDepth: 3 });
+  it('defaults invalid or missing recent-inspector depth to three and theme to light', () => {
+    expect(dbService.getAppSettings()).toEqual({ recentInspectorsDepth: 3, theme: 'light' });
 
     localStorage.setItem('sunny_app_settings', '{invalid json');
-    expect(dbService.getAppSettings()).toEqual({ recentInspectorsDepth: 3 });
+    expect(dbService.getAppSettings()).toEqual({ recentInspectorsDepth: 3, theme: 'light' });
 
     localStorage.setItem('sunny_app_settings', JSON.stringify({ recentInspectorsDepth: 7 }));
-    expect(dbService.getAppSettings()).toEqual({ recentInspectorsDepth: 3 });
+    expect(dbService.getAppSettings()).toEqual({ recentInspectorsDepth: 3, theme: 'light' });
+
+    localStorage.setItem('sunny_app_settings', JSON.stringify({ recentInspectorsDepth: 3, theme: 'bogus' }));
+    expect(dbService.getAppSettings()).toEqual({ recentInspectorsDepth: 3, theme: 'light' });
+  });
+
+  it('persists theme and defaults missing theme to light on read', async () => {
+    await dbService.saveAppSettings({ recentInspectorsDepth: 3, theme: 'dark' });
+    expect(dbService.getAppSettings()).toEqual({ recentInspectorsDepth: 3, theme: 'dark' });
+    expect(JSON.parse(localStorage.getItem('sunny_app_settings') || '{}')).toEqual({
+      recentInspectorsDepth: 3,
+      theme: 'dark',
+    });
+
+    localStorage.setItem('sunny_app_settings', JSON.stringify({ recentInspectorsDepth: 1 }));
+    expect(dbService.getAppSettings()).toEqual({ recentInspectorsDepth: 1, theme: 'light' });
   });
 
   it('saves normalized app settings and announces the update', async () => {
     const listener = vi.fn();
     window.addEventListener('sunny_db_update', listener);
 
-    await dbService.saveAppSettings({ recentInspectorsDepth: 1 });
+    await dbService.saveAppSettings({ recentInspectorsDepth: 1, theme: 'light' });
 
     expect(JSON.parse(localStorage.getItem('sunny_app_settings') || '{}')).toEqual({
       recentInspectorsDepth: 1,
+      theme: 'light',
     });
     expect(listener).toHaveBeenCalledOnce();
     window.removeEventListener('sunny_db_update', listener);
