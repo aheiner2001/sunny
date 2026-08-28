@@ -3,16 +3,22 @@
 **Sunny Fleet Accountability** — Next.js 14 App Router (static export, `output: 'export'`), TypeScript, Tailwind. Fleet vehicle/equipment inspection tracking with QR scanning. Data lives in `localStorage` with optional Firestore sync via a single `dbService` singleton.
 
 ## Layout / Shell UI
-- `src/app/layout.tsx` — Root layout: `AuthProvider`, desktop sidebar + mobile drawer, `Header`, floating "Scan QR" button, and the global `QRScannerModal`.
-- `src/components/Header.tsx` — Sticky top bar: mobile menu toggle, page title, demo-data reset, notification bell (open issues), and the user/role-switcher dropdown.
-- `src/components/Sidebar.tsx` — Primary nav with `NAV_ITEMS` list and `managerOnly` role gating; highlights the active route via `usePathname`.
+- `src/app/layout.tsx` — Root layout: `AuthProvider`, `ThemeInit`, desktop sidebar + mobile drawer, `Header`, floating "Scan QR" button, and the global `QRScannerModal`.
+- `src/components/Header.tsx` — Sticky top bar: mobile menu toggle, page title via `getPageTitle()`, demo-data reset, notification bell (open issues), and the user/role-switcher dropdown.
+- `src/components/Sidebar.tsx` — Primary nav from `NAV_ITEMS` (`src/lib/navItems.ts`) with `managerOnly` / `employeeOnly` role gating; highlights the active route via `usePathname`.
+- `src/components/ThemeInit.tsx` — On mount, reads `AppSettings.theme` and calls `applyAppTheme()` so dark mode applies before paint.
+- `src/lib/theme.ts` — `applyAppTheme()` sets `document.documentElement.dataset.theme` (`light` | `dark`).
+- `src/lib/navItems.ts` — Shared `NAV_ITEMS` catalog (label, href, icon, role flags) for sidebar and title resolution.
+- `src/lib/pageTitles.ts` — `getPageTitle(pathname)` and `PAGE_TITLES` overrides; derives labels from `NAV_ITEMS`.
+- `src/lib/roleHome.ts` — `getHomePath(role)` → `/home` (employee) or `/dashboard` (manager).
 - `src/components/StatusBadges.tsx` — Colored pill badges for inspection, issue, vehicle, and equipment statuses.
 - `src/components/ManagerOnly.tsx` — URL-level role guard wrapping every manager page; `requireTrueManager` excludes temporary admins from account control.
-- `src/app/globals.css` — Tailwind layers plus global base styles and animation utilities.
+- `src/app/globals.css` — Tailwind layers plus global base styles, `[data-theme="dark"]` tokens, and animation utilities.
 
 ## Pages / Routes
-- `src/app/page.tsx` — Index route; redirects into `/dashboard`.
-- `src/app/dashboard/page.tsx` — KPI tiles and recent activity aggregated from vehicles, inspections, and issues.
+- `src/app/page.tsx` + `HomeRedirect.tsx` — Index route; role-aware redirect via `getHomePath()` → `/home` or `/dashboard`.
+- `src/app/home/page.tsx` — Employee scan-first home: prominent "Scan vehicle" CTA, open assigned fleet task, and recent personal inspections (`EmptyState` when none).
+- `src/app/dashboard/page.tsx` — KPI tiles, recent activity, and compact `InspectionCalendar` widget.
 - `src/app/vehicles/page.tsx` — Vehicle roster with create/edit/delete, equipment counts, and QR code access (manager).
 - `src/app/vehicles/detail/page.tsx` + `VehicleDetailClient.tsx` — Single-vehicle view (`?id=`/QR lookup): assigned equipment, shop transfers, inspection and issue history.
 - `src/app/inspections/page.tsx` — Completed inspection log with filtering, detail expansion, and delete.
@@ -22,13 +28,18 @@
 - `src/app/equipment/scan/page.tsx` + `EquipmentScanClient.tsx` — Equipment QR scan: identify an item and transfer quantities between shop and vehicles.
 - `src/app/issues/page.tsx` — Reported issue queue with status tracking, auto/overridden issue types, and stock quick actions (Update Stock / Remove from Van); deep-linkable via `?issue=`.
 - `src/app/employees/page.tsx` — User management (create/edit/delete), access-passcode assignment with reveal/copy, and per-employee inspection and issue stats.
-- `src/app/calendar/page.tsx` — Month calendar of inspections and issues by date.
+- `src/app/calendar/page.tsx` — Full-month `InspectionCalendar` of inspections and issues by date.
 - `src/app/reports/page.tsx` — Report generation with persisted `ReportSettings`.
-- `src/app/settings/page.tsx` — Manager-gated admin console: checklist categories/questions, equipment options, fleet tasks, recent-inspectors depth (1 or 3), and the danger zone factory reset.
+- `src/app/settings/page.tsx` — Manager-gated admin console: checklist categories/questions, equipment options, fleet tasks, app theme (light/dark), recent-inspectors depth (1 or 3), and the danger zone factory reset.
 - `src/app/not-found.tsx` + `src/components/NotFoundRedirect.tsx` — 404 handler that recovers deep links under static export.
 - `src/components/SPARedirectHandler.tsx` — Restores the intended path after the `404.html` redirect trick used by GitHub Pages hosting.
 
 ## QR / Modals / Shared Components
+- `src/components/PageHeader.tsx` — Reusable page title block: `title`, optional `subtitle`, and trailing `actions` slot (`.page-head` layout).
+- `src/components/ConfirmModal.tsx` — Generic confirm/cancel dialog; `variant: 'danger'` for destructive actions.
+- `src/components/QuantityModal.tsx` — Numeric input modal for stock/assignment qty changes (uses `parseQuantityInput` from `src/lib/quantityModal.ts`).
+- `src/components/EmptyState.tsx` — Centered empty-list placeholder: icon, title, body copy, optional action.
+- `src/components/InspectionCalendar.tsx` — Month grid marking inspection/issue days; `compact` mode for dashboard embed; optional `onDayClick`.
 - `src/components/QRScannerModal.tsx` — Global camera scanner (`html5-qrcode`) that resolves a scanned code to a vehicle and navigates.
 - `src/components/QRCodeDisplay.tsx` — Renders/prints/downloads a vehicle QR code.
 - `src/components/EquipmentQRCodeDisplay.tsx` — Same for equipment items.
@@ -39,7 +50,7 @@
 
 ## State / Data / Services
 - `src/context/AuthContext.tsx` — `AuthProvider` + `useAuth()`: current user, role, `switchUser`, and `availableUsers` (demo RBAC switching).
-- `src/lib/db.ts` — The core `dbService` singleton: all vehicle/equipment/inspection/issue/user/checklist reads and writes, `AppSettings` (`recentInspectorsDepth`), `getRecentInspectors()`, stock issue resolution (`resolveStockIssue`), `localStorage` persistence, Firestore sync, seeding, and the `sunny_db_update` change event.
+- `src/lib/db.ts` — The core `dbService` singleton: all vehicle/equipment/inspection/issue/user/checklist reads and writes, `AppSettings` (`recentInspectorsDepth`, `theme`), `getRecentInspectors()`, stock issue resolution (`resolveStockIssue`), `localStorage` persistence, Firestore sync, seeding, and the `sunny_db_update` change event.
 - `src/lib/issueClassification.ts` — Auto-classifies issues into `IssueType` (`stock_low_inventory`, `equipment_replacement`, `needs_repair`); overridable in the issues UI.
 - `src/lib/__tests__/inventory.test.ts` — Vitest: return-to-shop, multi-qty assign, catalog delete cascade, vehicle delete, `resolveStockIssue`.
 - `src/lib/__tests__/issueClassification.test.ts` — Vitest: issue type detection heuristics.
