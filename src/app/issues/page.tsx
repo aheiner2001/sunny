@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  AlertTriangle, 
-  Search, 
+import {
+  AlertTriangle,
+  Search,
   CheckCircle2,
   PackageCheck,
-  PackageMinus
+  PackageMinus,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Issue, IssueType } from '@/types';
@@ -14,12 +14,19 @@ import { IssueTimeline } from '@/components/IssueTimeline';
 import { ManagerOnly } from '@/components/ManagerOnly';
 import { useAuth } from '@/context/AuthContext';
 import { RecentInspectors } from '@/components/RecentInspectors';
+import { PageHeader } from '@/components/PageHeader';
+import { ConfirmModal } from '@/components/ConfirmModal';
+import { QuantityModal } from '@/components/QuantityModal';
+import { EmptyState } from '@/components/EmptyState';
+import { parseQuantityInput } from '@/lib/quantityModal';
 
 const ISSUE_TYPES: Array<{ value: IssueType; label: string }> = [
   { value: 'stock_low_inventory', label: 'Stock / Low Inventory' },
   { value: 'equipment_replacement', label: 'Equipment Replacement' },
   { value: 'needs_repair', label: 'Needs Repair' },
 ];
+
+const STATUS_FILTERS = ['all', 'open', 'needs_repair', 'being_repaired', 'fixed'] as const;
 
 export default function IssuesPage() {
   return (
@@ -37,6 +44,11 @@ function IssuesPageContent() {
   const [vehicleFilter, setVehicleFilter] = useState<string>('all');
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [pendingAction, setPendingAction] = useState<'update_stock' | 'remove_from_van' | null>(null);
+  const [confirmRemoveIssue, setConfirmRemoveIssue] = useState<Issue | null>(null);
+  const [quantityModal, setQuantityModal] = useState<{
+    action: 'update_stock' | 'remove_from_van';
+    issue: Issue;
+  } | null>(null);
 
   const loadData = () => {
     setIssues(dbService.getIssues());
@@ -64,6 +76,8 @@ function IssuesPageContent() {
     name: user?.name || 'Manager',
   };
 
+  const openIssuesCount = issues.filter(i => i.status !== 'fixed').length;
+
   const handleTypeChange = (issue: Issue, type: IssueType) => {
     try {
       const updated = dbService.updateIssueType(issue.id, type, managerIdentity);
@@ -74,39 +88,14 @@ function IssuesPageContent() {
     }
   };
 
-  const handleStockAction = async (
+  const submitStockAction = async (
     issue: Issue,
     action: 'update_stock' | 'remove_from_van',
+    quantity: number | undefined,
   ) => {
     if (!issue.equipmentId) {
       alert('This issue has no linked equipment; update inventory manually.');
       return;
-    }
-
-    let quantity: number | undefined;
-    if (action === 'update_stock') {
-      const response = window.prompt(
-        'Enter the actual quantity currently on the van:',
-        issue.reportedQuantity == null ? '' : String(issue.reportedQuantity),
-      );
-      if (response === null) return;
-      if (!response.trim()) return;
-      const qty = Number(response);
-      if (!Number.isInteger(qty) || qty < 0) {
-        alert('Quantity must be a whole number greater than or equal to 0.');
-        return;
-      }
-      quantity = qty;
-    }
-
-    if (action === 'remove_from_van') {
-      if (!window.confirm('Return this equipment from the van to shop inventory?')) return;
-      const response = window.prompt(
-        'Quantity to remove (leave blank to remove everything assigned to this van):',
-        '',
-      );
-      if (response === null) return;
-      if (response.trim()) quantity = Number(response);
     }
 
     try {
@@ -124,6 +113,22 @@ function IssuesPageContent() {
     } finally {
       setPendingAction(null);
     }
+  };
+
+  const closeQuantityModal = () => setQuantityModal(null);
+
+  const handleUpdateQuantityConfirm = (qty: number) => {
+    if (!quantityModal || quantityModal.action !== 'update_stock') return;
+    const { issue } = quantityModal;
+    closeQuantityModal();
+    void submitStockAction(issue, 'update_stock', qty);
+  };
+
+  const handleRemoveQuantityConfirm = (qty: number | undefined) => {
+    if (!quantityModal || quantityModal.action !== 'remove_from_van') return;
+    const { issue } = quantityModal;
+    closeQuantityModal();
+    void submitStockAction(issue, 'remove_from_van', qty);
   };
 
   const activeIssues = (statusFilter === 'fixed'
@@ -153,159 +158,287 @@ function IssuesPageContent() {
       ?.quantity ?? issue.reportedQuantity ?? 0;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-            {statusFilter === 'fixed' ? 'Resolved Issue History' : 'Active Equipment Issues'}
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Trace problems back to origin, update equipment repair stages, and audit immutable resolution history.
-          </p>
-        </div>
+    <div className="page">
+      <PageHeader
+        title={statusFilter === 'fixed' ? 'Resolved Issue History' : 'Active Equipment Issues'}
+        subtitle="Trace problems, update stock, and audit resolution history."
+        actions={
+          <span className="badge" data-status="flagged">
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+            {openIssuesCount} currently open
+          </span>
+        }
+      />
 
-        <div className="flex items-center gap-2">
-          <div className="bg-amber-50 border border-amber-200 px-3.5 py-1.5 rounded-xl text-xs font-bold text-amber-800 flex items-center gap-1.5">
-            <AlertTriangle className="w-4 h-4 text-amber-600" />
-            <span>{issues.filter(i => i.status !== 'fixed').length} Currently Open</span>
+      <div className="card card-pad">
+        <div className="spread flex-col md:flex-row gap-3">
+          <div className="field w-full md:max-w-xs">
+            <label className="label sr-only" htmlFor="issues-search">
+              Search issues
+            </label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" aria-hidden />
+              <input
+                id="issues-search"
+                type="search"
+                placeholder="Search equipment, problem, van, reporter..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="input pl-9"
+              />
+            </div>
+          </div>
+
+          <div className="cluster w-full md:w-auto md:justify-end">
+            {STATUS_FILTERS.map((st) => (
+              <button
+                key={st}
+                type="button"
+                onClick={() => setStatusFilter(st)}
+                className={`btn btn-sm capitalize ${statusFilter === st ? 'btn-primary' : 'btn-secondary'}`}
+              >
+                {st === 'all' ? 'active' : st === 'fixed' ? 'resolved history' : st.replace('_', ' ')}
+              </button>
+            ))}
+
+            <select
+              value={vehicleFilter}
+              onChange={(e) => setVehicleFilter(e.target.value)}
+              className="select btn-sm w-auto"
+              aria-label="Filter by vehicle"
+            >
+              <option value="all">All Vehicles</option>
+              {vehicles.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.vehicleNumber}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
 
-      {/* Filters Bar */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm flex flex-col md:flex-row gap-3 items-center justify-between">
-        <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search equipment, problem, van, reporter..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-          />
-        </div>
+      <div className="stack">
+        {filteredIssues.map((issue) => {
+          const held = getHeldQuantity(issue);
+          const required = issue.requiredQuantity;
+          const isLowStock = required != null && held < required;
 
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          {/* Status filter tabs */}
-          {['all', 'open', 'needs_repair', 'being_repaired', 'fixed'].map((st) => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold capitalize transition-all ${
-                statusFilter === st
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          return (
+            <div
+              key={issue.id}
+              id={`issue-${issue.id}`}
+              onClick={() => setSelectedIssue(issue)}
+              className={`cursor-pointer rounded-[var(--radius-lg)] transition-shadow ${
+                selectedIssue?.id === issue.id ? 'ring-2 ring-ink ring-offset-2 ring-offset-[var(--bg)]' : ''
               }`}
             >
-              {st === 'all' ? 'active' : st === 'fixed' ? 'resolved history' : st.replace('_', ' ')}
-            </button>
-          ))}
-
-          {/* Vehicle Dropdown */}
-          <select
-            value={vehicleFilter}
-            onChange={(e) => setVehicleFilter(e.target.value)}
-            className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500"
-          >
-            <option value="all">All Vehicles</option>
-            {vehicles.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.vehicleNumber}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Main Issue Cards with Built-in Timeline */}
-      <div className="space-y-6">
-        {filteredIssues.map((issue) => (
-          <div
-            key={issue.id}
-            id={`issue-${issue.id}`}
-            onClick={() => setSelectedIssue(issue)}
-            className={`rounded-3xl transition-shadow ${
-              selectedIssue?.id === issue.id ? 'ring-2 ring-sky-500 ring-offset-2' : ''
-            }`}
-          >
-            <IssueTimeline issue={issue} onStatusUpdated={() => loadData()} />
-            {selectedIssue?.id === issue.id && (
-              <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                  <div className="w-full lg:max-w-xs">
-                    <label
-                      htmlFor={`issue-type-${issue.id}`}
-                      className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500"
-                    >
-                      Issue Type
-                    </label>
-                    <select
-                      id={`issue-type-${issue.id}`}
-                      value={issue.type || 'needs_repair'}
-                      onChange={(event) => handleTypeChange(issue, event.target.value as IssueType)}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    >
-                      {ISSUE_TYPES.map((type) => (
-                        <option key={type.value} value={type.value}>
-                          {type.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {issue.type === 'stock_low_inventory' && issue.status !== 'fixed' && (
-                    <div className="flex flex-col gap-2">
-                      {issue.requiredQuantity != null && (
-                        <div
-                          className={`rounded-xl border px-3 py-2 text-xs font-bold ${
-                            getHeldQuantity(issue) < issue.requiredQuantity
-                              ? 'border-rose-200 bg-rose-50 text-rose-700'
-                              : 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                          }`}
-                        >
-                          Held {getHeldQuantity(issue)} / Required {issue.requiredQuantity}
-                          {getHeldQuantity(issue) < issue.requiredQuantity && ' — Low stock'}
-                        </div>
-                      )}
-                      <div className="flex flex-col gap-2 sm:flex-row">
-                      <button
-                        type="button"
-                        disabled={pendingAction !== null}
-                        onClick={() => handleStockAction(issue, 'update_stock')}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-sky-700 disabled:opacity-50"
+              <IssueTimeline issue={issue} onStatusUpdated={() => loadData()} />
+              {selectedIssue?.id === issue.id && (
+                <div className="card card-pad mt-3">
+                  <div className="spread flex-col items-stretch gap-4 lg:flex-row lg:items-end">
+                    <div className="field w-full lg:max-w-xs">
+                      <label htmlFor={`issue-type-${issue.id}`} className="label">
+                        Issue Type
+                      </label>
+                      <select
+                        id={`issue-type-${issue.id}`}
+                        value={issue.type || 'needs_repair'}
+                        onChange={(event) => {
+                          event.stopPropagation();
+                          handleTypeChange(issue, event.target.value as IssueType);
+                        }}
+                        onClick={(event) => event.stopPropagation()}
+                        className="select"
                       >
-                        <PackageCheck className="h-4 w-4" />
-                        {pendingAction === 'update_stock' ? 'Updating...' : 'Update Stock'}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={pendingAction !== null}
-                        onClick={() => handleStockAction(issue, 'remove_from_van')}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-bold text-rose-700 transition-colors hover:bg-rose-100 disabled:opacity-50"
-                      >
-                        <PackageMinus className="h-4 w-4" />
-                        {pendingAction === 'remove_from_van' ? 'Removing...' : 'Remove from Van'}
-                      </button>
-                      </div>
+                        {ISSUE_TYPES.map((type) => (
+                          <option key={type.value} value={type.value}>
+                            {type.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  )}
-                </div>
-                <div className="mt-4 border-t border-slate-100 pt-4">
+
+                    {issue.type === 'stock_low_inventory' && issue.status !== 'fixed' && (
+                      <div className="stack-tight w-full lg:w-auto">
+                        {required != null && (
+                          <div className="row rounded border border-line" data-status={isLowStock ? 'flagged' : 'ok'}>
+                            <span className="text-sm font-semibold">
+                              Held {held} / Required {required}
+                              {isLowStock ? ' — Low stock' : ''}
+                            </span>
+                          </div>
+                        )}
+                        <div className="cluster">
+                          <button
+                            type="button"
+                            disabled={pendingAction !== null}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setQuantityModal({ action: 'update_stock', issue });
+                            }}
+                            className="btn btn-primary btn-sm"
+                          >
+                            <PackageCheck className="h-4 w-4" aria-hidden />
+                            {pendingAction === 'update_stock' ? 'Updating...' : 'Update Stock'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={pendingAction !== null}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setConfirmRemoveIssue(issue);
+                            }}
+                            className="btn btn-danger btn-sm"
+                          >
+                            <PackageMinus className="h-4 w-4" aria-hidden />
+                            {pendingAction === 'remove_from_van' ? 'Removing...' : 'Remove from Van'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="divider mt-4 mb-4" />
                   <RecentInspectors vehicleId={selectedIssue.vehicleId} />
                 </div>
-              </div>
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          );
+        })}
 
         {filteredIssues.length === 0 && (
-          <div className="bg-white rounded-3xl p-12 text-center border border-slate-200">
-            <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-2" />
-            <h3 className="text-base font-bold text-slate-800">No issues found matching query</h3>
-            <p className="text-xs text-slate-400 mt-1">Try resetting search keywords or status filter.</p>
+          <div className="card card-pad">
+            <EmptyState
+              icon={<CheckCircle2 className="h-12 w-12 text-[var(--ok)]" aria-hidden />}
+              title="No issues found matching query"
+            >
+              Try resetting search keywords or status filter.
+            </EmptyState>
           </div>
         )}
+      </div>
+
+      <ConfirmModal
+        open={confirmRemoveIssue !== null}
+        title="Return equipment to shop?"
+        message="Return this equipment from the van to shop inventory?"
+        confirmLabel="Continue"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={() => {
+          if (!confirmRemoveIssue) return;
+          setQuantityModal({ action: 'remove_from_van', issue: confirmRemoveIssue });
+          setConfirmRemoveIssue(null);
+        }}
+        onCancel={() => setConfirmRemoveIssue(null)}
+      />
+
+      <QuantityModal
+        open={quantityModal?.action === 'update_stock'}
+        title="Update stock"
+        description="Enter the actual quantity currently on the van."
+        initialValue={quantityModal?.issue.reportedQuantity ?? 0}
+        min={0}
+        onConfirm={handleUpdateQuantityConfirm}
+        onCancel={closeQuantityModal}
+      />
+
+      <RemoveStockQuantityModal
+        open={quantityModal?.action === 'remove_from_van'}
+        onConfirm={handleRemoveQuantityConfirm}
+        onCancel={closeQuantityModal}
+      />
+    </div>
+  );
+}
+
+function RemoveStockQuantityModal({
+  open,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  onConfirm: (qty: number | undefined) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setValue('');
+      setError(null);
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = value.trim();
+    if (!trimmed) {
+      setError(null);
+      onConfirm(undefined);
+      return;
+    }
+    const result = parseQuantityInput(value, { min: 0 });
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setError(null);
+    onConfirm(result.value);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-ink/60 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onCancel}
+    >
+      <div
+        className="card card-pad max-w-md w-full"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="remove-quantity-modal-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="remove-quantity-modal-title" className="card-title mb-2">
+          Remove from van
+        </h2>
+        <p className="text-sm text-ink-muted mb-4">Leave blank to remove all</p>
+        <form onSubmit={handleSubmit} className="stack">
+          <div className="field">
+            <label className="label" htmlFor="remove-quantity-modal-input">
+              Quantity
+            </label>
+            <input
+              id="remove-quantity-modal-input"
+              type="number"
+              min={0}
+              value={value}
+              onChange={(e) => {
+                setValue(e.target.value);
+                if (error) setError(null);
+              }}
+              className="input"
+              aria-invalid={error ? true : undefined}
+              autoFocus
+            />
+            {error ? (
+              <p className="hint" data-status="critical">
+                {error}
+              </p>
+            ) : null}
+          </div>
+          <div className="cluster justify-end">
+            <button type="button" className="btn btn-secondary" onClick={onCancel}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary">
+              Confirm
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
