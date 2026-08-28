@@ -38,14 +38,14 @@ export default function RootLayout({
               {mobileMenuOpen && (
                 <div className="fixed inset-0 z-50 lg:hidden flex">
                   <div 
-                    className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
+                    className="fixed inset-0 bg-ink/60 backdrop-blur-sm"
                     onClick={() => setMobileMenuOpen(false)}
                   />
-                  <div className="relative bg-white w-72 h-full shadow-2xl flex flex-col justify-between z-10 animate-in slide-in-from-left duration-200">
+                  <div className="relative bg-surface w-72 h-full shadow-lg flex flex-col justify-between z-10 animate-in slide-in-from-left duration-200">
                     <div className="absolute top-4 right-4">
                       <button
                         onClick={() => setMobileMenuOpen(false)}
-                        className="p-1 rounded-full text-slate-400 hover:bg-slate-100"
+                        className="p-1 rounded-full text-ink-muted hover:bg-surface-sunk"
                       >
                         <X className="w-5 h-5" />
                       </button>
@@ -60,22 +60,20 @@ export default function RootLayout({
               {/* Main Content Area */}
               <div className="flex-1 flex flex-col min-w-0">
                 <Header onMobileMenuToggle={() => setMobileMenuOpen(true)} />
-                <main className="flex-1 p-4 sm:p-8 max-w-7xl w-full mx-auto pb-24 lg:pb-8">
+                <main className="flex-1 w-full max-w-[1400px] mx-auto px-[var(--gutter)] py-4 sm:py-8 pb-24 lg:pb-8">
                   {children}
                 </main>
               </div>
             </div>
 
             {/* Floating Mobile QR Scan Button */}
-            <div className="fixed bottom-6 right-6 lg:hidden z-40">
-              <button
-                onClick={() => setScannerOpen(true)}
-                className="btn btn-primary rounded-full px-5 shadow-panel border-2 border-white"
-              >
-                <QrCode className="w-5 h-5" />
-                <span>Scan QR</span>
-              </button>
-            </div>
+            <button
+              onClick={() => setScannerOpen(true)}
+              className="btn btn-primary flex items-center gap-2 px-5 py-3.5 rounded-full shadow-lg lg:hidden fixed bottom-6 right-6 z-40"
+            >
+              <QrCode className="w-5 h-5" />
+              <span>Scan QR</span>
+            </button>
 
             {/* QR Scanner Modal (global) */}
             <QRScannerModal

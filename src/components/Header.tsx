@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { getPageTitle } from '@/lib/pageTitles';
 import {
   Bell,
   ChevronDown,
@@ -19,6 +21,8 @@ import { getResolvedAvatarUrl } from '@/lib/avatarPresets';
 import { asset } from '@/lib/basePath';
 
 export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void }) {
+  const pathname = usePathname();
+  const pageTitle = getPageTitle(pathname || '/dashboard');
   const { user, switchUser, availableUsers, canSwitchUser, logout, managerGrantUntil } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notifMenuOpen, setNotifMenuOpen] = useState(false);
@@ -62,8 +66,8 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
           alt="Sunny logo"
           className="lg:hidden h-9 w-28 shrink-0 object-contain object-left"
         />
-        <div className="min-w-0 hidden lg:block">
-          <h1 className="page-title text-xl truncate">Dashboard</h1>
+        <div className="min-w-0 flex-1">
+          <h1 className="page-title text-xl truncate">{pageTitle}</h1>
         </div>
       </div>
 
