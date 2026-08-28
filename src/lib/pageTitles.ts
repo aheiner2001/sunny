@@ -1,4 +1,4 @@
-import { NAV_ITEMS } from '@/components/Sidebar';
+import { NAV_ITEMS } from '@/lib/navItems';
 
 export const PAGE_TITLES: Record<string, string> = {
   '/home': 'Home',

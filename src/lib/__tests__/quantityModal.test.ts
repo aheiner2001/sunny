@@ -16,4 +16,9 @@ describe('parseQuantityInput', () => {
     expect(parseQuantityInput('1.5').ok).toBe(false);
     expect(parseQuantityInput('abc').ok).toBe(false);
   });
+
+  it('accepts blank when allowEmpty is true', () => {
+    expect(parseQuantityInput('', { allowEmpty: true })).toEqual({ ok: true, value: 0 });
+    expect(parseQuantityInput('   ', { allowEmpty: true })).toEqual({ ok: true, value: 0 });
+  });
 });

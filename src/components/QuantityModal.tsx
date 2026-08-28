@@ -38,12 +38,7 @@ export function QuantityModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = value.trim();
-    if (allowEmpty && !trimmed) {
-      onConfirm(0);
-      return;
-    }
-    const result = parseQuantityInput(value, { min, max });
+    const result = parseQuantityInput(value, { min, max, allowEmpty });
     if (!result.ok) {
       setError(result.error);
       return;
