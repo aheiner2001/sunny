@@ -978,22 +978,35 @@ class DataStore {
       });
     } else {
       equipment = equipment.flatMap(e => {
-        const hadOnlyThis =
-          (e.assignments || []).length > 0 &&
-          (e.assignments || []).every(a => a.vehicleId === vehicleId);
-        if (hadOnlyThis) {
+        const assignments = e.assignments || [];
+        const total = e.totalQuantity ?? 0;
+        const assignedTotal = assignments.reduce((sum, a) => sum + a.quantity, 0);
+        const shopBefore = Math.max(0, total - assignedTotal);
+        const qtyOnVehicle = assignments
+          .filter(a => a.vehicleId === vehicleId)
+          .reduce((sum, a) => sum + a.quantity, 0);
+        const onlyOnThisVehicle =
+          assignments.length > 0 &&
+          assignments.every(a => a.vehicleId === vehicleId);
+        const allUnitsOnThisVehicle = onlyOnThisVehicle && assignedTotal === total;
+        if (allUnitsOnThisVehicle) {
           deletedEquipmentIds.push(e.id);
           return [];
         }
-        if (!(e.assignments || []).some(a => a.vehicleId === vehicleId)) return [e];
-        const assignments = (e.assignments || []).filter(a => a.vehicleId !== vehicleId);
-        const total = e.totalQuantity ?? 0;
+        if (qtyOnVehicle === 0) return [e];
+        const nextAssignments = assignments.filter(a => a.vehicleId !== vehicleId);
+        const nextTotal =
+          shopBefore > 0 && onlyOnThisVehicle
+            ? Math.max(0, total - qtyOnVehicle)
+            : total;
+        const nextAssigned = nextAssignments.reduce((sum, a) => sum + a.quantity, 0);
         const updated = {
           ...e,
-          assignments,
-          vehicleId: assignments[0]?.vehicleId || null,
-          vehicleNumber: assignments[0]?.vehicleNumber || 'Unassigned',
-          availableQuantity: Math.max(0, total - assignments.reduce((sum, a) => sum + a.quantity, 0)),
+          totalQuantity: nextTotal,
+          assignments: nextAssignments,
+          vehicleId: nextAssignments[0]?.vehicleId || null,
+          vehicleNumber: nextAssignments[0]?.vehicleNumber || 'Unassigned',
+          availableQuantity: Math.max(0, nextTotal - nextAssigned),
         };
         modifiedEquipment.push(updated);
         return [updated];

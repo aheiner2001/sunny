@@ -183,6 +183,44 @@ describe('inventory sync', () => {
     );
   });
 
+  it('deleteVehicle delete_associated keeps catalog items with shop stock', async () => {
+    const bike = await dbService.createEquipment({
+      name: 'Bike',
+      kind: 'reusable',
+      totalQuantity: 7,
+      category: 'equipment',
+    });
+    await dbService.transferEquipmentQuantity(bike.id, 'van-test-1', 5, null);
+
+    let eq = dbService.getEquipmentItem(bike.id)!;
+    expect(eq.availableQuantity).toBe(2);
+    expect(eq.assignments?.find(a => a.vehicleId === 'van-test-1')?.quantity).toBe(5);
+
+    await dbService.deleteVehicle('van-test-1', { equipmentMode: 'delete_associated' });
+
+    eq = dbService.getEquipmentItem(bike.id)!;
+    expect(eq.totalQuantity).toBe(2);
+    expect(eq.availableQuantity).toBe(2);
+    expect(eq.assignments || []).toHaveLength(0);
+    expect(dbService.getEquipment()).toHaveLength(1);
+    expect(dbService.getGlobalInventorySummary().totalOwned).toBe(2);
+    expect(dbService.getVehicle('van-test-1')).toBeUndefined();
+  });
+
+  it('deleteVehicle delete_associated still removes items when every unit is on the deleted van', async () => {
+    const sole = await dbService.createEquipment({
+      name: 'Van-only item',
+      kind: 'reusable',
+      totalQuantity: 5,
+      category: 'equipment',
+    });
+    await dbService.transferEquipmentQuantity(sole.id, 'van-test-1', 5, null);
+
+    await dbService.deleteVehicle('van-test-1', { equipmentMode: 'delete_associated' });
+
+    expect(dbService.getEquipmentItem(sole.id)).toBeUndefined();
+  });
+
   it('deleteVehicle persists only modified surviving equipment to Firestore', async () => {
     const assigned = await dbService.createEquipment({
       name: 'Assigned Item',
