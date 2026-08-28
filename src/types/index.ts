@@ -198,7 +198,6 @@ export type IssueType =
 
 export interface AppSettings {
   recentInspectorsDepth: 1 | 3;
-  theme?: 'light' | 'dark';
 }
 
 export interface IssueStatusLog {

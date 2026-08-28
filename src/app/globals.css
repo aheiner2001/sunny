@@ -93,34 +93,6 @@
   --tap: 44px;            /* minimum touch target, gloves in a yard */
 }
 
-/* Opt-in dark palette. Not wired to a toggle yet — set data-theme="dark" on
-   <html> to activate. Token names are identical, so components need no changes. */
-[data-theme='dark'] {
-  --bg: #15181c;
-  --bg-sunk: #0f1115;
-  --surface: #1c2025;
-  --surface-alt: #22262b;
-  --surface-ink: #000000;
-
-  --ink: #eef1f4;
-  --ink-muted: #a3acb8;
-  --ink-faint: #78818d;
-  --ink-inverse: #15181c;
-
-  --line: #2c3239;
-  --line-strong: #3d444d;
-
-  --amber-text: #ffc978;
-  --amber-wash: #33260f;
-  --ok-wash: #10281d;
-  --critical-wash: #2e1416;
-  --info: #eef1f4;
-  --info-wash: #2c3239;
-  --idle-wash: #23272d;
-
-  --focus: var(--amber);
-}
-
 /* ==========================================================================
    Base
    ========================================================================== */

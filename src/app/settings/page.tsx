@@ -27,12 +27,8 @@ import {
   Lock,
   KeyRound,
   History,
-  Palette,
-  Sun,
-  Moon
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
-import { applyAppTheme } from '@/lib/theme';
 import { ChecklistQuestion, ChecklistCategoryConfig, QuestionType, ChecklistConfig, EquipmentOption, FleetTask } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { ManagerOnly } from '@/components/ManagerOnly';
@@ -60,7 +56,6 @@ function SettingsPageContent() {
   const { isTrueManager, user: currentUser } = useAuth();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<SettingsTab>('checklist');
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   // Passcode change form (own account)
   const [passcodeForm, setPasscodeForm] = useState({ current: '', next: '', confirm: '' });
@@ -124,18 +119,11 @@ function SettingsPageContent() {
     setTasks(dbService.getTasks());
     const settings = dbService.getAppSettings();
     setRecentInspectorsDepth(settings.recentInspectorsDepth);
-    setTheme(settings.theme ?? 'light');
   };
 
   const updateRecentInspectorsDepth = async (value: 1 | 3) => {
     setRecentInspectorsDepth(value);
-    await dbService.saveAppSettings({ recentInspectorsDepth: value, theme });
-  };
-
-  const updateTheme = async (value: 'light' | 'dark') => {
-    setTheme(value);
-    applyAppTheme(value);
-    await dbService.saveAppSettings({ recentInspectorsDepth, theme: value });
+    await dbService.saveAppSettings({ recentInspectorsDepth: value });
   };
 
   const saveEquipmentOption = async () => {
@@ -850,41 +838,6 @@ function SettingsPageContent() {
 
       {activeTab === 'appearance' && (
         <div className="stack">
-          <section className="card card-pad stack">
-            <div>
-              <h2 className="card-title cluster gap-2">
-                <Palette className="w-5 h-5" />
-                Theme
-              </h2>
-              <p className="hint">Choose light or dark appearance for the fleet dashboard.</p>
-            </div>
-            <fieldset className="cluster gap-3">
-              <legend className="sr-only">App theme</legend>
-              {([
-                { value: 'light' as const, label: 'Light', icon: Sun },
-                { value: 'dark' as const, label: 'Dark', icon: Moon },
-              ]).map(({ value, label, icon: Icon }) => (
-                <label
-                  key={value}
-                  className={`flex flex-1 cursor-pointer items-center gap-2 rounded-xl border px-4 py-3 text-xs font-bold ${
-                    theme === value ? 'border-ink bg-surface-alt' : 'border-line bg-surface'
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="appTheme"
-                    value={value}
-                    checked={theme === value}
-                    onChange={() => updateTheme(value)}
-                    className="sr-only"
-                  />
-                  <Icon className="w-4 h-4" />
-                  {label}
-                </label>
-              ))}
-            </fieldset>
-          </section>
-
           <section className="card card-pad stack">
             <div>
               <h2 className="card-title cluster gap-2">
