@@ -9,8 +9,6 @@ import {
   AlertTriangle,
   Users,
   ArrowRight,
-  ChevronLeft,
-  ChevronRight,
   Info,
   Clock,
   Wrench
@@ -18,6 +16,7 @@ import {
 import { dbService } from '@/lib/db';
 import { Vehicle, Inspection, Issue } from '@/types';
 import { InspectionStatusBadge, IssueStatusBadge, VehicleStatusBadge } from '@/components/StatusBadges';
+import { InspectionCalendar } from '@/components/InspectionCalendar';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -47,24 +46,6 @@ export default function DashboardPage() {
   const openIssuesCount = issues.filter(i => i.status !== 'fixed').length;
   const openIssues = issues.filter(i => i.status !== 'fixed');
   const vehiclesInUse = vehicles.filter(v => v.status === 'in_use');
-
-  // Mini Calendar Calculations
-  const daysInMonth = new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 0).getDate();
-  const startDayOffset = (new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth(), 1).getDay() + 6) % 7;
-  const calendarDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const viewingCurrentMonth =
-    currentMonthDate.getFullYear() === today.getFullYear() &&
-    currentMonthDate.getMonth() === today.getMonth();
-
-  // Check activity per day for calendar dots
-  const getDayStatus = (day: number) => {
-    const dayStr = `${currentMonthDate.getFullYear()}-${String(currentMonthDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const dayInspections = inspections.filter(i => i.dateString === dayStr);
-    const dayIssues = issues.filter(i => i.dateString === dayStr);
-    const hasInspection = dayInspections.length > 0;
-    const hasIssue = dayIssues.length > 0;
-    return { hasInspection, hasIssue };
-  };
 
   const inspectionStatusFor = (status: Inspection['status'] | null | undefined) =>
     status === 'passed' ? 'ok' : status === 'issues_found' ? 'flagged' : 'info';
@@ -201,79 +182,18 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Inspection Calendar */}
         <div
           onClick={() => router.push('/calendar')}
           className="card card-link card-pad flex flex-col cursor-pointer"
         >
-          <div className="spread pb-3 mb-2 border-b border-line">
-            <h2 className="card-title">Inspection calendar</h2>
-            <div className="cluster gap-1">
-              <span className="unit-tag">
-                {currentMonthDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-              </span>
-              <button
-                onClick={(e) => { e.stopPropagation(); setCurrentMonthDate(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() - 1, 1)); }}
-                className="btn btn-ghost btn-sm px-2"
-                aria-label="Previous month"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); setCurrentMonthDate(new Date(currentMonthDate.getFullYear(), currentMonthDate.getMonth() + 1, 1)); }}
-                className="btn btn-ghost btn-sm px-2"
-                aria-label="Next month"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-7 text-center py-1 eyebrow mb-0">
-            <span>Mon</span>
-            <span>Tue</span>
-            <span>Wed</span>
-            <span>Thu</span>
-            <span>Fri</span>
-            <span>Sat</span>
-            <span>Sun</span>
-          </div>
-
-          <div className="grid grid-cols-7 text-center text-sm gap-y-1.5 py-2" data-numeric>
-            {Array.from({ length: startDayOffset }).map((_, i) => <span key={`empty-${i}`} />)}
-            {calendarDays.map(day => {
-              const info = getDayStatus(day);
-              const isToday = viewingCurrentMonth && day === today.getDate();
-              return (
-                <span
-                  key={day}
-                  className={`relative py-1 ${isToday ? 'font-bold text-ink ring-1 ring-ink rounded' : 'text-ink-muted'}`}
-                >
-                  {day}
-                  {(info.hasIssue || info.hasInspection) && (
-                    <span
-                      className="dot absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1"
-                      data-status={info.hasIssue ? 'flagged' : 'ok'}
-                    />
-                  )}
-                </span>
-              );
-            })}
-          </div>
-
-          <div className="card-foot mt-auto text-2xs">
-            <span className="cluster gap-1.5">
-              <span className="dot w-2 h-2" data-status="ok" />
-              <span className="text-ink-muted">Inspections</span>
-            </span>
-            <span className="cluster gap-1.5">
-              <span className="dot w-2 h-2" data-status="flagged" />
-              <span className="text-ink-muted">Issues</span>
-            </span>
-            <span className="link-action">
-              Open full view <ArrowRight className="w-3 h-3" />
-            </span>
-          </div>
+          <InspectionCalendar
+            compact
+            inspections={inspections}
+            issues={issues}
+            monthDate={currentMonthDate}
+            onMonthChange={setCurrentMonthDate}
+            onDayClick={(d) => router.push(`/calendar?date=${d}`)}
+          />
         </div>
 
         {/* Open Issues */}

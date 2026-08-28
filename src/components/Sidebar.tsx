@@ -26,7 +26,11 @@ export function Sidebar() {
 
         {/* Nav links */}
         <nav className="p-4 space-y-1.5">
-          {NAV_ITEMS.filter(item => !item.managerOnly || role === 'manager').map((item) => {
+          {NAV_ITEMS.filter(item => {
+            if (item.managerOnly && role !== 'manager') return false;
+            if (item.employeeOnly && role === 'manager') return false;
+            return true;
+          }).map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
 
