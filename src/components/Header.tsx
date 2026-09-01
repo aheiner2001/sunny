@@ -156,7 +156,7 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
                 <div className="min-w-0 flex-1">
                   <p className="eyebrow mb-1">Active account</p>
                   <p className="text-sm font-display font-semibold truncate">{user?.name}</p>
-                  <p className="text-xs text-ink-muted truncate">{user?.email}</p>
+                  {user?.email && <p className="text-xs text-ink-muted truncate">{user?.email}</p>}
                   {managerGrantUntil && (
                     <p className="text-2xs font-semibold text-ink mt-1 flex items-center gap-1">
                       <Shield className="w-3 h-3" />

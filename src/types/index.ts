@@ -3,7 +3,7 @@ export type UserRole = 'employee' | 'manager';
 export interface User {
   id: string;
   name: string;
-  email: string;
+  email?: string;
   role: UserRole;
   status: 'active' | 'inactive';
   avatarUrl?: string;

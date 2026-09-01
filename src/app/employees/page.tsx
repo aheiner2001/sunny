@@ -163,8 +163,8 @@ function EmployeesPageContent() {
 
   const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim() || !formData.email.trim()) {
-      alert('Please provide name and email');
+    if (!formData.name.trim()) {
+      alert('Please provide a name');
       return;
     }
     const codeError = validatePasscode(formData.passcode);
@@ -204,7 +204,7 @@ function EmployeesPageContent() {
       const updated = await dbService.updateUser({
         ...selectedUser,
         name: formData.name.trim(),
-        email: formData.email.trim(),
+        email: formData.email.trim() || undefined,
         role: formData.role,
         status: formData.status,
         avatarUrl: formData.avatarUrl.trim() || selectedUser.avatarUrl,
@@ -649,11 +649,10 @@ function EmployeesPageContent() {
 
               <div>
                 <label className="block text-xs font-bold text-ink-muted uppercase tracking-wider mb-1">
-                  Email Address
+                  Email Address <span className="text-ink-faint">(optional)</span>
                 </label>
                 <input
                   type="email"
-                  required
                   placeholder="e.g. alex@sunnyfleet.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -774,11 +773,10 @@ function EmployeesPageContent() {
 
               <div>
                 <label className="block text-xs font-bold text-ink-muted uppercase tracking-wider mb-1">
-                  Email Address
+                  Email Address <span className="text-ink-faint">(optional)</span>
                 </label>
                 <input
                   type="email"
-                  required
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2  focus:outline-none"

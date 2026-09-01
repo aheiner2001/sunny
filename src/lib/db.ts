@@ -628,7 +628,7 @@ class DataStore {
 
   public async createUser(userData: {
     name: string;
-    email: string;
+    email?: string;
     role: UserRole;
     status?: 'active' | 'inactive';
     avatarUrl?: string;
@@ -648,7 +648,7 @@ class DataStore {
     const newUser: User = {
       id: `user-${timestamp}`,
       name: userData.name.trim(),
-      email: userData.email.trim().toLowerCase(),
+      email: userData.email?.trim().toLowerCase(),
       role: userData.role,
       status: userData.status || 'active',
       avatarUrl: userData.avatarUrl?.trim() || undefined,

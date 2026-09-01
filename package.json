@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "agy": "^0.0.0",
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "firebase": "^10.13.0",

@@ -1,0 +1,57 @@
+{
+  "name": "Sunny Fleet Accountability",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:20-bookworm",
+  
+  // Automatically install dependencies when container starts
+  "postCreateCommand": "npm install",
+  
+  // Forward the Next.js development server port
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "Next.js Dev Server",
+      "onAutoForward": "openBrowser"
+    }
+  },
+
+  // Install useful development tools and CLI features
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+
+  // Configure VS Code extensions and settings
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",              // Next.js/TypeScript linting
+        "esbenp.prettier-vscode",              // Code formatter
+        "GitHub.copilot",                      // GitHub Copilot AI
+        "GitHub.copilot-chat",                 // Copilot Chat
+        "bradlc.vscode-tailwindcss",           // Tailwind CSS IntelliSense
+        "ms-playwright.playwright"             // For optional testing
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "[typescript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[javascript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": true
+        }
+      }
+    }
+  },
+
+  // Optional: Uncomment the line below to auto-start the dev server on container start
+  // "postStartCommand": "npm run dev",
+  
+  // Set environment variables for development
+  "remoteEnv": {
+    "NODE_ENV": "development"
+  }
+}
