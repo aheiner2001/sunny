@@ -1985,6 +1985,175 @@ class DataStore {
     return { inspection: newInspection, newIssues };
   }
 
+  /**
+   * Reject an inspection and provide feedback for corrections.
+   * Sets status to 'rejected' and stores manager feedback and flagged questions.
+   */
+  public async rejectInspection(
+    inspectionId: string,
+    rejectedBy: string,
+    reason: string,
+    flaggedQuestionIds: string[]
+  ): Promise<Inspection> {
+    if (!this.isClient()) throw new Error('Client only');
+    this.init();
+
+    const inspections = this.getInspections();
+    const inspection = inspections.find(i => i.id === inspectionId);
+    if (!inspection) throw new Error('Inspection not found');
+
+    const nowIso = new Date().toISOString();
+    const updatedInspection: Inspection = {
+      ...inspection,
+      status: 'rejected',
+      rejectionReason: reason,
+      rejectedBy,
+      rejectedAt: nowIso,
+      flaggedForCorrection: flaggedQuestionIds
+    };
+
+    const updated = inspections.map(i => (i.id === inspectionId ? updatedInspection : i));
+    localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(updated));
+
+    // Sync to Firestore
+    if (db) {
+      await setDoc(
+        doc(db, 'inspections', inspectionId),
+        sanitizeForFirestore(updatedInspection),
+        { merge: true }
+      ).catch((e) => console.warn('Firestore rejection sync error:', e));
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return updatedInspection;
+  }
+
+  /**
+   * Resubmit a rejected inspection with corrections.
+   * Creates a new inspection linked to the original, preserving the correction history.
+   */
+  public async resubmitInspection(
+    originalInspectionId: string,
+    updatedResponses: InspectionResponse[],
+    updatedNotes?: string
+  ): Promise<{ inspection: Inspection; newIssues: Issue[] }> {
+    if (!this.isClient()) throw new Error('Client only');
+    this.init();
+
+    const original = this.getInspections().find(i => i.id === originalInspectionId);
+    if (!original) throw new Error('Original inspection not found');
+
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const dateStr = nowIso.split('T')[0];
+    const newInspectionId = `insp-${Date.now()}-resubmit`;
+
+    // Identify flagged items in updated responses
+    const newIssues: Issue[] = [];
+    const issueIds: string[] = [];
+
+    updatedResponses.forEach((response, idx) => {
+      if (response.isFlagged) {
+        const issueId = `issue-${Date.now()}-${idx}`;
+        issueIds.push(issueId);
+
+        const initialLog: IssueStatusLog = {
+          id: `log-${Date.now()}-${idx}`,
+          issueId,
+          changedById: original.userId || 'anon',
+          changedByName: original.userName || 'Inspector',
+          oldStatus: 'created',
+          newStatus: 'open',
+          notes: `Flagged in resubmission of inspection ${original.id}`,
+          timestamp: nowIso
+        };
+
+        const newIssue: Issue = {
+          id: issueId,
+          vehicleId: original.vehicleId,
+          vehicleNumber: original.vehicleNumber,
+          equipmentId: response.equipmentId || null,
+          equipmentName: response.equipmentName || 'Vehicle Equipment',
+          reportedById: original.userId || 'anon',
+          reportedByName: original.userName || 'Inspector',
+          reportedAt: nowIso,
+          dateString: dateStr,
+          inspectionId: newInspectionId,
+          title: response.questionText,
+          description: response.notes || '',
+          type: 'needs_repair',
+          status: 'open',
+          resolvedAt: null,
+          resolvedById: null,
+          resolvedByName: null,
+          resolutionNotes: null,
+          statusLogs: [initialLog]
+        };
+
+        newIssues.push(newIssue);
+
+        if (db) {
+          setDoc(doc(db, 'issues', issueId), sanitizeForFirestore(newIssue)).catch((e) =>
+            console.warn('Firestore issue write error:', e)
+          );
+        }
+      }
+    });
+
+    const status: Inspection['status'] = newIssues.length > 0 ? 'issues_found' : 'passed';
+
+    const cleanResponses: InspectionResponse[] = updatedResponses.map(r => ({
+      questionId: r.questionId || '',
+      questionText: r.questionText || '',
+      category: r.category || 'general',
+      value: r.value !== undefined ? r.value : 'pass',
+      isFlagged: Boolean(r.isFlagged),
+      notes: r.notes || null as any,
+      equipmentId: r.equipmentId || null as any,
+      equipmentName: r.equipmentName || null as any
+    }));
+
+    const resubmittedInspection: Inspection = {
+      id: newInspectionId,
+      vehicleId: original.vehicleId,
+      vehicleNumber: original.vehicleNumber,
+      userId: original.userId,
+      userName: original.userName,
+      userEmail: original.userEmail,
+      status,
+      startedAt: original.startedAt,
+      submittedAt: nowIso,
+      dateString: dateStr,
+      responses: cleanResponses,
+      issueIds,
+      generalNotes: updatedNotes || original.generalNotes || null as any,
+      taskId: original.taskId || null,
+      scheduleLabel: original.scheduleLabel || null,
+      scheduledAt: original.scheduledAt || null,
+      previousSubmissionId: originalInspectionId
+    };
+
+    // Save new inspection locally
+    const allInspections = [resubmittedInspection, ...this.getInspections()];
+    localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(allInspections));
+
+    // Save new issues locally
+    if (newIssues.length > 0) {
+      const allIssues = [...newIssues, ...this.getIssues()];
+      localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(allIssues));
+    }
+
+    // Sync to Firestore
+    if (db) {
+      setDoc(doc(db, 'inspections', newInspectionId), sanitizeForFirestore(resubmittedInspection)).catch((e) =>
+        console.warn('Firestore inspection write error:', e)
+      );
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return { inspection: resubmittedInspection, newIssues };
+  }
+
   public async deleteInspection(inspectionId: string): Promise<void> {
     if (!this.isClient()) return;
     this.init();

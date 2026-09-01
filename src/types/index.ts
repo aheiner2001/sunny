@@ -31,7 +31,7 @@ export interface AuthSession {
 }
 
 export type VehicleStatus = 'active' | 'in_use' | 'maintenance' | 'inactive';
-export type InspectionStatus = 'passed' | 'issues_found' | 'in_progress';
+export type InspectionStatus = 'passed' | 'issues_found' | 'in_progress' | 'submitted' | 'rejected' | 'approved';
 
 export interface Vehicle {
   id: string;
@@ -155,6 +155,14 @@ export interface Inspection {
   scheduleLabel?: string | null;
   scheduledAt?: string | null;
   taskId?: string | null;
+  /** For rejection workflow: reason manager provided for rejection */
+  rejectionReason?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  /** Questions flagged for correction in rejection */
+  flaggedForCorrection?: string[];
+  /** Link to previous submission if this is a resubmit */
+  previousSubmissionId?: string;
 }
 
 export type TaskStatus = 'open' | 'completed';
