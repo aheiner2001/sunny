@@ -120,7 +120,7 @@ function EmployeesPageContent() {
 
   const filteredEmployees = employees.filter(e =>
     e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (e.email && e.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
     e.role.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -152,7 +152,7 @@ function EmployeesPageContent() {
   const handleOpenEdit = (target: User) => {
     setFormData({
       name: target.name,
-      email: target.email,
+      email: target.email || '',
       role: target.role,
       status: target.status,
       avatarUrl: target.avatarUrl || '',

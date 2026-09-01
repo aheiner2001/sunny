@@ -13,12 +13,14 @@ import {
   Send,
   RotateCcw,
   Check,
+  CheckCheck,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { Vehicle, ChecklistQuestion, ChecklistCategoryConfig, InspectionResponse, FleetTask } from '@/types';
 import { canSubmitInspection } from './inspectionValidation';
 import { RecentInspectors } from '@/components/RecentInspectors';
+import { RejectedInspectionBanner } from '@/components/RejectedInspectionBanner';
 
 export default function InspectClient() {
   const searchParams = useSearchParams();
@@ -38,6 +40,12 @@ export default function InspectClient() {
   const [submittedInspection, setSubmittedInspection] = useState<any | null>(null);
   const [tasks, setTasks] = useState<FleetTask[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState('');
+  
+  // Auto-save and draft recovery
+  const [isSaved, setIsSaved] = useState(false);
+  const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
+  const [showDraftRecovery, setShowDraftRecovery] = useState(false);
+  const [rejectedInspection, setRejectedInspection] = useState<any | null>(null);
 
   const loadData = async () => {
     if (!vehicleId) {
@@ -80,6 +88,77 @@ export default function InspectClient() {
     window.addEventListener('sunny_db_update', loadData);
     return () => window.removeEventListener('sunny_db_update', loadData);
   }, [vehicleId]);
+
+  // Draft recovery and rejection detection on mount
+  useEffect(() => {
+    if (!vehicleId || !user) return;
+
+    // Check for rejected inspection
+    const rejectedKey = `sunny_inspection_rejected_${vehicleId}_${user.id}`;
+    const rejectedData = localStorage.getItem(rejectedKey);
+    if (rejectedData) {
+      try {
+        const rejected = JSON.parse(rejectedData);
+        setRejectedInspection(rejected);
+        setShowDraftRecovery(true);
+        // Pre-fill form with rejected data
+        if (rejected.responses) {
+          const prefilledResponses: typeof responses = {};
+          rejected.responses.forEach((r: any) => {
+            prefilledResponses[r.questionId] = {
+              value: r.value,
+              isFlagged: r.isFlagged,
+              notes: r.notes
+            };
+          });
+          setResponses(prefilledResponses);
+        }
+        if (rejected.generalNotes) {
+          setGeneralNotes(rejected.generalNotes);
+        }
+      } catch (e) {
+        console.error('Error parsing rejected inspection:', e);
+      }
+    } else {
+      // Check for draft
+      const draftKey = `sunny_inspection_draft_${vehicleId}`;
+      const draftData = localStorage.getItem(draftKey);
+      if (draftData) {
+        setShowDraftRecovery(true);
+        try {
+          const draft = JSON.parse(draftData);
+          if (draft.responses) {
+            setResponses(draft.responses);
+          }
+          if (draft.generalNotes) {
+            setGeneralNotes(draft.generalNotes);
+          }
+        } catch (e) {
+          console.error('Error parsing draft:', e);
+        }
+      }
+    }
+  }, [vehicleId, user]);
+
+  // Auto-save every 30 seconds
+  useEffect(() => {
+    if (!vehicleId) return;
+
+    const interval = setInterval(() => {
+      const draftKey = `sunny_inspection_draft_${vehicleId}`;
+      const draft = {
+        responses,
+        generalNotes,
+        lastSaved: new Date().toISOString()
+      };
+      localStorage.setItem(draftKey, JSON.stringify(draft));
+      setIsSaved(true);
+      setLastSaveTime(new Date());
+      setTimeout(() => setIsSaved(false), 2000);
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [vehicleId, responses, generalNotes]);
 
   if (isLoading) {
     return (
@@ -208,7 +287,7 @@ export default function InspectClient() {
   });
   const canSubmit = allRequiredAnswered && !flaggedMissingNotes && !isSubmitting;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!allRequiredAnswered) {
@@ -244,36 +323,57 @@ export default function InspectClient() {
         };
       });
 
-      const flaggedList = Object.entries(flagIssues).map(([qId, issueData]) => {
-        const question = questions.find(q => q.id === qId);
-        const response = responses[qId];
-        const quantities = issueData.description.match(/\d+(?:\.\d+)?/g)?.map(Number) || [];
-        return {
-          equipmentId: question?.equipmentId || null,
-          equipmentName: question?.equipmentName || issueData.title || 'Equipment Item',
-          title: issueData.title || 'Flagged Issue',
-          description: issueData.description || '',
-          questionType: question?.type,
-          value: response?.value,
-          reportedQuantity: quantities.length >= 2 ? quantities[0] : null,
-          requiredQuantity: quantities.length >= 2 ? quantities[1] : null
-        };
-      });
+      // If resubmitting a rejected inspection
+      if (rejectedInspection) {
+        const result = await dbService.resubmitInspection(
+          rejectedInspection.id,
+          inspectionResponses,
+          generalNotes.trim() || undefined
+        );
+        
+        setSubmittedInspection(result);
+        
+        // Clear rejection and draft
+        const rejectedKey = `sunny_inspection_rejected_${vehicleId}_${user?.id}`;
+        localStorage.removeItem(rejectedKey);
+        const draftKey = `sunny_inspection_draft_${vehicleId}`;
+        localStorage.removeItem(draftKey);
+      } else {
+        const flaggedList = Object.entries(flagIssues).map(([qId, issueData]) => {
+          const question = questions.find(q => q.id === qId);
+          const response = responses[qId];
+          const quantities = issueData.description.match(/\d+(?:\.\d+)?/g)?.map(Number) || [];
+          return {
+            equipmentId: question?.equipmentId || null,
+            equipmentName: question?.equipmentName || issueData.title || 'Equipment Item',
+            title: issueData.title || 'Flagged Issue',
+            description: issueData.description || '',
+            questionType: question?.type,
+            value: response?.value,
+            reportedQuantity: quantities.length >= 2 ? quantities[0] : null,
+            requiredQuantity: quantities.length >= 2 ? quantities[1] : null
+          };
+        });
 
-      const result = dbService.submitInspection({
-        vehicleId: vehicle.id,
-        userId: user?.id || 'emp-anon',
-        userName: user?.name || 'Employee Operator',
-        userEmail: user?.email || 'employee@sunnyfleet.com',
-        responses: inspectionResponses,
-        flaggedIssues: flaggedList,
-        generalNotes: generalNotes.trim() || null,
-        taskId: selectedTaskId || null,
-        scheduleLabel: selectedTask?.scheduleLabel || null,
-        scheduledAt: selectedTask?.dueAt || null
-      });
+        const result = dbService.submitInspection({
+          vehicleId: vehicle.id,
+          userId: user?.id || 'emp-anon',
+          userName: user?.name || 'Employee Operator',
+          userEmail: user?.email || 'employee@sunnyfleet.com',
+          responses: inspectionResponses,
+          flaggedIssues: flaggedList,
+          generalNotes: generalNotes.trim() || null,
+          taskId: selectedTaskId || null,
+          scheduleLabel: selectedTask?.scheduleLabel || null,
+          scheduledAt: selectedTask?.dueAt || null
+        });
 
-      setSubmittedInspection(result);
+        setSubmittedInspection(result);
+        
+        // Clear draft
+        const draftKey = `sunny_inspection_draft_${vehicleId}`;
+        localStorage.removeItem(draftKey);
+      }
     } catch (err: any) {
       alert(err.message || 'Error submitting inspection');
     } finally {
@@ -346,6 +446,57 @@ export default function InspectClient() {
 
   return (
     <div className="page max-w-2xl mx-auto space-y-5 pb-12">
+      {/* Rejected Inspection Banner */}
+      {rejectedInspection && (
+        <RejectedInspectionBanner
+          inspection={rejectedInspection}
+          questions={questions}
+          onClose={() => setRejectedInspection(null)}
+        />
+      )}
+
+      {/* Auto-save Indicator */}
+      {isSaved && lastSaveTime && (
+        <div className="text-xs text-emerald-600 flex items-center gap-1 px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-200">
+          <CheckCheck className="w-3.5 h-3.5" />
+          <span>Draft saved at {lastSaveTime.toLocaleTimeString()}</span>
+        </div>
+      )}
+
+      {/* Draft Recovery Prompt */}
+      {showDraftRecovery && !rejectedInspection && (
+        <div className="bg-blue-50 border border-blue-300 rounded-lg p-4 flex gap-3">
+          <div className="flex-1">
+            <p className="text-sm font-bold text-blue-900">Resume from draft?</p>
+            <p className="text-xs text-blue-700 mt-1">
+              We found an auto-saved inspection for this vehicle. Continue where you left off?
+            </p>
+          </div>
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              onClick={() => {
+                setShowDraftRecovery(false);
+              }}
+              className="px-3 py-1 bg-blue-600 text-white rounded font-bold text-xs hover:bg-blue-700"
+            >
+              Resume
+            </button>
+            <button
+              onClick={() => {
+                const draftKey = `sunny_inspection_draft_${vehicleId}`;
+                localStorage.removeItem(draftKey);
+                setResponses({});
+                setGeneralNotes('');
+                setShowDraftRecovery(false);
+              }}
+              className="px-3 py-1 bg-gray-300 text-gray-800 rounded font-bold text-xs hover:bg-gray-400"
+            >
+              Start Over
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <Link href="/scan" className="btn btn-secondary btn-sm cluster gap-1.5">
           <ArrowLeft className="w-4 h-4" />
