@@ -14,13 +14,21 @@ import {
   RotateCcw,
   Check,
   CheckCheck,
+  Camera,
+  Image as ImageIcon,
+  X,
+  WifiOff,
+  RefreshCw,
+  Gauge,
+  Fuel,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
-import { Vehicle, ChecklistQuestion, ChecklistCategoryConfig, InspectionResponse, FleetTask } from '@/types';
+import { Vehicle, ChecklistQuestion, ChecklistCategoryConfig, InspectionResponse, FleetTask, Inspection } from '@/types';
 import { canSubmitInspection } from './inspectionValidation';
 import { RecentInspectors } from '@/components/RecentInspectors';
 import { RejectedInspectionBanner } from '@/components/RejectedInspectionBanner';
+import { SignaturePad } from '@/components/SignaturePad';
 
 export default function InspectClient() {
   const searchParams = useSearchParams();
@@ -33,13 +41,22 @@ export default function InspectClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [categories, setCategories] = useState<ChecklistCategoryConfig[]>([]);
   const [questions, setQuestions] = useState<ChecklistQuestion[]>([]);
-  const [responses, setResponses] = useState<Record<string, { value: string; isFlagged: boolean; notes?: string }>>({});
-  const [flagIssues, setFlagIssues] = useState<Record<string, { title: string; description: string }>>({});
+  const [responses, setResponses] = useState<Record<string, { value: string; isFlagged: boolean; notes?: string; photoUrl?: string }>>({});
+  const [flagIssues, setFlagIssues] = useState<Record<string, { title: string; description: string; photoUrl?: string }>>({});
   const [generalNotes, setGeneralNotes] = useState('');
+  const [generalPhotos, setGeneralPhotos] = useState<string[]>([]);
+  const [signatureBase64, setSignatureBase64] = useState<string | null>(null);
+  const [odometer, setOdometer] = useState<string>('');
+  const [fuelLevel, setFuelLevel] = useState<number>(100);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedInspection, setSubmittedInspection] = useState<any | null>(null);
   const [tasks, setTasks] = useState<FleetTask[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState('');
+  
+  // Offline sync state
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [offlineCount, setOfflineCount] = useState<number>(0);
+  const [isSyncingOffline, setIsSyncingOffline] = useState(false);
   
   // Auto-save and draft recovery
   const [isSaved, setIsSaved] = useState(false);
@@ -64,6 +81,8 @@ export default function InspectClient() {
 
       if (v) {
         setVehicle(v);
+        if (v.odometer) setOdometer(String(v.odometer));
+        if (v.fuelLevel !== undefined && v.fuelLevel !== null) setFuelLevel(v.fuelLevel);
       } else {
         setVehicle(null);
       }
@@ -76,6 +95,7 @@ export default function InspectClient() {
       setTasks(vehicleTasks);
       const openTask = vehicleTasks.find(task => task.status === 'open');
       setSelectedTaskId(prev => prev || openTask?.id || '');
+      setOfflineCount(dbService.getOfflineInspections().length);
     } catch (error) {
       console.error('Error loading inspection data:', error);
     } finally {
@@ -86,8 +106,75 @@ export default function InspectClient() {
   useEffect(() => {
     loadData();
     window.addEventListener('sunny_db_update', loadData);
-    return () => window.removeEventListener('sunny_db_update', loadData);
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      setOfflineCount(dbService.getOfflineInspections().length);
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      setOfflineCount(dbService.getOfflineInspections().length);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('sunny_db_update', loadData);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, [vehicleId]);
+
+  const handleManualSync = async () => {
+    try {
+      setIsSyncingOffline(true);
+      const synced = await dbService.syncOfflineInspections();
+      setOfflineCount(dbService.getOfflineInspections().length);
+      alert(`Synchronized ${synced} offline inspection(s) successfully!`);
+    } catch (err: any) {
+      alert(`Sync failed: ${err.message}`);
+    } finally {
+      setIsSyncingOffline(false);
+    }
+  };
+
+  const processImageFile = (file: File, callback: (base64: string) => void) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          callback(dataUrl);
+        } else {
+          callback(e.target?.result as string);
+        }
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Draft recovery and rejection detection on mount
   useEffect(() => {
@@ -108,7 +195,8 @@ export default function InspectClient() {
             prefilledResponses[r.questionId] = {
               value: r.value,
               isFlagged: r.isFlagged,
-              notes: r.notes
+              notes: r.notes,
+              photoUrl: r.photoUrl
             };
           });
           setResponses(prefilledResponses);
@@ -130,8 +218,23 @@ export default function InspectClient() {
           if (draft.responses) {
             setResponses(draft.responses);
           }
+          if (draft.flagIssues) {
+            setFlagIssues(draft.flagIssues);
+          }
           if (draft.generalNotes) {
             setGeneralNotes(draft.generalNotes);
+          }
+          if (draft.generalPhotos) {
+            setGeneralPhotos(draft.generalPhotos);
+          }
+          if (draft.odometer) {
+            setOdometer(draft.odometer);
+          }
+          if (draft.fuelLevel !== undefined) {
+            setFuelLevel(draft.fuelLevel);
+          }
+          if (draft.signatureBase64) {
+            setSignatureBase64(draft.signatureBase64);
           }
         } catch (e) {
           console.error('Error parsing draft:', e);
@@ -148,7 +251,12 @@ export default function InspectClient() {
       const draftKey = `sunny_inspection_draft_${vehicleId}`;
       const draft = {
         responses,
+        flagIssues,
         generalNotes,
+        generalPhotos,
+        odometer,
+        fuelLevel,
+        signatureBase64,
         lastSaved: new Date().toISOString()
       };
       localStorage.setItem(draftKey, JSON.stringify(draft));
@@ -158,7 +266,7 @@ export default function InspectClient() {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [vehicleId, responses, generalNotes]);
+  }, [vehicleId, responses, flagIssues, generalNotes, generalPhotos, odometer, fuelLevel, signatureBase64]);
 
   if (isLoading) {
     return (
@@ -227,13 +335,14 @@ export default function InspectClient() {
     );
   }
 
-  const handleSetResponse = (q: ChecklistQuestion, value: string, isFlagged: boolean, notes?: string) => {
+  const handleSetResponse = (q: ChecklistQuestion, value: string, isFlagged: boolean, notes?: string, photoUrl?: string) => {
     setResponses(prev => ({
       ...prev,
       [q.id]: {
         value,
         isFlagged,
-        notes: isFlagged ? (notes !== undefined ? notes : prev[q.id]?.notes || '') : ''
+        notes: isFlagged ? (notes !== undefined ? notes : prev[q.id]?.notes || '') : '',
+        photoUrl: photoUrl !== undefined ? photoUrl : prev[q.id]?.photoUrl
       }
     }));
 
@@ -242,7 +351,8 @@ export default function InspectClient() {
         ...prev,
         [q.id]: {
           title: `${q.equipmentName || q.text.split(':')[0]} issue`,
-          description: ''
+          description: '',
+          photoUrl: photoUrl || prev[q.id]?.photoUrl
         }
       }));
     } else if (!isFlagged && flagIssues[q.id]) {
@@ -252,7 +362,7 @@ export default function InspectClient() {
     }
   };
 
-  const handleIssueChange = (questionId: string, field: 'title' | 'description', val: string) => {
+  const handleIssueChange = (questionId: string, field: 'title' | 'description' | 'photoUrl', val: string) => {
     setFlagIssues(prev => ({
       ...prev,
       [questionId]: {
@@ -268,6 +378,16 @@ export default function InspectClient() {
           value: prev[questionId]?.value || '',
           isFlagged: Boolean(prev[questionId]?.isFlagged),
           notes: val
+        }
+      }));
+    } else if (field === 'photoUrl') {
+      setResponses(prev => ({
+        ...prev,
+        [questionId]: {
+          ...prev[questionId],
+          value: prev[questionId]?.value || '',
+          isFlagged: Boolean(prev[questionId]?.isFlagged),
+          photoUrl: val
         }
       }));
     }
@@ -306,6 +426,15 @@ export default function InspectClient() {
       }
     }
 
+    // Odometer delta validation check
+    const currentOdo = vehicle.odometer || 0;
+    const parsedOdo = odometer ? Number(odometer) : null;
+    if (parsedOdo !== null && parsedOdo < currentOdo) {
+      if (!confirm(`Warning: Entered odometer (${parsedOdo} mi) is less than previous recorded mileage (${currentOdo} mi). Do you wish to proceed?`)) {
+        return;
+      }
+    }
+
     try {
       setIsSubmitting(true);
 
@@ -318,10 +447,84 @@ export default function InspectClient() {
           value: resp?.value || '',
           isFlagged: Boolean(resp?.isFlagged),
           notes: resp?.notes || '',
+          photoUrl: resp?.photoUrl || flagIssues[q.id]?.photoUrl || null as any,
           equipmentId: q.equipmentId || null as any,
           equipmentName: q.equipmentName || null as any
         };
       });
+
+      const flaggedList = Object.entries(flagIssues).map(([qId, issueData]) => {
+        const question = questions.find(q => q.id === qId);
+        const response = responses[qId];
+        const quantities = issueData.description.match(/\d+(?:\.\d+)?/g)?.map(Number) || [];
+        return {
+          equipmentId: question?.equipmentId || null,
+          equipmentName: question?.equipmentName || issueData.title || 'Equipment Item',
+          title: issueData.title || 'Flagged Issue',
+          description: issueData.description || '',
+          questionType: question?.type,
+          value: response?.value,
+          reportedQuantity: quantities.length >= 2 ? quantities[0] : null,
+          requiredQuantity: quantities.length >= 2 ? quantities[1] : null,
+          photoUrl: issueData.photoUrl || null
+        };
+      });
+
+      const payload = {
+        vehicleId: vehicle.id,
+        userId: user?.id || 'emp-anon',
+        userName: user?.name || 'Employee Operator',
+        userEmail: user?.email || 'employee@sunnyfleet.com',
+        responses: inspectionResponses,
+        flaggedIssues: flaggedList,
+        generalNotes: generalNotes.trim() || null,
+        photoUrls: generalPhotos.length > 0 ? generalPhotos : null,
+        odometer: parsedOdo,
+        fuelLevel: fuelLevel !== undefined ? Number(fuelLevel) : null,
+        signatureBase64: signatureBase64 || null,
+        taskId: selectedTaskId || null,
+        scheduleLabel: selectedTask?.scheduleLabel || null,
+        scheduledAt: selectedTask?.dueAt || null
+      };
+
+      // Offline submission check
+      if (!navigator.onLine) {
+        const nowIso = new Date().toISOString();
+        const offlineInspection: Inspection = {
+          id: `offline-${Date.now()}`,
+          vehicleId: vehicle.id,
+          vehicleNumber: vehicle.vehicleNumber,
+          userId: payload.userId,
+          userName: payload.userName,
+          userEmail: payload.userEmail,
+          status: flaggedList.length > 0 ? 'issues_found' : 'passed',
+          startedAt: nowIso,
+          submittedAt: nowIso,
+          dateString: nowIso.split('T')[0],
+          responses: inspectionResponses,
+          issueIds: [],
+          generalNotes: payload.generalNotes || undefined,
+          odometer: payload.odometer ?? undefined,
+          fuelLevel: payload.fuelLevel ?? undefined,
+          signatureBase64: payload.signatureBase64 || undefined,
+          photoUrls: payload.photoUrls || undefined,
+          taskId: payload.taskId,
+          scheduleLabel: payload.scheduleLabel,
+          scheduledAt: payload.scheduledAt
+        };
+        dbService.saveOfflineInspection(offlineInspection);
+        setOfflineCount(dbService.getOfflineInspections().length);
+
+        const offlineResult = {
+          inspection: { ...offlineInspection, isOfflineQueued: true },
+          newIssues: flaggedList
+        };
+
+        setSubmittedInspection(offlineResult);
+        const draftKey = `sunny_inspection_draft_${vehicleId}`;
+        localStorage.removeItem(draftKey);
+        return;
+      }
 
       // If resubmitting a rejected inspection
       if (rejectedInspection) {
@@ -339,34 +542,7 @@ export default function InspectClient() {
         const draftKey = `sunny_inspection_draft_${vehicleId}`;
         localStorage.removeItem(draftKey);
       } else {
-        const flaggedList = Object.entries(flagIssues).map(([qId, issueData]) => {
-          const question = questions.find(q => q.id === qId);
-          const response = responses[qId];
-          const quantities = issueData.description.match(/\d+(?:\.\d+)?/g)?.map(Number) || [];
-          return {
-            equipmentId: question?.equipmentId || null,
-            equipmentName: question?.equipmentName || issueData.title || 'Equipment Item',
-            title: issueData.title || 'Flagged Issue',
-            description: issueData.description || '',
-            questionType: question?.type,
-            value: response?.value,
-            reportedQuantity: quantities.length >= 2 ? quantities[0] : null,
-            requiredQuantity: quantities.length >= 2 ? quantities[1] : null
-          };
-        });
-
-        const result = dbService.submitInspection({
-          vehicleId: vehicle.id,
-          userId: user?.id || 'emp-anon',
-          userName: user?.name || 'Employee Operator',
-          userEmail: user?.email || 'employee@sunnyfleet.com',
-          responses: inspectionResponses,
-          flaggedIssues: flaggedList,
-          generalNotes: generalNotes.trim() || null,
-          taskId: selectedTaskId || null,
-          scheduleLabel: selectedTask?.scheduleLabel || null,
-          scheduledAt: selectedTask?.dueAt || null
-        });
+        const result = dbService.submitInspection(payload);
 
         setSubmittedInspection(result);
         
@@ -446,6 +622,38 @@ export default function InspectClient() {
 
   return (
     <div className="page max-w-2xl mx-auto space-y-5 pb-12">
+      {/* Offline Sync Banner */}
+      {(!isOnline || offlineCount > 0) && (
+        <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 sticky top-2 z-20 shadow-sm ${
+          !isOnline ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-blue-50 border-blue-300 text-blue-900'
+        }`}>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <WifiOff className="w-5 h-5 shrink-0 text-amber-600" />
+            <div>
+              <div className="text-xs font-extrabold">
+                {!isOnline ? 'You are currently offline' : 'Pending Offline Submissions'}
+              </div>
+              <p className="text-[11px] opacity-90 truncate">
+                {offlineCount > 0
+                  ? `${offlineCount} inspection(s) stored locally — will auto-sync when connection restores.`
+                  : 'Submissions will be saved locally and auto-synced once back online.'}
+              </p>
+            </div>
+          </div>
+          {isOnline && offlineCount > 0 && (
+            <button
+              type="button"
+              onClick={handleManualSync}
+              disabled={isSyncingOffline}
+              className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncingOffline ? 'animate-spin' : ''}`} />
+              <span>{isSyncingOffline ? 'Syncing...' : 'Sync Now'}</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Rejected Inspection Banner */}
       {rejectedInspection && (
         <RejectedInspectionBanner
@@ -486,7 +694,10 @@ export default function InspectClient() {
                 const draftKey = `sunny_inspection_draft_${vehicleId}`;
                 localStorage.removeItem(draftKey);
                 setResponses({});
+                setFlagIssues({});
                 setGeneralNotes('');
+                setGeneralPhotos([]);
+                setSignatureBase64(null);
                 setShowDraftRecovery(false);
               }}
               className="px-3 py-1 bg-gray-300 text-gray-800 rounded font-bold text-xs hover:bg-gray-400"
@@ -565,29 +776,122 @@ export default function InspectClient() {
         </div>
       </div>
 
-      <div className="sticky top-0 z-10 bg-surface border-b border-line py-2 space-y-2">
-        <div>
-          <p className="text-sm text-ink-muted">Answered {answeredCount} / {requiredQuestions.length}</p>
-          <div className="h-1.5 bg-surface-sunk rounded-full mt-1">
-            <div
-              className="h-full bg-ink rounded-full transition-all"
-              style={{ width: `${progressPercent}%` }}
+      {/* 4.4 Odometer & Gas Level Tracking */}
+      <div className="card card-pad space-y-4 bg-surface border border-line">
+        <div className="border-b border-line pb-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Gauge className="w-4 h-4 text-ink" />
+            <h2 className="text-xs font-bold text-ink uppercase tracking-wider">
+              Vehicle Readings & Pre-Trip Check
+            </h2>
+          </div>
+          {vehicle.odometer && (
+            <span className="text-[11px] text-ink-muted">
+              Last Odometer: <strong>{vehicle.odometer.toLocaleString()} mi</strong>
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-ink flex items-center justify-between">
+              <span>Current Odometer (Miles)</span>
+              {odometer && vehicle.odometer && Number(odometer) < vehicle.odometer && (
+                <span className="text-[10px] text-rose-600 font-extrabold flex items-center gap-0.5">
+                  <AlertTriangle className="w-3 h-3" /> Lower than last record
+                </span>
+              )}
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                min="0"
+                placeholder="e.g. 45200"
+                value={odometer}
+                onChange={(e) => setOdometer(e.target.value)}
+                className="w-full px-3 py-2 text-xs font-bold rounded-xl border border-line bg-surface focus:outline-none focus:ring-2 focus:ring-ink/20"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-ink-faint pointer-events-none">
+                MI
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-ink flex items-center gap-1.5">
+                <Fuel className="w-3.5 h-3.5 text-ink-muted" />
+                <span>Fuel Level: <strong>{fuelLevel}%</strong></span>
+              </label>
+              <div className="flex gap-1">
+                {[25, 50, 75, 100].map((lvl) => (
+                  <button
+                    key={lvl}
+                    type="button"
+                    onClick={() => setFuelLevel(lvl)}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-all ${
+                      fuelLevel === lvl
+                        ? 'bg-ink text-white border-ink'
+                        : 'bg-surface-sunk text-ink-muted border-line hover:text-ink'
+                    }`}
+                  >
+                    {lvl === 100 ? 'Full' : `${lvl}%`}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={fuelLevel}
+              onChange={(e) => setFuelLevel(Number(e.target.value))}
+              className="w-full h-2 bg-surface-sunk rounded-lg appearance-none cursor-pointer accent-ink"
             />
           </div>
         </div>
+      </div>
+
+      <div className="sticky top-2 z-10 card card-pad space-y-3 shadow-sm">
+        <div className="border-b border-line pb-2.5 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xs font-bold text-ink uppercase tracking-wider">
+              Checklist Progress
+            </h2>
+            <p className="text-sm font-semibold text-ink mt-0.5">
+              Answered {answeredCount} / {requiredQuestions.length}
+            </p>
+          </div>
+          <span className="text-xs font-bold text-ink-muted tabular-nums shrink-0">
+            {Math.round(progressPercent)}%
+          </span>
+        </div>
+
+        <div className="h-2 bg-surface-sunk rounded-full overflow-hidden border border-line">
+          <div
+            className="h-full bg-ink rounded-full transition-all"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
 
         {categories.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-thin">
-            {categories.map(cat => (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => document.getElementById(`cat-${cat.id}`)?.scrollIntoView({ behavior: 'smooth' })}
-                className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border border-line bg-surface-sunk text-ink-muted hover:text-ink hover:bg-surface-alt transition-colors"
-              >
-                {cat.title}
-              </button>
-            ))}
+          <div>
+            <p className="text-[10px] font-semibold text-ink-faint uppercase tracking-wider mb-1.5">
+              Jump to category
+            </p>
+            <div className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-thin">
+              {categories.map(cat => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => document.getElementById(`cat-${cat.id}`)?.scrollIntoView({ behavior: 'smooth' })}
+                  className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold border border-line bg-surface-sunk text-ink-muted hover:text-ink hover:bg-surface-alt transition-colors"
+                >
+                  {cat.title}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -755,7 +1059,7 @@ export default function InspectClient() {
                         )}
 
                         {isFlagged && (
-                          <div className="mt-3 pt-3 border-t border-amber-200/80 bg-amber-100/40 p-3 rounded-xl space-y-2 animate-in fade-in duration-150">
+                          <div className="mt-3 pt-3 border-t border-amber-200/80 bg-amber-100/40 p-3 rounded-xl space-y-3 animate-in fade-in duration-150">
                             <div className="text-[11px] font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1">
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
                               Describe the problem for the permanent log
@@ -788,6 +1092,48 @@ export default function InspectClient() {
                               onChange={(e) => handleIssueChange(q.id, 'description', e.target.value)}
                               className="w-full px-3 py-1.5 text-xs rounded-lg border border-amber-200 bg-surface focus:outline-none focus:ring-2 focus:ring-amber-500"
                             />
+
+                            {/* 4.1 Photo Upload / Camera Capture for Issue */}
+                            <div className="pt-1">
+                              <div className="flex items-center gap-2">
+                                <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-surface text-xs font-bold text-amber-900 hover:bg-amber-50 transition-colors shadow-xs">
+                                  <Camera className="w-3.5 h-3.5 text-amber-700" />
+                                  <span>{currentIssue?.photoUrl ? 'Change Photo' : 'Attach Photo / Camera'}</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    capture="environment"
+                                    className="sr-only"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        processImageFile(file, (dataUrl) => {
+                                          handleIssueChange(q.id, 'photoUrl', dataUrl);
+                                        });
+                                      }
+                                    }}
+                                  />
+                                </label>
+                                {currentIssue?.photoUrl && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleIssueChange(q.id, 'photoUrl', '')}
+                                    className="text-xs text-rose-600 hover:text-rose-700 flex items-center gap-1"
+                                  >
+                                    <X className="w-3.5 h-3.5" /> Remove Photo
+                                  </button>
+                                )}
+                              </div>
+                              {currentIssue?.photoUrl && (
+                                <div className="mt-2 relative inline-block">
+                                  <img
+                                    src={currentIssue.photoUrl}
+                                    alt="Issue capture preview"
+                                    className="w-24 h-24 object-cover rounded-lg border border-amber-300 shadow-sm"
+                                  />
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -806,7 +1152,7 @@ export default function InspectClient() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="card card-pad space-y-4">
+      <form onSubmit={handleSubmit} className="card card-pad space-y-5">
         {tasks.length > 0 && (
           <div className="p-3 rounded-2xl bg-surface-sunk border border-line">
             <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">Scheduled inspection / task</label>
@@ -831,6 +1177,7 @@ export default function InspectClient() {
             )}
           </div>
         )}
+
         <div>
           <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
             General Inspection Notes (Optional)
@@ -841,6 +1188,64 @@ export default function InspectClient() {
             value={generalNotes}
             onChange={(e) => setGeneralNotes(e.target.value)}
             className="w-full px-3 py-2 text-xs rounded-xl border border-line bg-surface focus:outline-none focus:ring-2 focus:ring-ink/20"
+          />
+        </div>
+
+        {/* General Overview Photos */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-1.5">
+              <ImageIcon className="w-3.5 h-3.5 text-ink-muted" />
+              <span>Inspection Overview Photos (Optional)</span>
+            </label>
+            <label className="cursor-pointer inline-flex items-center gap-1 text-xs font-bold text-ink hover:text-ink-muted">
+              <Camera className="w-3.5 h-3.5" />
+              <span>Add Photo</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="sr-only"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  files.forEach(file => {
+                    processImageFile(file, (dataUrl) => {
+                      setGeneralPhotos(prev => [...prev, dataUrl]);
+                    });
+                  });
+                }}
+              />
+            </label>
+          </div>
+          {generalPhotos.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {generalPhotos.map((pUrl, idx) => (
+                <div key={idx} className="relative group">
+                  <img
+                    src={pUrl}
+                    alt={`Photo ${idx + 1}`}
+                    className="w-20 h-20 object-cover rounded-xl border border-line"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setGeneralPhotos(prev => prev.filter((_, i) => i !== idx))}
+                    className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white rounded-full p-0.5 shadow-sm hover:bg-rose-700"
+                    title="Remove"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 4.2 Digital Operator Signature */}
+        <div className="pt-2 border-t border-line">
+          <SignaturePad
+            value={signatureBase64}
+            onChange={setSignatureBase64}
+            label="Digital Operator Signature (Pre-Trip / Checkout)"
           />
         </div>
 

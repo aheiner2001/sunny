@@ -22,9 +22,22 @@ import {
   ReportSettings,
   AuthSession,
   AppSettings,
-  InspectionStatus
+  InspectionStatus,
+  LifespanMode,
+  LifespanStatus,
+  VehicleDayLog
 } from '@/types';
 import { classifyIssueType } from './issueClassification';
+import { 
+  computeLifespanStatus,
+  calculateLifespanDueDate,
+  extendLifespan,
+  replaceLifespan,
+  retireLifespan,
+  formatIndividualToolName,
+  isMultiQtyLifespanItem
+} from './lifespan';
+import { stripInstanceSuffix } from './equipmentGrouping';
 import { 
   INITIAL_VEHICLES, 
   INITIAL_EQUIPMENT, 
@@ -64,6 +77,8 @@ const STORAGE_KEYS = {
   REPORT_SETTINGS: 'sunny_report_settings',
   APP_SETTINGS: 'sunny_app_settings',
   SESSION: 'sunny_session',
+  VEHICLE_DAY_LOGS: 'sunny_vehicle_day_logs',
+  OFFLINE_INSPECTIONS: 'sunny_offline_inspections',
 };
 
 const DEFAULT_CHECKLIST_ID = 'standard-detailing-checklist';
@@ -140,11 +155,36 @@ class DataStore {
     // 1 when the stored value is missing entirely (legacy records).
     const totalQuantity = Math.max(assignedQuantity, Number.isFinite(rawTotal) ? rawTotal : 1);
     const availableQuantity = Math.max(0, Number(raw.availableQuantity ?? totalQuantity - assignedQuantity));
+
+    const lifespanEnabled = Boolean(raw.lifespanEnabled);
+    const lifespanMode = raw.lifespanMode || null;
+    const expectedCars = raw.expectedCars != null ? Number(raw.expectedCars) : null;
+    const carsUsed = Math.max(0, Number(raw.carsUsed) || 0);
+    const expectedMonths = raw.expectedMonths != null ? Number(raw.expectedMonths) : null;
+    const lifeStartedAt = raw.lifeStartedAt || null;
+    const dueDate = raw.dueDate || (lifeStartedAt && expectedMonths ? calculateLifespanDueDate(lifeStartedAt, expectedMonths) : null);
+    const retiredAt = raw.retiredAt || null;
+    const lowWearThresholdPercent = raw.lowWearThresholdPercent != null ? Number(raw.lowWearThresholdPercent) : undefined;
+    const lifespanStatus = computeLifespanStatus({
+      lifespanEnabled,
+      lifespanMode,
+      expectedCars,
+      carsUsed,
+      expectedMonths,
+      lifeStartedAt,
+      dueDate,
+      retiredAt,
+      lowWearThresholdPercent
+    });
+
     return {
       ...raw,
+      lowWearThresholdPercent,
+      minRequiredStock: raw.minRequiredStock != null ? Number(raw.minRequiredStock) : 0,
       vehicleId: legacyVehicleId || assignments[0]?.vehicleId || null,
       vehicleNumber: legacyVehicleNumber || assignments[0]?.vehicleNumber || 'Unassigned',
       assetTag: raw.assetTag?.trim() || null,
+      toolFamily: raw.toolFamily?.trim() || (lifespanEnabled ? stripInstanceSuffix(raw.name) || null : raw.toolFamily?.trim() || null),
       kind,
       equipmentType: kind,
       isConsumable: kind === 'consumable',
@@ -153,7 +193,16 @@ class DataStore {
       assignments,
       qrCodeToken: raw.qrCodeToken || raw.qrToken || raw.qrCode || null,
       qrCode: raw.qrCode || raw.qrCodeToken || raw.qrToken || null,
-      qrToken: raw.qrToken || raw.qrCodeToken || raw.qrCode || null
+      qrToken: raw.qrToken || raw.qrCodeToken || raw.qrCode || null,
+      lifespanEnabled,
+      lifespanMode,
+      expectedCars,
+      carsUsed,
+      expectedMonths,
+      lifeStartedAt,
+      dueDate,
+      lifespanStatus,
+      retiredAt
     };
   }
 
@@ -271,6 +320,18 @@ class DataStore {
         }
       }, (err) => console.warn('Firestore report settings listener:', err.message));
 
+      // Listen to VehicleDayLogs collection
+      onSnapshot(collection(db, 'vehicleDayLogs'), (snapshot) => {
+        if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
+          const list: VehicleDayLog[] = [];
+          snapshot.forEach((d) => list.push(d.data() as VehicleDayLog));
+          localStorage.setItem(STORAGE_KEYS.VEHICLE_DAY_LOGS, JSON.stringify(list));
+          window.dispatchEvent(new Event('sunny_db_update'));
+        }
+      }, (err) => {
+        console.warn('Firestore vehicleDayLogs listener (using local cache):', err.message);
+      });
+
       // Listen to Checklist doc: checklists/standard-detailing-checklist
       onSnapshot(doc(db, 'checklists', DEFAULT_CHECKLIST_ID), (docSnap) => {
         if (docSnap.exists()) {
@@ -333,6 +394,11 @@ class DataStore {
         batch.set(ref, sanitizeForFirestore(iss));
       });
 
+      this.getVehicleDayLogs().forEach((log) => {
+        const ref = doc(db, 'vehicleDayLogs', log.id);
+        batch.set(ref, sanitizeForFirestore(log));
+      });
+
       this.getEquipmentOptions().forEach((option) => {
         batch.set(doc(db, 'equipmentOptions', option.id), sanitizeForFirestore(option));
       });
@@ -385,6 +451,7 @@ class DataStore {
 
     localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(INITIAL_INSPECTIONS));
     localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(INITIAL_ISSUES));
+    localStorage.setItem(STORAGE_KEYS.VEHICLE_DAY_LOGS, JSON.stringify([]));
     const nowIso = new Date().toISOString();
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT_OPTIONS, JSON.stringify(
       INITIAL_EQUIPMENT.map((eq, index) => ({
@@ -948,6 +1015,33 @@ class DataStore {
     return sanitized;
   }
 
+  public async checkInVehicle(vehicleId: string): Promise<Vehicle> {
+    const vehicle = this.getVehicle(vehicleId);
+    if (!vehicle) throw new Error('Vehicle not found');
+    const updated: Vehicle = {
+      ...vehicle,
+      status: 'active',
+      currentUserId: null,
+      currentUserName: null,
+      currentUserStartTime: null,
+    };
+    return this.updateVehicle(updated);
+  }
+
+  public async checkOutVehicle(vehicleId: string, user: { id: string; name: string }): Promise<Vehicle> {
+    const vehicle = this.getVehicle(vehicleId);
+    if (!vehicle) throw new Error('Vehicle not found');
+    const now = new Date();
+    const updated: Vehicle = {
+      ...vehicle,
+      status: 'in_use',
+      currentUserId: user.id,
+      currentUserName: user.name,
+      currentUserStartTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    return this.updateVehicle(updated);
+  }
+
   public async deleteVehicle(
     vehicleId: string,
     options?: { equipmentMode: 'return_to_shop' | 'delete_associated' }
@@ -1093,8 +1187,19 @@ class DataStore {
     status?: Equipment['status'];
     kind?: EquipmentKind;
     totalQuantity?: number;
+    minRequiredStock?: number;
+    lowWearThresholdPercent?: number;
     qrCodeToken?: string | null;
     qrCode?: string | null;
+    toolFamily?: string | null;
+    lifespanEnabled?: boolean;
+    lifespanMode?: LifespanMode | null;
+    expectedCars?: number | null;
+    carsUsed?: number;
+    expectedMonths?: number | null;
+    lifeStartedAt?: string | null;
+    dueDate?: string | null;
+    retiredAt?: string | null;
   }): Promise<Equipment> {
     if (!this.isClient()) throw new Error('Client only');
     this.init();
@@ -1104,18 +1209,46 @@ class DataStore {
     const nowIso = new Date().toISOString();
     const kind = equipmentData.kind || (equipmentData.category === 'supplies' ? 'consumable' : 'reusable');
     const requestedTotal = Number(equipmentData.totalQuantity);
-    const totalQuantity = Math.max(1, Number.isFinite(requestedTotal) ? Math.floor(requestedTotal) : 1);
+
+    const lifespanEnabled = Boolean(equipmentData.lifespanEnabled);
+    const lifespanMode = equipmentData.lifespanMode || null;
+    const expectedCars = equipmentData.expectedCars != null ? Number(equipmentData.expectedCars) : null;
+    const carsUsed = Math.max(0, Number(equipmentData.carsUsed) || 0);
+    const expectedMonths = equipmentData.expectedMonths != null ? Number(equipmentData.expectedMonths) : null;
+    const lifeStartedAt = equipmentData.lifeStartedAt || (lifespanEnabled && lifespanMode === 'time' ? nowIso : null);
+    const dueDate = equipmentData.dueDate || (lifeStartedAt && expectedMonths ? calculateLifespanDueDate(lifeStartedAt, expectedMonths) : null);
+    const retiredAt = equipmentData.retiredAt || null;
+    const lifespanStatus = computeLifespanStatus({
+      lifespanEnabled,
+      lifespanMode,
+      expectedCars,
+      carsUsed,
+      expectedMonths,
+      lifeStartedAt,
+      dueDate,
+      retiredAt
+    });
+
+    // Lifespan-tracked tools are always individual assets (one QR / one life bar).
+    const totalQuantity = lifespanEnabled ? 1 : Math.max(1, Number.isFinite(requestedTotal) ? Math.floor(requestedTotal) : 1);
     // New stock lands in the shop; the manager distributes it per vehicle after.
+    // When creating with an optional vehicle + lifespan, assign the single unit to that van.
     const assignments = targetVehicle
       ? [{ vehicleId: targetVehicle.id, vehicleNumber: targetVehicle.vehicleNumber, quantity: 1 }]
       : [];
 
+    const trimmedName = equipmentData.name.trim();
+    const toolFamily =
+      equipmentData.toolFamily?.trim() ||
+      (lifespanEnabled ? stripInstanceSuffix(trimmedName) || trimmedName : null);
+
     const newEq: Equipment = {
-      id: `eq-${timestamp}`,
+      id: `eq-${timestamp}-${Math.random().toString(36).slice(2, 7)}`,
       vehicleId: targetVehicle?.id || null,
       vehicleNumber: targetVehicle ? targetVehicle.vehicleNumber : 'Unassigned',
-      name: equipmentData.name.trim(),
+      name: trimmedName,
       assetTag: equipmentData.assetTag?.trim() || null,
+      toolFamily,
       category: equipmentData.category || 'equipment',
       kind,
       totalQuantity,
@@ -1126,7 +1259,18 @@ class DataStore {
       status: equipmentData.status || 'working',
       activeIssueId: null,
       createdAt: nowIso,
-      updatedAt: nowIso
+      updatedAt: nowIso,
+      lifespanEnabled,
+      lifespanMode,
+      expectedCars,
+      carsUsed,
+      expectedMonths,
+      lifeStartedAt,
+      dueDate,
+      lifespanStatus,
+      retiredAt,
+      minRequiredStock: equipmentData.minRequiredStock !== undefined ? equipmentData.minRequiredStock : undefined,
+      lowWearThresholdPercent: equipmentData.lowWearThresholdPercent !== undefined ? equipmentData.lowWearThresholdPercent : undefined
     };
 
     const currentList = this.getEquipment();
@@ -1145,12 +1289,156 @@ class DataStore {
     return newEq;
   }
 
+  /**
+   * Creates N separately tracked lifespan tools (each qty 1, own life bar, own QR token).
+   * Use when the manager says "I own 3 brushes that each last 300 cars."
+   */
+  public async createLifespanTrackedUnits(
+    equipmentData: {
+      name: string;
+      assetTag?: string | null;
+      vehicleId?: string | null;
+      category?: EquipmentCategory;
+      status?: Equipment['status'];
+      kind?: EquipmentKind;
+      minRequiredStock?: number;
+      lowWearThresholdPercent?: number;
+      qrCodeToken?: string | null;
+      lifespanMode?: LifespanMode | null;
+      expectedCars?: number | null;
+      expectedMonths?: number | null;
+      lifeStartedAt?: string | null;
+    },
+    count: number
+  ): Promise<Equipment[]> {
+    const unitCount = Math.max(1, Math.floor(Number(count) || 1));
+    const baseName = equipmentData.name.trim();
+    const cleanPrefix = (equipmentData.assetTag?.trim() || baseName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || 'EQ');
+    const created: Equipment[] = [];
+
+    for (let i = 1; i <= unitCount; i++) {
+      const unitName = formatIndividualToolName(baseName, i, unitCount);
+      const tagSuffix = String(i).padStart(3, '0');
+      const unitTag = `${cleanPrefix}-${tagSuffix}`;
+      const unitQr = equipmentData.qrCodeToken?.trim()
+        ? (unitCount > 1 ? `${equipmentData.qrCodeToken.trim()}-${i}` : equipmentData.qrCodeToken.trim())
+        : unitTag.toLowerCase();
+
+      const item = await this.createEquipment({
+        ...equipmentData,
+        name: unitName,
+        assetTag: unitTag,
+        toolFamily: baseName,
+        qrCodeToken: unitQr,
+        totalQuantity: 1,
+        lifespanEnabled: true,
+        lifespanMode: equipmentData.lifespanMode || 'usage',
+        expectedCars: equipmentData.expectedCars,
+        expectedMonths: equipmentData.expectedMonths,
+        lifeStartedAt: equipmentData.lifeStartedAt,
+        carsUsed: 0
+      });
+      created.push(item);
+    }
+
+    return created;
+  }
+
+  /**
+   * Splits a multi-qty lifespan SKU into individual qty-1 tools with their own life bars.
+   * Distributes existing van assignments one unit at a time; leftover stock stays in the shop.
+   * Removes the original shared record.
+   */
+  public async splitLifespanEquipmentIntoIndividuals(equipmentId: string): Promise<Equipment[]> {
+    if (!this.isClient()) throw new Error('Client only');
+    this.init();
+
+    const source = this.getEquipmentItem(equipmentId);
+    if (!source) throw new Error('Equipment not found.');
+    if (!source.lifespanEnabled) {
+      throw new Error('Only lifespan-tracked equipment can be split into individual tools.');
+    }
+    if (!isMultiQtyLifespanItem(source)) {
+      throw new Error('This tool is already tracked as a single unit.');
+    }
+
+    const assignedSlots: Array<{ vehicleId: string; vehicleNumber: string }> = [];
+    for (const assignment of source.assignments || []) {
+      for (let i = 0; i < assignment.quantity; i++) {
+        assignedSlots.push({ vehicleId: assignment.vehicleId, vehicleNumber: assignment.vehicleNumber });
+      }
+    }
+
+    const assignedTotal = assignedSlots.length;
+    const total = Math.max(source.totalQuantity ?? 1, assignedTotal);
+    const shopCount = Math.max(0, total - assignedTotal);
+
+    const baseName = source.name.replace(/\s+#\d+$/, '').trim() || source.name;
+    const baseTag = source.assetTag?.replace(/-\d+$/, '').trim() || '';
+    const created: Equipment[] = [];
+
+    const makeUnit = async (index: number, vehicleId: string | null) => {
+      const unitName = formatIndividualToolName(baseName, index, total);
+      const unitTag = total > 1 ? (baseTag ? `${baseTag}-${index}` : null) : (baseTag || null);
+      const item = await this.createEquipment({
+        name: unitName,
+        assetTag: unitTag,
+        toolFamily: baseName,
+        vehicleId,
+        category: source.category,
+        kind: source.kind,
+        status: source.status,
+        totalQuantity: 1,
+        qrCodeToken: null,
+        lifespanEnabled: true,
+        lifespanMode: source.lifespanMode,
+        expectedCars: source.expectedCars,
+        carsUsed: 0,
+        expectedMonths: source.expectedMonths,
+        lifeStartedAt: source.lifeStartedAt,
+        dueDate: source.dueDate
+      });
+      created.push(item);
+    };
+
+    let index = 1;
+    for (const slot of assignedSlots) {
+      await makeUnit(index, slot.vehicleId);
+      index += 1;
+    }
+    for (let s = 0; s < shopCount; s++) {
+      await makeUnit(index, null);
+      index += 1;
+    }
+
+    await this.deleteEquipment(equipmentId);
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return created;
+  }
+
   public async updateEquipment(updated: Equipment): Promise<Equipment> {
     if (!this.isClient()) throw new Error('Client only');
     this.init();
 
     const targetVehicle = updated.vehicleId ? this.getVehicle(updated.vehicleId) : undefined;
-    const normalized = this.normalizeEquipment(updated);
+    let normalized = this.normalizeEquipment(updated);
+
+    // Lifespan tools must stay individual (qty 1). Refuse silent multi-qty lifespan saves.
+    if (normalized.lifespanEnabled) {
+      const assigned = (normalized.assignments || []).reduce((sum, a) => sum + a.quantity, 0);
+      if (assigned > 1 || (normalized.totalQuantity ?? 1) > 1) {
+        throw new Error(
+          'Lifespan-tracked tools must be individual units (quantity 1). Split this item into separate tools first.'
+        );
+      }
+      normalized = {
+        ...normalized,
+        totalQuantity: 1,
+        availableQuantity: Math.max(0, 1 - assigned),
+        assignments: (normalized.assignments || []).map(a => ({ ...a, quantity: Math.min(1, a.quantity) }))
+      };
+    }
+
     const enriched: Equipment = {
       ...normalized,
       vehicleNumber: targetVehicle ? targetVehicle.vehicleNumber : updated.vehicleNumber || 'Unassigned',
@@ -1173,6 +1461,181 @@ class DataStore {
 
     window.dispatchEvent(new Event('sunny_db_update'));
     return sanitized;
+  }
+
+  // ==========================================
+  // EQUIPMENT LIFESPAN & DUE FOR REVIEW
+  // ==========================================
+  public getDueForReviewEquipment(): Equipment[] {
+    return this.getEquipment().filter(
+      eq => eq.lifespanEnabled && !eq.retiredAt && eq.lifespanStatus === 'due_for_review'
+    );
+  }
+
+  public getLifespanAlertsEquipment(): Equipment[] {
+    return this.getEquipment().filter(
+      eq => eq.lifespanEnabled && !eq.retiredAt && (eq.lifespanStatus === 'due_for_review' || eq.lifespanStatus === 'getting_low')
+    );
+  }
+
+  public async extendEquipmentLifespan(
+    equipmentId: string,
+    extensionAmount: number,
+    meta?: { userId?: string | null; userName?: string | null; reason?: string }
+  ): Promise<Equipment> {
+    const item = this.getEquipmentItem(equipmentId);
+    if (!item) throw new Error('Equipment not found.');
+    const updated = extendLifespan(item, extensionAmount, meta);
+    return this.updateEquipment(updated);
+  }
+
+  public async replaceEquipmentLifespan(
+    equipmentId: string,
+    meta?: { userId?: string | null; userName?: string | null; reason?: string }
+  ): Promise<Equipment> {
+    const item = this.getEquipmentItem(equipmentId);
+    if (!item) throw new Error('Equipment not found.');
+    const updated = replaceLifespan(item, meta);
+    return this.updateEquipment(updated);
+  }
+
+  public async batchReplaceLifespan(
+    equipmentIds: string[],
+    meta?: { userId?: string | null; userName?: string | null; reason?: string }
+  ): Promise<Equipment[]> {
+    const results: Equipment[] = [];
+    for (const id of equipmentIds) {
+      const item = this.getEquipmentItem(id);
+      if (item && item.lifespanEnabled && !item.retiredAt) {
+        const updated = replaceLifespan(item, {
+          userId: meta?.userId,
+          userName: meta?.userName,
+          reason: meta?.reason || 'Batch replaced',
+        });
+        const saved = await this.updateEquipment(updated);
+        results.push(saved);
+      }
+    }
+    return results;
+  }
+
+  public async retireEquipment(
+    equipmentId: string,
+    meta?: { userId?: string | null; userName?: string | null; reason?: string }
+  ): Promise<Equipment> {
+    const item = this.getEquipmentItem(equipmentId);
+    if (!item) throw new Error('Equipment not found.');
+    const updated = retireLifespan(item, meta);
+    return this.updateEquipment(updated);
+  }
+
+  public getVehicleAvgDailyJobs(vehicleId: string): number {
+    const logs = this.getVehicleDayLogs().filter(l => l.vehicleId === vehicleId && l.jobsCount > 0);
+    if (logs.length === 0) return 3.5; // Fleet typical average
+    const total = logs.reduce((sum, l) => sum + l.jobsCount, 0);
+    return Math.max(0.5, total / logs.length);
+  }
+
+  // ==========================================
+  // VEHICLE DAILY JOB LOGS & WEAR TRACKING
+  // ==========================================
+  public getVehicleDayLogs(): VehicleDayLog[] {
+    if (!this.isClient()) return [];
+    this.init();
+    const data = localStorage.getItem(STORAGE_KEYS.VEHICLE_DAY_LOGS);
+    return data ? (JSON.parse(data) as VehicleDayLog[]) : [];
+  }
+
+  public getVehicleDayLog(vehicleId: string, dateString?: string): VehicleDayLog | undefined {
+    const targetDate = dateString || this.getTodayDateString();
+    return this.getVehicleDayLogs().find(
+      log => log.vehicleId === vehicleId && log.dateString === targetDate
+    );
+  }
+
+  public getTodayJobsCount(vehicleId: string): number {
+    const log = this.getVehicleDayLog(vehicleId);
+    return log ? Math.max(0, log.jobsCount) : 0;
+  }
+
+  public getTodayDateString(): string {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  public async setVehicleJobsToday(
+    vehicleId: string,
+    newJobsCount: number,
+    user?: { id: string; name: string } | null
+  ): Promise<VehicleDayLog> {
+    if (!this.isClient()) throw new Error('Client only');
+    this.init();
+
+    const vehicle = this.getVehicle(vehicleId);
+    if (!vehicle) throw new Error('Vehicle not found.');
+
+    const clampedJobs = Math.max(0, Math.floor(Number(newJobsCount) || 0));
+    const todayString = this.getTodayDateString();
+    const logId = `${vehicleId}_${todayString}`;
+    const nowIso = new Date().toISOString();
+
+    const existingLogs = this.getVehicleDayLogs();
+    const existingLog = existingLogs.find(l => l.id === logId || (l.vehicleId === vehicleId && l.dateString === todayString));
+    const oldJobsCount = existingLog ? Math.max(0, existingLog.jobsCount) : 0;
+    const delta = clampedJobs - oldJobsCount;
+
+    const updatedLog: VehicleDayLog = {
+      id: logId,
+      vehicleId,
+      dateString: todayString,
+      jobsCount: clampedJobs,
+      updatedAt: nowIso,
+      updatedById: user?.id || null,
+      updatedByName: user?.name || null
+    };
+
+    const newLogs = existingLogs.some(l => l.id === logId)
+      ? existingLogs.map(l => (l.id === logId ? updatedLog : l))
+      : [...existingLogs, updatedLog];
+
+    localStorage.setItem(STORAGE_KEYS.VEHICLE_DAY_LOGS, JSON.stringify(newLogs));
+
+    if (db) {
+      try {
+        await setDoc(doc(db, 'vehicleDayLogs', logId), sanitizeForFirestore(updatedLog));
+      } catch (e) {
+        console.warn('Firestore vehicleDayLogs write error:', e);
+      }
+    }
+
+    // Apply delta wear to all active, usage-mode tools assigned to this vehicle
+    if (delta !== 0) {
+      const allEquipment = this.getEquipment();
+      const updatedEquipmentList = allEquipment.map(eq => {
+        const isAssigned = eq.vehicleId === vehicleId || (eq.assignments && eq.assignments.some(a => a.vehicleId === vehicleId));
+        if (isAssigned && eq.lifespanEnabled && eq.lifespanMode === 'usage' && !eq.retiredAt) {
+          const newCarsUsed = Math.max(0, (eq.carsUsed || 0) + delta);
+          const updatedEq: Equipment = {
+            ...eq,
+            carsUsed: newCarsUsed,
+            updatedAt: nowIso
+          };
+          updatedEq.lifespanStatus = computeLifespanStatus(updatedEq);
+          if (db) {
+            setDoc(doc(db, 'equipment', updatedEq.id), sanitizeForFirestore(updatedEq), { merge: true }).catch(err => {
+              console.warn('Firestore equipment wear update error:', err);
+            });
+          }
+          return updatedEq;
+        }
+        return eq;
+      });
+
+      localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(updatedEquipmentList));
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return updatedLog;
   }
 
   public getEquipmentByQR(token: string): Equipment | undefined {
@@ -1462,6 +1925,20 @@ class DataStore {
       equipment.kind === 'consumable' ? 1 : 1,
       sourceVehicleId || equipment.assignments?.[0]?.vehicleId || null
     );
+  }
+
+  public async batchTransferEquipment(
+    transfers: Array<{ equipmentId: string; quantity: number }>,
+    targetVehicleId: string
+  ): Promise<Equipment[]> {
+    const vehicle = this.getVehicle(targetVehicleId);
+    if (!vehicle) throw new Error('Target vehicle not found.');
+    const results: Equipment[] = [];
+    for (const item of transfers) {
+      const res = await this.transferEquipmentQuantity(item.equipmentId, targetVehicleId, item.quantity);
+      results.push(res);
+    }
+    return results;
   }
 
   /**
@@ -1831,11 +2308,17 @@ class DataStore {
       requiredQuantity?: number | null;
       questionType?: string;
       value?: string;
+      priority?: 'critical' | 'moderate' | 'low';
+      photoUrl?: string | null;
     }>;
     generalNotes?: string | null;
     taskId?: string | null;
     scheduleLabel?: string | null;
     scheduledAt?: string | null;
+    signatureBase64?: string | null;
+    photoUrls?: string[] | null;
+    odometer?: number | null;
+    fuelLevel?: number | null;
   }): { inspection: Inspection; newIssues: Issue[] } {
     if (!this.isClient()) throw new Error('Client only');
     this.init();
@@ -1886,6 +2369,8 @@ class DataStore {
           questionType: flag.questionType,
           value: flag.value,
         }),
+        priority: flag.priority || 'moderate',
+        photoUrl: flag.photoUrl || null,
         reportedQuantity: flag.reportedQuantity ?? null,
         requiredQuantity: flag.requiredQuantity ?? null,
         status: 'open',
@@ -1922,7 +2407,8 @@ class DataStore {
       isFlagged: Boolean(r.isFlagged),
       notes: r.notes || null as any,
       equipmentId: r.equipmentId || null as any,
-      equipmentName: r.equipmentName || null as any
+      equipmentName: r.equipmentName || null as any,
+      photoUrl: r.photoUrl || null as any,
     }));
 
     const newInspection: Inspection = {
@@ -1941,7 +2427,11 @@ class DataStore {
       generalNotes: data.generalNotes || null as any,
       taskId: data.taskId || null,
       scheduleLabel: data.scheduleLabel || null,
-      scheduledAt: data.scheduledAt || null
+      scheduledAt: data.scheduledAt || null,
+      signatureBase64: data.signatureBase64 || null as any,
+      photoUrls: data.photoUrls || null as any,
+      odometer: data.odometer !== undefined && data.odometer !== null ? Number(data.odometer) : null as any,
+      fuelLevel: data.fuelLevel !== undefined && data.fuelLevel !== null ? Number(data.fuelLevel) : null as any,
     };
 
     // Save Inspection locally
@@ -1963,7 +2453,9 @@ class DataStore {
       currentUserStartTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       lastInspectionId: inspectionId,
       lastInspectionStatus: status,
-      lastInspectionAt: nowIso
+      lastInspectionAt: nowIso,
+      odometer: data.odometer !== undefined && data.odometer !== null ? Number(data.odometer) : vehicle.odometer,
+      fuelLevel: data.fuelLevel !== undefined && data.fuelLevel !== null ? Number(data.fuelLevel) : vehicle.fuelLevel,
     };
     this.updateVehicle(updatedVehicle);
 
@@ -1983,6 +2475,54 @@ class DataStore {
 
     window.dispatchEvent(new Event('sunny_db_update'));
     return { inspection: newInspection, newIssues };
+  }
+
+  // Offline Inspections Support
+  public getOfflineInspections(): Inspection[] {
+    if (!this.isClient()) return [];
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.OFFLINE_INSPECTIONS);
+      return data ? JSON.parse(data) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  public saveOfflineInspection(inspection: Inspection): void {
+    if (!this.isClient()) return;
+    const existing = this.getOfflineInspections();
+    const updated = [inspection, ...existing.filter(i => i.id !== inspection.id)];
+    localStorage.setItem(STORAGE_KEYS.OFFLINE_INSPECTIONS, JSON.stringify(updated));
+    window.dispatchEvent(new Event('sunny_db_update'));
+  }
+
+  public removeOfflineInspection(inspectionId: string): void {
+    if (!this.isClient()) return;
+    const existing = this.getOfflineInspections();
+    const updated = existing.filter(i => i.id !== inspectionId);
+    localStorage.setItem(STORAGE_KEYS.OFFLINE_INSPECTIONS, JSON.stringify(updated));
+    window.dispatchEvent(new Event('sunny_db_update'));
+  }
+
+  public async syncOfflineInspections(): Promise<number> {
+    if (!this.isClient()) return 0;
+    const offline = this.getOfflineInspections();
+    if (offline.length === 0) return 0;
+
+    let syncedCount = 0;
+    for (const item of offline) {
+      try {
+        if (db) {
+          await setDoc(doc(db, 'inspections', item.id), sanitizeForFirestore(item), { merge: true });
+        }
+        syncedCount++;
+      } catch (e) {
+        console.warn('Sync offline inspection failed:', e);
+      }
+    }
+    localStorage.removeItem(STORAGE_KEYS.OFFLINE_INSPECTIONS);
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return syncedCount;
   }
 
   /**
@@ -2360,6 +2900,96 @@ class DataStore {
 
     window.dispatchEvent(new Event('sunny_db_update'));
     return updatedIssue;
+  }
+
+  public updateIssueDetails(
+    issueId: string,
+    updates: {
+      priority?: 'critical' | 'moderate' | 'low';
+      assignedTechnician?: string | null;
+      estimatedCompletionDate?: string | null;
+      repairCost?: number | null;
+      partNumber?: string | null;
+    },
+    changedBy?: { id: string; name: string }
+  ): Issue {
+    if (!this.isClient()) throw new Error('Client only');
+    const issues = this.getIssues();
+    const targetIndex = issues.findIndex(i => i.id === issueId);
+    if (targetIndex === -1) throw new Error('Issue not found');
+
+    const issue = issues[targetIndex];
+    const nowIso = new Date().toISOString();
+    const detailNotes: string[] = [];
+    if (updates.priority && updates.priority !== issue.priority) {
+      detailNotes.push(`priority → ${updates.priority}`);
+    }
+    if (updates.assignedTechnician !== undefined && updates.assignedTechnician !== issue.assignedTechnician) {
+      detailNotes.push(`technician → ${updates.assignedTechnician || 'unassigned'}`);
+    }
+    if (updates.repairCost !== undefined && updates.repairCost !== issue.repairCost) {
+      detailNotes.push(`repair cost → ${updates.repairCost ?? 'n/a'}`);
+    }
+    if (updates.partNumber !== undefined && updates.partNumber !== issue.partNumber) {
+      detailNotes.push(`part # → ${updates.partNumber || 'n/a'}`);
+    }
+
+    const statusLogs = [...(issue.statusLogs || [])];
+    if (changedBy && detailNotes.length > 0) {
+      statusLogs.push({
+        id: `log-${Date.now()}`,
+        issueId,
+        changedById: changedBy.id,
+        changedByName: changedBy.name,
+        oldStatus: issue.status,
+        newStatus: issue.status,
+        notes: `Details updated: ${detailNotes.join(', ')}`,
+        timestamp: nowIso
+      });
+    }
+
+    const updatedIssue: Issue = {
+      ...issue,
+      ...updates,
+      statusLogs
+    };
+
+    issues[targetIndex] = updatedIssue;
+    localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(issues));
+
+    if (db) {
+      setDoc(doc(db, 'issues', issueId), sanitizeForFirestore(updatedIssue), { merge: true }).catch((e) =>
+        console.warn('Firestore update issue details error:', e)
+      );
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return updatedIssue;
+  }
+
+  public batchResolveIssues(
+    issueIds: string[],
+    notes: string,
+    changedBy: { id: string; name: string },
+    repairCost?: number,
+    partNumber?: string
+  ): Issue[] {
+    const results: Issue[] = [];
+    for (const id of issueIds) {
+      try {
+        if (repairCost !== undefined || partNumber !== undefined) {
+          this.updateIssueDetails(id, {
+            repairCost: repairCost !== undefined ? repairCost : undefined,
+            partNumber: partNumber !== undefined ? partNumber : undefined
+          });
+        }
+        const res = this.updateIssueStatus(id, 'fixed', changedBy, notes);
+        results.push(res);
+      } catch (e) {
+        console.warn('Batch resolve issue failed for', id, e);
+      }
+    }
+    return results;
   }
 
   public async deleteIssue(issueId: string): Promise<void> {

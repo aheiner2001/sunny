@@ -1,9 +1,21 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Issue, IssueStatus } from '@/types';
+import { Issue, IssueStatus, IssuePriority } from '@/types';
 import { IssueLogStatusBadge, IssueStatusBadge, issueLogStatusDataStatus } from './StatusBadges';
-import { ChevronDown, Clock, User, Wrench } from 'lucide-react';
+import {
+  ChevronDown,
+  Clock,
+  User,
+  Wrench,
+  AlertOctagon,
+  AlertTriangle,
+  Info,
+  Calendar,
+  DollarSign,
+  Tag,
+  UserCheck,
+} from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { dbService } from '@/lib/db';
 
@@ -15,13 +27,24 @@ function formatLogTime(iso: string) {
 export function IssueTimeline({
   issue,
   onStatusUpdated,
+  selectable = false,
+  selected = false,
+  onSelectToggle,
 }: {
   issue: Issue;
   onStatusUpdated?: (updated: Issue) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onSelectToggle?: (issueId: string) => void;
 }) {
   const { user, role } = useAuth();
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<IssueStatus>(issue.status);
+  const [priority, setPriority] = useState<IssuePriority>(issue.priority || 'moderate');
+  const [assignedTechnician, setAssignedTechnician] = useState(issue.assignedTechnician || '');
+  const [estimatedCompletionDate, setEstimatedCompletionDate] = useState(issue.estimatedCompletionDate || '');
+  const [repairCost, setRepairCost] = useState(issue.repairCost !== undefined && issue.repairCost !== null ? String(issue.repairCost) : '');
+  const [partNumber, setPartNumber] = useState(issue.partNumber || '');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
@@ -32,21 +55,38 @@ export function IssueTimeline({
   const handleUpdateStatus = (e: React.FormEvent) => {
     e.preventDefault();
     if (!notes.trim()) {
-      alert('Please provide notes explaining this status change for the permanent audit trail.');
+      alert('Please provide notes explaining this update for the permanent audit trail.');
       return;
     }
 
     try {
       setIsSubmitting(true);
+      const managerIdentity = {
+        id: user?.id || 'mgr-1',
+        name: user?.name || 'Manager',
+      };
+
+      // Update details first
+      const updatedDetails = dbService.updateIssueDetails(
+        issue.id,
+        {
+          priority,
+          assignedTechnician: assignedTechnician.trim() || null,
+          estimatedCompletionDate: estimatedCompletionDate || null,
+          repairCost: repairCost ? Number(repairCost) : null,
+          partNumber: partNumber.trim() || null,
+        },
+        managerIdentity,
+      );
+
+      // Update status with audit log
       const updated = dbService.updateIssueStatus(
         issue.id,
         selectedStatus,
-        {
-          id: user?.id || 'mgr-1',
-          name: user?.name || 'Manager',
-        },
+        managerIdentity,
         notes,
       );
+
       setShowStatusModal(false);
       setNotes('');
       if (onStatusUpdated) onStatusUpdated(updated);
@@ -57,20 +97,61 @@ export function IssueTimeline({
     }
   };
 
+  const priorityStyles = {
+    critical: 'bg-rose-100 text-rose-800 border-rose-300',
+    moderate: 'bg-amber-100 text-amber-800 border-amber-300',
+    low: 'bg-slate-100 text-slate-800 border-slate-300',
+  };
+
   return (
-    <div className="card card-pad">
-      <div className="spread flex-col sm:flex-row items-stretch sm:items-center pb-4 mb-4 border-b border-line">
-        <div>
-          <div className="cluster mb-1">
-            <span className="badge" data-status="info">
-              {issue.vehicleNumber}
-            </span>
-            <span className="text-xs text-ink-faint">•</span>
-            <span className="text-xs text-ink-muted">{issue.equipmentName}</span>
+    <div className={`card card-pad transition-all ${
+      issue.priority === 'critical' && issue.status !== 'fixed'
+        ? 'border-rose-300 bg-rose-50/20'
+        : ''
+    }`}>
+      <div className="spread flex-col sm:flex-row items-stretch sm:items-center pb-4 mb-4 border-b border-line gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          {selectable && (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={(e) => {
+                e.stopPropagation();
+                if (onSelectToggle) onSelectToggle(issue.id);
+              }}
+              className="mt-1.5 w-4 h-4 rounded border-line cursor-pointer text-ink focus:ring-ink shrink-0"
+              aria-label={`Select issue ${issue.title}`}
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="cluster mb-1 flex-wrap gap-1.5">
+              <span className="badge" data-status="info">
+                {issue.vehicleNumber}
+              </span>
+              <span className="text-xs text-ink-faint">•</span>
+              <span className="text-xs text-ink-muted">{issue.equipmentName}</span>
+
+              {/* 7.1 Priority Badge */}
+              {issue.priority && (
+                <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                  priorityStyles[issue.priority]
+                }`}>
+                  {issue.priority === 'critical' ? (
+                    <AlertOctagon className="w-3 h-3 text-rose-600" />
+                  ) : issue.priority === 'moderate' ? (
+                    <AlertTriangle className="w-3 h-3 text-amber-600" />
+                  ) : (
+                    <Info className="w-3 h-3 text-slate-600" />
+                  )}
+                  <span>{issue.priority === 'critical' ? 'Critical (Grounded)' : issue.priority}</span>
+                </span>
+              )}
+            </div>
+            <h3 className="card-title text-lg">{issue.title}</h3>
           </div>
-          <h3 className="card-title text-lg">{issue.title}</h3>
         </div>
-        <div className="cluster">
+
+        <div className="cluster justify-end flex-wrap gap-2">
           <IssueStatusBadge status={issue.status} />
           {role === 'manager' && (
             <button
@@ -78,24 +159,74 @@ export function IssueTimeline({
               onClick={(e) => {
                 e.stopPropagation();
                 setSelectedStatus(issue.status);
+                setPriority(issue.priority || 'moderate');
+                setAssignedTechnician(issue.assignedTechnician || '');
+                setEstimatedCompletionDate(issue.estimatedCompletionDate || '');
+                setRepairCost(issue.repairCost !== undefined && issue.repairCost !== null ? String(issue.repairCost) : '');
+                setPartNumber(issue.partNumber || '');
                 setShowStatusModal(true);
               }}
               className="btn btn-primary btn-sm"
             >
               <Wrench className="h-3.5 w-3.5" aria-hidden />
-              Update Status
+              Manage / Resolve
             </button>
           )}
         </div>
       </div>
 
-      <div className="card card-pad bg-[var(--surface-alt)] mb-4">
-        <div className="eyebrow mb-1">Initial report</div>
-        <p className="text-sm text-ink-muted leading-relaxed line-clamp-3">{issue.description}</p>
-        <div className="mt-2 pt-2 border-t border-line cluster text-xs text-ink-muted">
+      <div className="card card-pad bg-[var(--surface-alt)] mb-4 space-y-3">
+        <div>
+          <div className="eyebrow mb-1">Initial report</div>
+          <p className="text-sm text-ink-muted leading-relaxed line-clamp-3">{issue.description}</p>
+        </div>
+
+        {/* Issue Photo if attached */}
+        {issue.photoUrl && (
+          <div className="pt-1">
+            <div className="text-[10px] font-bold text-ink-faint uppercase mb-1">Attached Photo</div>
+            <img
+              src={issue.photoUrl}
+              alt="Issue evidence"
+              className="w-24 h-24 object-cover rounded-xl border border-line shadow-xs"
+            />
+          </div>
+        )}
+
+        {/* 7.2 & 7.3 Technician, ETA, Cost & Parts Badges */}
+        {(issue.assignedTechnician || issue.estimatedCompletionDate || issue.repairCost || issue.partNumber) && (
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-line text-xs">
+            {issue.assignedTechnician && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface border border-line text-ink font-semibold">
+                <UserCheck className="w-3.5 h-3.5 text-blue-600" />
+                <span>Tech: <strong>{issue.assignedTechnician}</strong></span>
+              </div>
+            )}
+            {issue.estimatedCompletionDate && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface border border-line text-ink font-semibold">
+                <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                <span>ETA: <strong>{new Date(issue.estimatedCompletionDate).toLocaleDateString()}</strong></span>
+              </div>
+            )}
+            {issue.repairCost !== undefined && issue.repairCost !== null && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold font-mono">
+                <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Cost: ${issue.repairCost.toLocaleString()}</span>
+              </div>
+            )}
+            {issue.partNumber && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface border border-line text-ink font-mono text-[11px]">
+                <Tag className="w-3 h-3 text-ink-muted" />
+                <span>Part: {issue.partNumber}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="pt-2 border-t border-line cluster text-xs text-ink-muted">
           <User className="h-3.5 w-3.5 text-ink-faint" aria-hidden />
           <span>
-            {issue.reportedByName} · {formatLogTime(issue.reportedAt)}
+            Reported by <strong>{issue.reportedByName}</strong> · {formatLogTime(issue.reportedAt)}
           </span>
         </div>
       </div>
@@ -169,29 +300,32 @@ export function IssueTimeline({
           onClick={() => setShowStatusModal(false)}
         >
           <div
-            className="card card-pad max-w-md w-full"
+            className="card card-pad max-w-lg w-full max-h-[90vh] overflow-y-auto"
             role="dialog"
             aria-modal="true"
             aria-labelledby="issue-status-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="issue-status-title" className="card-title mb-1">
-              Update Equipment Status
+            <h3 id="issue-status-title" className="card-title mb-1 text-base">
+              Manage & Resolve Issue
             </h3>
-            <p className="hint mb-4">
-              All status changes are permanently recorded in the immutable audit trail.
+            <p className="hint mb-4 text-xs">
+              Update priority, technician dispatch, parts/costs, and audit resolution notes.
             </p>
 
-            <form onSubmit={handleUpdateStatus} className="stack">
-              <div className="field">
-                <span className="label">New Status</span>
-                <div className="grid grid-cols-2 gap-2">
+            <form onSubmit={handleUpdateStatus} className="space-y-4 text-xs">
+              {/* Status Selector */}
+              <div>
+                <span className="label font-bold text-ink mb-1 block">Issue Lifecycle Status</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   {(['open', 'needs_repair', 'being_repaired', 'fixed'] as IssueStatus[]).map((st) => (
                     <button
                       type="button"
                       key={st}
                       onClick={() => setSelectedStatus(st)}
-                      className={`btn btn-sm text-left capitalize ${selectedStatus === st ? 'btn-primary' : 'btn-secondary'}`}
+                      className={`btn btn-sm text-center justify-center capitalize ${
+                        selectedStatus === st ? 'btn-primary' : 'btn-secondary'
+                      }`}
                     >
                       {st.replace('_', ' ')}
                     </button>
@@ -199,31 +333,105 @@ export function IssueTimeline({
                 </div>
               </div>
 
-              <div className="field">
-                <label className="label" htmlFor="status-notes">
-                  Manager Log / Action Notes <span className="text-[var(--critical)]">*</span>
+              {/* 7.1 Priority Selector */}
+              <div>
+                <label className="label font-bold text-ink mb-1 block">Issue Urgency / Safety Priority</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'critical', label: 'Critical (Grounded)', color: 'text-rose-700 bg-rose-50 border-rose-300' },
+                    { id: 'moderate', label: 'Moderate (Needs Fix)', color: 'text-amber-700 bg-amber-50 border-amber-300' },
+                    { id: 'low', label: 'Low (Cosmetic)', color: 'text-slate-700 bg-slate-50 border-slate-300' },
+                  ].map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setPriority(p.id as IssuePriority)}
+                      className={`p-2 rounded-xl text-center font-bold border transition-all ${
+                        priority === p.id
+                          ? 'ring-2 ring-ink bg-surface shadow-xs'
+                          : 'bg-surface-sunk text-ink-muted border-line'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 7.2 Technician & Estimated Date */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="label font-bold text-ink mb-1 block">Assigned Technician / Vendor</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Mike R. / Fleet Wash Supply"
+                    value={assignedTechnician}
+                    onChange={(e) => setAssignedTechnician(e.target.value)}
+                    className="input text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="label font-bold text-ink mb-1 block">Estimated Completion Date</label>
+                  <input
+                    type="date"
+                    value={estimatedCompletionDate}
+                    onChange={(e) => setEstimatedCompletionDate(e.target.value)}
+                    className="input text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* 7.3 Cost & Parts Tracking */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="label font-bold text-ink mb-1 block">Repair Cost ($ USD)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="e.g. 45.00"
+                    value={repairCost}
+                    onChange={(e) => setRepairCost(e.target.value)}
+                    className="input text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="label font-bold text-ink mb-1 block">Replacement Part #</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. CAT-PUMP-3DX"
+                    value={partNumber}
+                    onChange={(e) => setPartNumber(e.target.value)}
+                    className="input text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Audit Notes */}
+              <div>
+                <label className="label font-bold text-ink mb-1 block">
+                  Action / Resolution Audit Notes <span className="text-rose-500">*</span>
                 </label>
                 <textarea
-                  id="status-notes"
-                  rows={3}
+                  rows={2}
                   required
-                  placeholder="e.g. Replaced leaking valve gasket with OEM part. Tested up to 140 PSI."
+                  placeholder="e.g. Replaced leaking brass fitting, bench tested at 150 PSI, ready for route."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="textarea"
+                  className="textarea text-xs"
                 />
               </div>
 
-              <div className="cluster pt-2">
+              <div className="cluster pt-2 border-t border-line justify-end">
                 <button
                   type="button"
                   onClick={() => setShowStatusModal(false)}
-                  className="btn btn-secondary flex-1"
+                  className="btn btn-secondary"
                 >
                   Cancel
                 </button>
-                <button type="submit" disabled={isSubmitting} className="btn btn-primary flex-1">
-                  {isSubmitting ? 'Saving...' : 'Save to Audit Trail'}
+                <button type="submit" disabled={isSubmitting} className="btn btn-primary">
+                  {isSubmitting ? 'Saving...' : 'Save & Update Log'}
                 </button>
               </div>
             </form>

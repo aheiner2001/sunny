@@ -24,7 +24,8 @@
 - `src/app/inspections/page.tsx` — Completed inspection log with filtering, detail expansion, and delete.
 - `src/app/inspect/page.tsx` + `InspectClient.tsx` — The inspection workflow itself: loads the checklist config, walks questions by category, and submits results (auto-raising issues).
 - `src/app/scan/page.tsx` — Standalone vehicle QR scan/lookup page that routes into an inspection.
-- `src/app/equipment/page.tsx` — Equipment/supply catalog with status filters, global inventory summary, and CRUD.
+- `src/app/equipment/page.tsx` — Equipment/supply catalog: default **By tool type** grouping with compact instance rows, plus vehicle / all-cards views; lifespan create splits into individuals; due-for-review filters.
+- `src/lib/equipmentGrouping.ts` — Groups equipment by `toolFamily` / stripped `#N` name for manager type summaries.
 - `src/app/equipment/scan/page.tsx` + `EquipmentScanClient.tsx` — Equipment QR scan: identify an item and transfer quantities between shop and vehicles.
 - `src/app/issues/page.tsx` — Reported issue queue with status tracking, auto/overridden issue types, and stock quick actions (Update Stock / Remove from Van); deep-linkable via `?issue=`.
 - `src/app/employees/page.tsx` — User management (create/edit/delete), access-passcode assignment with reveal/copy, and per-employee inspection and issue stats.
@@ -47,18 +48,22 @@
 - `src/components/RecentInspectors.tsx` — Shows the last 1 or 3 completed inspectors for a vehicle (depth from `AppSettings`).
 - `src/components/ProfileModal.tsx` — Avatar preset picker and profile editing for the signed-in user.
 - `src/components/PasscodeGate.tsx` — Passcode keypad: `PasscodeGate` locks the whole shell until a valid session exists; `PasscodePrompt` re-authenticates mid-scan when the shift session lapses.
+- `src/components/LifespanActionModal.tsx` — Manager modal to extend life, mark replaced (reset wear), or retire lifespan-tracked equipment.
 
 ## State / Data / Services
 - `src/context/AuthContext.tsx` — `AuthProvider` + `useAuth()`: current user, role, `switchUser`, and `availableUsers` (demo RBAC switching).
-- `src/lib/db.ts` — The core `dbService` singleton: all vehicle/equipment/inspection/issue/user/checklist reads and writes, `AppSettings` (`recentInspectorsDepth`, `theme`), `getRecentInspectors()`, stock issue resolution (`resolveStockIssue`), `localStorage` persistence, Firestore sync, seeding, and the `sunny_db_update` change event.
+- `src/lib/db.ts` — The core `dbService` singleton: all vehicle/equipment/inspection/issue/user/checklist reads and writes, vehicle daily job logs (`setVehicleJobsToday`), equipment lifespan tracking, `AppSettings` (`recentInspectorsDepth`, `theme`), `getRecentInspectors()`, stock issue resolution (`resolveStockIssue`), `localStorage` persistence, Firestore sync, seeding, and the `sunny_db_update` change event.
+- `src/lib/lifespan.ts` — Equipment lifespan calculations: usage wear (cars cleaned), time-based calendar lifespans, threshold evaluation (`ok`, `getting_low`, `due_for_review`), and manager actions (`extendLifespan`, `replaceLifespan`, `retireLifespan`).
 - `src/lib/issueClassification.ts` — Auto-classifies issues into `IssueType` (`stock_low_inventory`, `equipment_replacement`, `needs_repair`); overridable in the issues UI.
 - `src/lib/__tests__/inventory.test.ts` — Vitest: return-to-shop, multi-qty assign, catalog delete cascade, vehicle delete, `resolveStockIssue`.
+- `src/lib/__tests__/lifespan.test.ts` — Vitest: lifespan status calculations, threshold transitions, and manager operations.
+- `src/lib/__tests__/dbLifespan.test.ts` — Vitest: vehicle daily job counts, usage wear delta propagation, and manager actions in `dbService`.
 - `src/lib/__tests__/issueClassification.test.ts` — Vitest: issue type detection heuristics.
 - `src/lib/__tests__/appSettings.test.ts` — Vitest: `getRecentInspectors` respects depth 1 vs 3.
 - `src/lib/firebase.ts` — Firebase app/auth/Firestore initialization plus `ensureAuth()` anonymous sign-in.
 - `src/lib/mockData.ts` — `INITIAL_*` seed data (users, vehicles, equipment, checklist categories/questions).
 - `src/lib/avatarPresets.ts` — Avatar preset catalog and `getResolvedAvatarUrl()` / role-default helpers.
-- `src/types/index.ts` — Central domain model: `User`, `Vehicle`, `Equipment`, `Inspection`, `Issue`, `IssueType`, `AppSettings`, `ChecklistQuestion`, and their status unions.
+- `src/types/index.ts` — Central domain model: `User`, `Vehicle`, `VehicleDayLog`, `Equipment`, `Inspection`, `Issue`, `IssueType`, `LifespanMode`, `LifespanStatus`, `AppSettings`, `ChecklistQuestion`, and their status unions.
 
 ## Config
 - `next.config.mjs` — Static export, `basePath`/`assetPrefix` for `/sunny` hosting, unoptimized images, strict mode off (protects the camera scanner).

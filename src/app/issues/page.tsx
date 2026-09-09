@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   AlertTriangle,
   Search,
@@ -8,9 +8,16 @@ import {
   PackageCheck,
   PackageMinus,
   Trash2,
+  CheckCheck,
+  Filter,
+  AlertOctagon,
+  Wrench,
+  DollarSign,
+  UserCheck,
+  X,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
-import { Issue, IssueType } from '@/types';
+import { Issue, IssueType, IssuePriority } from '@/types';
 import { IssueTimeline } from '@/components/IssueTimeline';
 import { ManagerOnly } from '@/components/ManagerOnly';
 import { useAuth } from '@/context/AuthContext';
@@ -42,12 +49,23 @@ function IssuesPageContent() {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [vehicleFilter, setVehicleFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'priority_critical' | 'date_desc' | 'date_asc' | 'status'>('priority_critical');
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [pendingAction, setPendingAction] = useState<'update_stock' | 'remove_from_van' | null>(null);
   const [confirmRemoveIssue, setConfirmRemoveIssue] = useState<Issue | null>(null);
   const [issueToDelete, setIssueToDelete] = useState<Issue | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // 7.4 Batch Selection State
+  const [selectedIssueIds, setSelectedIssueIds] = useState<string[]>([]);
+  const [showBatchResolveModal, setShowBatchResolveModal] = useState(false);
+  const [batchNotes, setBatchNotes] = useState('');
+  const [batchRepairCost, setBatchRepairCost] = useState('');
+  const [batchPartNumber, setBatchPartNumber] = useState('');
+  const [isBatchSubmitting, setIsBatchSubmitting] = useState(false);
+
   const [quantityModal, setQuantityModal] = useState<{
     action: 'update_stock' | 'remove_from_van';
     issue: Issue;
@@ -80,6 +98,7 @@ function IssuesPageContent() {
   };
 
   const openIssuesCount = issues.filter(i => i.status !== 'fixed').length;
+  const criticalIssuesCount = issues.filter(i => i.status !== 'fixed' && i.priority === 'critical').length;
 
   const handleTypeChange = (issue: Issue, type: IssueType) => {
     try {
@@ -151,10 +170,51 @@ function IssuesPageContent() {
     }
   };
 
+  // 7.4 Batch Resolve Handler
+  const handleBatchResolveSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!batchNotes.trim()) {
+      alert('Please provide resolution notes for the batch audit trail.');
+      return;
+    }
+
+    try {
+      setIsBatchSubmitting(true);
+      const cost = batchRepairCost ? Number(batchRepairCost) : undefined;
+      const part = batchPartNumber.trim() || undefined;
+
+      await dbService.batchResolveIssues(
+        selectedIssueIds,
+        batchNotes.trim(),
+        managerIdentity,
+        cost,
+        part,
+      );
+
+      setSelectedIssueIds([]);
+      setShowBatchResolveModal(false);
+      setBatchNotes('');
+      setBatchRepairCost('');
+      setBatchPartNumber('');
+      loadData();
+      alert(`Successfully marked ${selectedIssueIds.length} issue(s) as resolved!`);
+    } catch (err: any) {
+      alert(err.message || 'Error executing batch resolution');
+    } finally {
+      setIsBatchSubmitting(false);
+    }
+  };
+
+  const toggleSelectIssue = (issueId: string) => {
+    setSelectedIssueIds(prev =>
+      prev.includes(issueId) ? prev.filter(id => id !== issueId) : [...prev, issueId]
+    );
+  };
+
   const activeIssues = (statusFilter === 'fixed'
     ? issues.filter(iss => iss.status === 'fixed')
     : issues.filter(iss => iss.status !== 'fixed')
-  ).sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime());
+  );
 
   const filteredIssues = activeIssues.filter(iss => {
     const matchesSearch =
@@ -162,12 +222,34 @@ function IssuesPageContent() {
       iss.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
       iss.equipmentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       iss.vehicleNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      iss.reportedByName.toLowerCase().includes(searchTerm.toLowerCase());
+      iss.reportedByName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (iss.assignedTechnician && iss.assignedTechnician.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchesStatus = statusFilter === 'all' || iss.status === statusFilter;
+    const matchesPriority = priorityFilter === 'all' || iss.priority === priorityFilter;
     const matchesVehicle = vehicleFilter === 'all' || iss.vehicleId === vehicleFilter;
 
-    return matchesSearch && matchesStatus && matchesVehicle;
+    return matchesSearch && matchesStatus && matchesPriority && matchesVehicle;
+  });
+
+  // 7.1 Sort with Critical Triage to the Top
+  const sortedIssues = [...filteredIssues].sort((a, b) => {
+    if (sortBy === 'priority_critical') {
+      const priorityWeight: Record<string, number> = { critical: 3, moderate: 2, low: 1 };
+      const weightA = priorityWeight[a.priority || 'moderate'] || 2;
+      const weightB = priorityWeight[b.priority || 'moderate'] || 2;
+      if (weightA !== weightB) {
+        return weightB - weightA; // Higher priority first
+      }
+      return new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime();
+    }
+    if (sortBy === 'date_asc') {
+      return new Date(a.reportedAt).getTime() - new Date(b.reportedAt).getTime();
+    }
+    if (sortBy === 'status') {
+      return a.status.localeCompare(b.status);
+    }
+    return new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime();
   });
 
   const vehicles = dbService.getVehicles();
@@ -178,19 +260,54 @@ function IssuesPageContent() {
       ?.quantity ?? issue.reportedQuantity ?? 0;
 
   return (
-    <div className="page">
+    <div className="page space-y-6 pb-20">
       <PageHeader
-        title={statusFilter === 'fixed' ? 'Resolved Issue History' : 'Active Equipment Issues'}
-        subtitle="Trace problems, update stock, and audit resolution history."
+        title={statusFilter === 'fixed' ? 'Resolved Issue History' : 'Active Equipment Issues & Triage'}
+        subtitle="Trace problems, dispatch technicians, record repair costs, and audit resolution history."
         actions={
-          <span className="badge" data-status="flagged">
-            <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-            {openIssuesCount} currently open
-          </span>
+          <div className="flex items-center gap-2">
+            {criticalIssuesCount > 0 && statusFilter !== 'fixed' && (
+              <span className="badge bg-rose-100 text-rose-800 border-rose-300 font-extrabold flex items-center gap-1">
+                <AlertOctagon className="h-3.5 w-3.5 text-rose-600" aria-hidden />
+                {criticalIssuesCount} Grounded
+              </span>
+            )}
+            <span className="badge" data-status="flagged">
+              <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+              {openIssuesCount} currently open
+            </span>
+          </div>
         }
       />
 
-      <div className="card card-pad">
+      {/* 7.1 Urgent Grounding Warning Banner */}
+      {criticalIssuesCount > 0 && statusFilter !== 'fixed' && (
+        <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-300 text-rose-950 spread items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            <AlertOctagon className="w-5 h-5 text-rose-600 shrink-0" />
+            <div>
+              <div className="text-xs font-extrabold">
+                {criticalIssuesCount} Critical Issue{criticalIssuesCount > 1 ? 's' : ''} Require Immediate Attention
+              </div>
+              <p className="text-[11px] text-rose-800">
+                Vehicles with critical flags should remain grounded until repairs are certified by a technician.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setPriorityFilter('critical');
+              setSortBy('priority_critical');
+            }}
+            className="px-3 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 shrink-0"
+          >
+            View Critical Only
+          </button>
+        </div>
+      )}
+
+      <div className="card card-pad space-y-3">
         <div className="spread flex-col md:flex-row gap-3">
           <div className="field w-full md:max-w-xs">
             <label className="label sr-only" htmlFor="issues-search">
@@ -201,15 +318,15 @@ function IssuesPageContent() {
               <input
                 id="issues-search"
                 type="search"
-                placeholder="Search equipment, problem, van, reporter..."
+                placeholder="Search equipment, problem, tech, van..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="input pl-9"
+                className="input pl-9 text-xs"
               />
             </div>
           </div>
 
-          <div className="cluster w-full md:w-auto md:justify-end">
+          <div className="cluster w-full md:w-auto md:justify-end flex-wrap gap-2">
             {STATUS_FILTERS.map((st) => (
               <button
                 key={st}
@@ -221,10 +338,23 @@ function IssuesPageContent() {
               </button>
             ))}
 
+            {/* 7.1 Priority Filter */}
+            <select
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              className="select btn-sm w-auto text-xs"
+              aria-label="Filter by priority"
+            >
+              <option value="all">All Priorities</option>
+              <option value="critical">Critical (Grounded)</option>
+              <option value="moderate">Moderate</option>
+              <option value="low">Low (Cosmetic)</option>
+            </select>
+
             <select
               value={vehicleFilter}
               onChange={(e) => setVehicleFilter(e.target.value)}
-              className="select btn-sm w-auto"
+              className="select btn-sm w-auto text-xs"
               aria-label="Filter by vehicle"
             >
               <option value="all">All Vehicles</option>
@@ -234,12 +364,62 @@ function IssuesPageContent() {
                 </option>
               ))}
             </select>
+
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              className="select btn-sm w-auto text-xs"
+              aria-label="Sort issues"
+            >
+              <option value="priority_critical">Sort: Critical First</option>
+              <option value="date_desc">Sort: Newest</option>
+              <option value="date_asc">Sort: Oldest</option>
+              <option value="status">Sort: Status</option>
+            </select>
           </div>
         </div>
+
+        {/* 7.4 Multi-select Controls */}
+        {statusFilter !== 'fixed' && sortedIssues.length > 0 && (
+          <div className="spread items-center pt-2 border-t border-line text-xs text-ink-muted">
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5 font-bold cursor-pointer hover:text-ink">
+                <input
+                  type="checkbox"
+                  checked={selectedIssueIds.length === sortedIssues.length && sortedIssues.length > 0}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedIssueIds(sortedIssues.map((i) => i.id));
+                    } else {
+                      setSelectedIssueIds([]);
+                    }
+                  }}
+                  className="rounded border-line"
+                />
+                <span>Select All ({sortedIssues.length})</span>
+              </label>
+              {selectedIssueIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedIssueIds([])}
+                  className="text-xs text-rose-600 hover:text-rose-700 underline"
+                >
+                  Clear ({selectedIssueIds.length})
+                </button>
+              )}
+            </div>
+
+            {selectedIssueIds.length > 0 && (
+              <span className="font-bold text-ink">
+                {selectedIssueIds.length} issue(s) selected
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="stack">
-        {filteredIssues.map((issue) => {
+        {sortedIssues.map((issue) => {
           const held = getHeldQuantity(issue);
           const required = issue.requiredQuantity;
           const isLowStock = required != null && held < required;
@@ -253,7 +433,14 @@ function IssuesPageContent() {
                 selectedIssue?.id === issue.id ? 'ring-2 ring-ink ring-offset-2 ring-offset-[var(--bg)]' : ''
               }`}
             >
-              <IssueTimeline issue={issue} onStatusUpdated={() => loadData()} />
+              <IssueTimeline
+                issue={issue}
+                onStatusUpdated={() => loadData()}
+                selectable={statusFilter !== 'fixed'}
+                selected={selectedIssueIds.includes(issue.id)}
+                onSelectToggle={toggleSelectIssue}
+              />
+
               {selectedIssue?.id === issue.id && (
                 <div className="card card-pad mt-3">
                   <div className="spread flex-col items-stretch gap-4 lg:flex-row lg:items-end">
@@ -318,6 +505,7 @@ function IssuesPageContent() {
                       </div>
                     )}
                   </div>
+
                   <div className="cluster justify-end pt-2 border-t border-line mt-4">
                     <button
                       type="button"
@@ -339,17 +527,125 @@ function IssuesPageContent() {
           );
         })}
 
-        {filteredIssues.length === 0 && (
+        {sortedIssues.length === 0 && (
           <div className="card card-pad">
             <EmptyState
               icon={<CheckCircle2 className="h-12 w-12 text-[var(--ok)]" aria-hidden />}
               title="No issues found matching query"
             >
-              Try resetting search keywords or status filter.
+              Try resetting search keywords, status, or priority filters.
             </EmptyState>
           </div>
         )}
       </div>
+
+      {/* 7.4 Sticky Batch Action Bottom Bar */}
+      {selectedIssueIds.length > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-ink text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-4 border border-line-strong animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <div className="text-xs font-bold">
+            {selectedIssueIds.length} Issue{selectedIssueIds.length > 1 ? 's' : ''} Selected
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowBatchResolveModal(true)}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold flex items-center gap-1.5 transition-colors shadow-sm"
+            >
+              <CheckCheck className="w-3.5 h-3.5" />
+              <span>Resolve Selected</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedIssueIds([])}
+              className="p-1 rounded-lg text-ink-muted hover:text-white"
+              title="Cancel Selection"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 7.4 Batch Resolve Modal */}
+      {showBatchResolveModal && (
+        <div
+          className="fixed inset-0 z-50 bg-ink/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setShowBatchResolveModal(false)}
+        >
+          <div
+            className="card card-pad max-w-md w-full"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="batch-resolve-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="batch-resolve-title" className="card-title text-base font-extrabold mb-1">
+              Batch Resolve {selectedIssueIds.length} Issues
+            </h3>
+            <p className="hint text-xs mb-4">
+              Mark all selected issues as fixed with a permanent audit note and optional repair cost.
+            </p>
+
+            <form onSubmit={handleBatchResolveSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="label font-bold text-ink mb-1 block">
+                  Batch Resolution Notes <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="e.g. Completed routine fleet maintenance batch; restocked microfibers and replaced worn fittings."
+                  value={batchNotes}
+                  onChange={(e) => setBatchNotes(e.target.value)}
+                  className="textarea text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label font-bold text-ink mb-1 block">Total Batch Repair Cost ($)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="e.g. 120.00"
+                    value={batchRepairCost}
+                    onChange={(e) => setBatchRepairCost(e.target.value)}
+                    className="input text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="label font-bold text-ink mb-1 block">Shared Part # (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. MISC-RESTOCK"
+                    value={batchPartNumber}
+                    onChange={(e) => setBatchPartNumber(e.target.value)}
+                    className="input text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="cluster justify-end pt-3 border-t border-line">
+                <button
+                  type="button"
+                  onClick={() => setShowBatchResolveModal(false)}
+                  className="btn btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isBatchSubmitting}
+                  className="btn btn-primary bg-emerald-600 hover:bg-emerald-500 text-white"
+                >
+                  {isBatchSubmitting ? 'Resolving Issues...' : `Resolve ${selectedIssueIds.length} Issues`}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <ConfirmModal
         open={issueToDelete !== null}

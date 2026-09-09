@@ -47,12 +47,52 @@ export interface Vehicle {
   lastInspectionStatus?: InspectionStatus | null;
   lastInspectionAt?: string | null;
   imageUrl?: string | null;
+  odometer?: number;
+  fuelLevel?: number;
   createdAt?: string;
 }
 
 export type EquipmentCategory = 'equipment' | 'supplies' | 'vehicle_condition';
 export type EquipmentStatus = 'working' | 'flagged' | 'needs_repair' | 'being_repaired' | 'fixed';
 export type EquipmentKind = 'reusable' | 'consumable';
+export type LifespanMode = 'usage' | 'time';
+export type LifespanStatus = 'ok' | 'getting_low' | 'due_for_review';
+
+export interface LifespanLogEntry {
+  id: string;
+  equipmentId: string;
+  timestamp: string; // ISO string
+  userId?: string | null;
+  userName?: string | null;
+  action: 'extended' | 'replaced' | 'retired' | 'threshold_updated' | 'created';
+  previousValues?: {
+    carsUsed?: number;
+    expectedCars?: number | null;
+    dueDate?: string | null;
+    lifespanStatus?: LifespanStatus | null;
+    retiredAt?: string | null;
+    lowWearThresholdPercent?: number;
+  };
+  newValues?: {
+    carsUsed?: number;
+    expectedCars?: number | null;
+    dueDate?: string | null;
+    lifespanStatus?: LifespanStatus | null;
+    retiredAt?: string | null;
+    lowWearThresholdPercent?: number;
+  };
+  reason?: string;
+}
+
+export interface VehicleDayLog {
+  id: string; // e.g. `${vehicleId}_${dateString}`
+  vehicleId: string;
+  dateString: string; // YYYY-MM-DD
+  jobsCount: number; // >= 0
+  updatedAt: string;
+  updatedById?: string | null;
+  updatedByName?: string | null;
+}
 
 export interface EquipmentAssignment {
   vehicleId: string;
@@ -68,6 +108,8 @@ export interface Equipment {
   vehicleNumber?: string | null;
   name: string;
   assetTag?: string | null;
+  /** Shared type label for individual lifespan tools (e.g. "Brushy"). */
+  toolFamily?: string | null;
   category: EquipmentCategory;
   kind?: EquipmentKind;
   equipmentType?: EquipmentKind;
@@ -79,12 +121,30 @@ export interface Equipment {
   /** Total stock for consumables (reusable items default to one). */
   totalQuantity?: number;
   availableQuantity?: number;
+  /** Minimum shop stock par threshold */
+  minRequiredStock?: number;
+  /** Unit replacement cost in USD */
+  unitCost?: number;
   assignments?: EquipmentAssignment[];
   status: EquipmentStatus;
   activeIssueId?: string | null;
   lastCheckedAt?: string;
   createdAt?: string;
   updatedAt?: string;
+  /** Lifespan tracking fields */
+  lifespanEnabled?: boolean;
+  lifespanMode?: LifespanMode | null;
+  expectedCars?: number | null;
+  carsUsed?: number;
+  expectedMonths?: number | null;
+  lifeStartedAt?: string | null;
+  dueDate?: string | null;
+  lifespanStatus?: LifespanStatus | null;
+  retiredAt?: string | null;
+  /** Custom warning percentage threshold before review (defaults to 80%) */
+  lowWearThresholdPercent?: number;
+  /** History / audit log for life events */
+  lifespanHistory?: LifespanLogEntry[];
 }
 
 export type ChecklistCategory = string;
@@ -136,6 +196,7 @@ export interface InspectionResponse {
   notes?: string;
   equipmentId?: string;
   equipmentName?: string;
+  photoUrl?: string;
 }
 
 export interface Inspection {
@@ -163,6 +224,13 @@ export interface Inspection {
   flaggedForCorrection?: string[];
   /** Link to previous submission if this is a resubmit */
   previousSubmissionId?: string;
+  /** Digital touch/canvas signature base64 */
+  signatureBase64?: string;
+  /** Attached photo URLs */
+  photoUrls?: string[];
+  /** Mileage & fuel readings */
+  odometer?: number;
+  fuelLevel?: number;
 }
 
 export type TaskStatus = 'open' | 'completed';
@@ -198,6 +266,7 @@ export interface ReportSettings {
 }
 
 export type IssueStatus = 'open' | 'needs_repair' | 'being_repaired' | 'fixed';
+export type IssuePriority = 'critical' | 'moderate' | 'low';
 
 export type IssueType =
   | 'stock_low_inventory'
@@ -233,6 +302,12 @@ export interface Issue {
   title: string;
   description: string;
   status: IssueStatus;
+  priority?: IssuePriority;
+  assignedTechnician?: string | null;
+  estimatedCompletionDate?: string | null;
+  repairCost?: number | null;
+  partNumber?: string | null;
+  photoUrl?: string | null;
   resolvedAt?: string | null;
   resolvedById?: string | null;
   resolvedByName?: string | null;

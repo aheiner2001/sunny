@@ -14,10 +14,13 @@ import {
   User,
   History,
   Plus,
+  Gauge,
+  Fuel,
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 import { dbService } from '@/lib/db';
 import { Vehicle, Equipment, Inspection, Issue } from '@/types';
-import { VehicleStatusBadge, InspectionStatusBadge, EquipmentStatusBadge, IssueStatusBadge } from '@/components/StatusBadges';
+import { VehicleStatusBadge, InspectionStatusBadge, EquipmentStatusBadge, IssueStatusBadge, LifespanStatusBadge } from '@/components/StatusBadges';
 import { QRCodeDisplay } from '@/components/QRCodeDisplay';
 import { IssueTimeline } from '@/components/IssueTimeline';
 import { RecentInspectors } from '@/components/RecentInspectors';
@@ -27,6 +30,7 @@ import { EmptyState } from '@/components/EmptyState';
 export default function VehicleDetailClient() {
   const searchParams = useSearchParams();
   const vehicleId = searchParams?.get('id') || '';
+  const { user: currentUser } = useAuth();
 
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,6 +50,9 @@ export default function VehicleDetailClient() {
   const [returnModal, setReturnModal] = useState<{ item: Equipment; max: number } | null>(null);
   const [parDrafts, setParDrafts] = useState<Record<string, string>>({});
   const [parSavingId, setParSavingId] = useState<string | null>(null);
+  const [jobsToday, setJobsToday] = useState(0);
+  const [jobsTodayInput, setJobsTodayInput] = useState('0');
+  const [jobsSaving, setJobsSaving] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!vehicleId) {
@@ -67,6 +74,9 @@ export default function VehicleDetailClient() {
         setEquipment(vehicleEquipment);
         setInspections(dbService.getInspectionsForVehicle(v.id));
         setIssues(dbService.getIssuesForVehicle(v.id));
+        const currentJobs = dbService.getTodayJobsCount(v.id);
+        setJobsToday(currentJobs);
+        setJobsTodayInput(String(currentJobs));
         setParDrafts(prev => {
           const next = { ...prev };
           for (const item of vehicleEquipment) {
@@ -96,6 +106,30 @@ export default function VehicleDetailClient() {
   const getVehicleAllocation = (item: Equipment) => {
     return item.assignments?.find(assignment => assignment.vehicleId === vehicle?.id)?.quantity
       || (item.vehicleId === vehicle?.id ? 1 : 0);
+  };
+
+  const handleUpdateJobsToday = async (val: number) => {
+    if (!vehicle) return;
+    const clamped = Math.max(0, Math.floor(val));
+    if (clamped > 50 && !window.confirm(`Confirm: ${clamped} cars cleaned today is unusually high. Save this count?`)) {
+      setJobsTodayInput(String(jobsToday));
+      return;
+    }
+    try {
+      setJobsSaving(true);
+      await dbService.setVehicleJobsToday(
+        vehicle.id,
+        clamped,
+        currentUser ? { id: currentUser.id, name: currentUser.name } : null
+      );
+      setJobsToday(clamped);
+      setJobsTodayInput(String(clamped));
+    } catch (err: any) {
+      alert(err.message || 'Could not update cars cleaned.');
+      setJobsTodayInput(String(jobsToday));
+    } finally {
+      setJobsSaving(false);
+    }
   };
 
   const handleReturnConfirm = async (amount: number) => {
@@ -220,6 +254,11 @@ export default function VehicleDetailClient() {
   const selectedInventory = unassignedInventory.find(item => item.id === selectedInventoryId);
   const selectedInventoryAvailable = selectedInventory ? (selectedInventory.availableQuantity ?? 0) : 0;
 
+  const openIssuesCount = issues.filter(i => i.status !== 'fixed').length;
+  const lastInspectionLabel = vehicle.lastInspectionAt
+    ? new Date(vehicle.lastInspectionAt).toLocaleDateString([], { month: 'short', day: 'numeric' })
+    : null;
+
   return (
     <div className="page max-w-full overflow-x-hidden">
       <div className="page-head">
@@ -245,55 +284,167 @@ export default function VehicleDetailClient() {
           className="btn btn-primary self-start sm:self-auto"
         >
           <ClipboardCheck className="h-4 w-4" aria-hidden />
-          Perform Inspection
+          Inspect
         </Link>
       </div>
 
-      <div className="grid-auto" style={{ '--min': '12rem' } as React.CSSProperties}>
+      <div className="grid-auto" style={{ '--min': '11rem' } as React.CSSProperties}>
         <div className="card card-pad">
           <div className="stat">
-            <span className="stat-label">Current Operator</span>
+            <span className="stat-label" title="Adds wear to usage-lifespan tools on this van">
+              Jobs today
+            </span>
+            <div className="cluster gap-2 mt-1">
+              <button
+                type="button"
+                disabled={jobsSaving || jobsToday <= 0}
+                onClick={() => void handleUpdateJobsToday(jobsToday - 1)}
+                className="btn btn-secondary btn-sm px-2.5 py-1 min-h-0"
+                aria-label="Decrease cars cleaned"
+              >
+                -
+              </button>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={jobsTodayInput}
+                onChange={(e) => setJobsTodayInput(e.target.value)}
+                onBlur={() => {
+                  const num = Math.max(0, Math.floor(Number(jobsTodayInput) || 0));
+                  if (num !== jobsToday) {
+                    void handleUpdateJobsToday(num);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const num = Math.max(0, Math.floor(Number(jobsTodayInput) || 0));
+                    if (num !== jobsToday) {
+                      void handleUpdateJobsToday(num);
+                    }
+                  }
+                }}
+                className="input max-w-[4.5rem] py-1 text-center font-bold text-base"
+                title="Cars cleaned today — wears usage tools on this van"
+              />
+              <button
+                type="button"
+                disabled={jobsSaving}
+                onClick={() => void handleUpdateJobsToday(jobsToday + 1)}
+                className="btn btn-secondary btn-sm px-2.5 py-1 min-h-0"
+                aria-label="Increase cars cleaned"
+              >
+                +
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="card card-pad">
+          <div className="stat">
+            <span className="stat-label">Operator</span>
             <span className="stat-value text-base cluster">
               <User className="h-4 w-4 text-[var(--info)]" aria-hidden />
-              {vehicle.currentUserName || 'None (In Depot)'}
+              {vehicle.currentUserName || 'In depot'}
             </span>
           </div>
         </div>
-        <div className="card card-pad">
+
+        <div
+          className="card card-pad"
+          title={
+            lastInspectionLabel
+              ? `From last inspection (${lastInspectionLabel})`
+              : 'Updated when an inspection is submitted'
+          }
+        >
           <div className="stat">
-            <span className="stat-label">Last Inspection</span>
+            <span className="stat-label">Odometer</span>
+            <span className="stat-value text-base cluster">
+              <Gauge className="h-4 w-4 text-ink-muted" aria-hidden />
+              {vehicle.odometer != null
+                ? `${vehicle.odometer.toLocaleString()} mi`
+                : '—'}
+            </span>
+            {lastInspectionLabel && vehicle.odometer != null && (
+              <span className="hint mt-1 block">As of {lastInspectionLabel}</span>
+            )}
+          </div>
+        </div>
+
+        <div
+          className="card card-pad"
+          title={
+            lastInspectionLabel
+              ? `From last inspection (${lastInspectionLabel})`
+              : 'Updated when an inspection is submitted'
+          }
+        >
+          <div className="stat">
+            <span className="stat-label">Fuel</span>
+            <span className="stat-value text-base cluster">
+              <Fuel className="h-4 w-4 text-ink-muted" aria-hidden />
+              {vehicle.fuelLevel != null ? `${vehicle.fuelLevel}%` : '—'}
+            </span>
+            {lastInspectionLabel && vehicle.fuelLevel != null && (
+              <span className="hint mt-1 block">As of {lastInspectionLabel}</span>
+            )}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="card card-pad text-left w-full hover:bg-[var(--surface-alt)] transition-colors"
+          onClick={() => setActiveTab('timeline')}
+        >
+          <div className="stat">
+            <span className="stat-label">Last inspection</span>
             <span className="mt-1 block">
               <InspectionStatusBadge status={vehicle.lastInspectionStatus} />
             </span>
+            {lastInspectionLabel && (
+              <span className="hint mt-1 block">{lastInspectionLabel}</span>
+            )}
           </div>
-        </div>
-        <div className="card card-pad">
+        </button>
+
+        <button
+          type="button"
+          className="card card-pad text-left w-full hover:bg-[var(--surface-alt)] transition-colors"
+          onClick={() => setActiveTab('equipment')}
+        >
           <div className="stat">
-            <span className="stat-label">Assigned Equipment</span>
+            <span className="stat-label">Equipment</span>
             <span className="stat-value text-base cluster">
               <Wrench className="h-4 w-4 text-ink-muted" aria-hidden />
-              {equipment.length} Tools/Gear
+              {equipment.length}
             </span>
           </div>
-        </div>
-        <div className="card card-pad">
-          <div className="stat" data-status={issues.filter(i => i.status !== 'fixed').length > 0 ? 'flagged' : 'ok'}>
-            <span className="stat-label">Open Issues</span>
+        </button>
+
+        <button
+          type="button"
+          className="card card-pad text-left w-full hover:bg-[var(--surface-alt)] transition-colors"
+          data-status={openIssuesCount > 0 ? 'flagged' : 'ok'}
+          onClick={() => setActiveTab('issues')}
+        >
+          <div className="stat" data-status={openIssuesCount > 0 ? 'flagged' : 'ok'}>
+            <span className="stat-label">Open issues</span>
             <span className="stat-value text-base cluster">
               <AlertTriangle className="h-4 w-4" aria-hidden />
-              {issues.filter(i => i.status !== 'fixed').length} Active
+              {openIssuesCount}
             </span>
           </div>
-        </div>
+        </button>
       </div>
 
       <div className="border-b border-line overflow-x-auto">
         <div className="cluster gap-4 min-w-max px-1">
           {[
-            { id: 'timeline', label: 'Chronological Timeline', icon: History },
-            { id: 'equipment', label: `Assigned Equipment (${equipment.length})`, icon: Wrench },
-            { id: 'issues', label: `Issues & Resolutions (${issues.length})`, icon: AlertTriangle },
-            { id: 'qr', label: 'QR Code & Tag', icon: QrCode },
+            { id: 'timeline' as const, label: 'Timeline', icon: History },
+            { id: 'equipment' as const, label: `Equipment (${equipment.length})`, icon: Wrench },
+            { id: 'issues' as const, label: `Issues (${issues.length})`, icon: AlertTriangle },
+            { id: 'qr' as const, label: 'QR', icon: QrCode },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -301,7 +452,7 @@ export default function VehicleDetailClient() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                onClick={() => setActiveTab(tab.id)}
                 className={`cluster min-h-12 border-b-2 pb-3 text-sm font-bold transition-all -mb-px whitespace-nowrap ${
                   isActive
                     ? 'border-ink text-ink'
@@ -318,13 +469,11 @@ export default function VehicleDetailClient() {
 
       {activeTab === 'timeline' && (
         <div className="card card-pad stack">
-          <div className="spread flex-col sm:flex-row gap-3 border-b border-line pb-4">
+          <div className="spread flex-col sm:flex-row gap-3 border-b border-line pb-3">
             <div className="min-w-0">
-              <h2 className="card-title">Vehicle Operational Timeline</h2>
-              <p className="hint leading-relaxed">
-                {showAllTimeline
-                  ? 'Complete append-only history of every inspection result and equipment issue.'
-                  : 'Recent history from the last 30 days. Older records remain available below.'}
+              <h2 className="card-title">Timeline</h2>
+              <p className="hint">
+                {showAllTimeline ? 'Full history' : 'Last 30 days'}
               </p>
             </div>
             {hasOlderTimeline && (
@@ -333,7 +482,7 @@ export default function VehicleDetailClient() {
                 onClick={() => setShowAllTimeline(current => !current)}
                 className="btn btn-ghost btn-sm whitespace-nowrap"
               >
-                {showAllTimeline ? 'Show recent only' : `Show older history (${timelineItems.length - recentTimelineItems.length})`}
+                {showAllTimeline ? 'Recent only' : `Older (+${timelineItems.length - recentTimelineItems.length})`}
               </button>
             )}
           </div>
@@ -354,22 +503,22 @@ export default function VehicleDetailClient() {
                     >
                       <div className={`h-1.5 w-1.5 rounded-full ${isPassed ? 'bg-[var(--ok)]' : 'bg-[var(--amber)]'}`} />
                     </div>
-                    <div className="card card-pad bg-[var(--surface-alt)] stack-tight">
+                    <div className="rounded-xl border border-line bg-[var(--surface-alt)] px-3 py-2.5 stack-tight">
                       <div className="spread flex-wrap gap-2">
                         <div className="cluster">
-                          <span className="text-xs font-bold">Daily Inspection Submitted</span>
+                          <span className="text-xs font-bold">Inspection</span>
                           <InspectionStatusBadge status={insp.status} />
                         </div>
                         <span className="unit-tag">
-                          {new Date(insp.submittedAt).toLocaleDateString()} at{' '}
+                          {new Date(insp.submittedAt).toLocaleDateString()}{' '}
                           {new Date(insp.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
-                      <p className="text-sm text-ink-muted leading-relaxed break-words">
-                        Completed by <strong>{insp.userName}</strong> ({insp.userEmail})
+                      <p className="text-sm text-ink-muted break-words">
+                        {insp.userName}
                       </p>
                       {insp.generalNotes ? (
-                        <p className="text-sm italic text-ink-muted card card-pad bg-[var(--surface)] break-words leading-relaxed">
+                        <p className="text-sm italic text-ink-muted break-words">
                           &ldquo;{insp.generalNotes}&rdquo;
                         </p>
                       ) : null}
@@ -384,20 +533,18 @@ export default function VehicleDetailClient() {
                   <div className="absolute -left-6 top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-[var(--critical)] bg-[var(--surface)]">
                     <div className="h-1.5 w-1.5 rounded-full bg-[var(--critical)]" />
                   </div>
-                  <div className="card card-pad bg-[var(--amber-wash)] stack-tight">
+                  <div className="rounded-xl border border-line bg-[var(--amber-wash)] px-3 py-2.5 stack-tight">
                     <div className="spread flex-wrap gap-2">
                       <div className="cluster">
                         <span className="text-xs font-bold text-[var(--amber-text)]">
-                          Issue Reported: {iss.equipmentName}
+                          {iss.equipmentName}
                         </span>
                         <IssueStatusBadge status={iss.status} />
                       </div>
                       <span className="unit-tag">{new Date(iss.reportedAt).toLocaleDateString()}</span>
                     </div>
-                    <p className="text-sm text-ink break-words leading-relaxed">{iss.description}</p>
-                    <div className="hint">
-                      Reported by <strong>{iss.reportedByName}</strong>
-                    </div>
+                    <p className="text-sm text-ink break-words">{iss.description}</p>
+                    <div className="hint">{iss.reportedByName}</div>
                   </div>
                 </div>
               );
@@ -406,8 +553,8 @@ export default function VehicleDetailClient() {
             {visibleTimelineItems.length === 0 && (
               <p className="hint py-4">
                 {timelineItems.length === 0
-                  ? 'No inspection or issue records logged for this vehicle yet.'
-                  : 'No recent records. Show older history to view the complete timeline.'}
+                  ? 'No inspections or issues yet.'
+                  : 'No recent records — show older history.'}
               </p>
             )}
           </div>
@@ -415,98 +562,99 @@ export default function VehicleDetailClient() {
       )}
 
       {activeTab === 'equipment' && (
-        <div className="card card-pad stack">
-          <div className="spread flex-col sm:flex-row gap-3 border-b border-line pb-3">
+        <div className="card overflow-hidden">
+          <div className="card-pad spread flex-col sm:flex-row gap-3 border-b border-line">
             <div className="min-w-0">
-              <h2 className="card-title">Vehicle Inventory & Equipment</h2>
-              <p className="hint leading-relaxed">
-                All tools, machinery, and supplies dedicated to {vehicle.vehicleNumber}.
-              </p>
+              <h2 className="card-title">On this van</h2>
+              <p className="hint">{equipment.length} assigned · jobs today wear usage tools here</p>
             </div>
             <button type="button" onClick={openAssignModal} className="btn btn-primary w-full sm:w-auto">
               <Plus className="h-3.5 w-3.5" aria-hidden />
-              Assign Equipment
+              Assign
             </button>
           </div>
 
-          <div className="grid-auto">
-            {equipment.map((eq) => {
-              const assignment = eq.assignments?.find(candidate => candidate.vehicleId === vehicle.id);
-              const heldQty = getVehicleAllocation(eq);
-              const requiredLabel = assignment?.requiredQuantity ?? '—';
+          {equipment.length === 0 ? (
+            <div className="card-pad">
+              <EmptyState
+                icon={<Wrench className="h-10 w-10 text-ink-faint" aria-hidden />}
+                title="No equipment assigned"
+              >
+                Assign from shop stock or create a new item.
+              </EmptyState>
+            </div>
+          ) : (
+            <div>
+              {equipment.map((eq) => {
+                const assignment = eq.assignments?.find(candidate => candidate.vehicleId === vehicle.id);
+                const heldQty = getVehicleAllocation(eq);
+                const requiredLabel = assignment?.requiredQuantity ?? '—';
+                const lifeShort = !eq.lifespanEnabled
+                  ? null
+                  : eq.retiredAt
+                    ? 'Retired'
+                    : eq.lifespanMode === 'usage'
+                      ? `${eq.carsUsed ?? 0}/${eq.expectedCars ?? 0} cars`
+                      : eq.dueDate
+                        ? `Due ${new Date(eq.dueDate).toLocaleDateString()}`
+                        : 'Time-tracked';
 
-              return (
-                <div key={eq.id} className="card card-pad stack-tight">
-                  <div className="spread items-start gap-3">
-                    <div className="cluster items-start min-w-0">
-                      <span className="icon-tile" aria-hidden>
-                        <Wrench className="h-4 w-4" />
-                      </span>
-                      <div className="min-w-0">
-                        <h3 className="card-title break-words">{eq.name}</h3>
-                        <span className="badge mt-1">{eq.category}</span>
-                        <p className="hint mt-1 break-words">
-                          {eq.assetTag ? `Tag #${eq.assetTag}` : 'No serial / tag'}
+                return (
+                  <div key={eq.id} className="border-t border-line px-4 py-3">
+                    <div className="spread items-start gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="cluster flex-wrap gap-1.5">
+                          <span className="text-sm font-bold break-words">{eq.name}</span>
+                          <EquipmentStatusBadge status={eq.status} />
+                          {eq.lifespanEnabled && (
+                            <LifespanStatusBadge
+                              status={eq.lifespanStatus}
+                              isEmployee={true}
+                              isRetired={Boolean(eq.retiredAt)}
+                            />
+                          )}
+                        </div>
+                        <p className="hint mt-0.5 break-words">
+                          Held {heldQty} · Par {requiredLabel}
+                          {eq.assetTag ? ` · ${eq.assetTag}` : ''}
+                          {lifeShort ? ` · ${lifeShort}` : ''}
                         </p>
-                        <p className="text-sm font-semibold mt-2">
-                          Held {heldQty} / Required {requiredLabel}
-                        </p>
+                        <div className="cluster gap-2 mt-2 flex-wrap">
+                          <label className="sr-only" htmlFor={`par-${eq.id}`}>Par</label>
+                          <input
+                            id={`par-${eq.id}`}
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={parDrafts[eq.id] ?? ''}
+                            onChange={(e) => setParDrafts(prev => ({ ...prev, [eq.id]: e.target.value }))}
+                            onBlur={() => void saveRequiredQuantity(eq)}
+                            className="input max-w-[5rem] py-1 text-sm"
+                            placeholder="Par"
+                            title="Required (par) quantity"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void saveRequiredQuantity(eq)}
+                            disabled={parSavingId === eq.id}
+                            className="btn btn-ghost btn-sm"
+                          >
+                            {parSavingId === eq.id ? '…' : 'Save par'}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                    <EquipmentStatusBadge status={eq.status} />
-                  </div>
-
-                  <div className="field">
-                    <label className="label" htmlFor={`par-${eq.id}`}>
-                      Required (par) quantity
-                    </label>
-                    <div className="cluster">
-                      <input
-                        id={`par-${eq.id}`}
-                        type="number"
-                        min={0}
-                        step={1}
-                        value={parDrafts[eq.id] ?? ''}
-                        onChange={(e) => setParDrafts(prev => ({ ...prev, [eq.id]: e.target.value }))}
-                        onBlur={() => void saveRequiredQuantity(eq)}
-                        className="input max-w-[8rem]"
-                        placeholder="—"
-                      />
                       <button
                         type="button"
-                        onClick={() => void saveRequiredQuantity(eq)}
-                        disabled={parSavingId === eq.id}
-                        className="btn btn-secondary btn-sm"
+                        onClick={() => setReturnModal({ item: eq, max: heldQty })}
+                        className="btn btn-secondary btn-sm shrink-0"
                       >
-                        {parSavingId === eq.id ? 'Saving...' : 'Save'}
+                        Return
                       </button>
                     </div>
                   </div>
-
-                  <div className="card-foot mt-0 pt-3">
-                    <span className="hint">
-                      {eq.status === 'working' ? 'Assigned to' : 'In use by'} {vehicle.vehicleNumber}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setReturnModal({ item: eq, max: heldQty })}
-                      className="btn btn-primary btn-sm"
-                    >
-                      Return to shop
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {equipment.length === 0 && (
-            <EmptyState
-              icon={<Wrench className="h-10 w-10 text-ink-faint" aria-hidden />}
-              title="No equipment assigned"
-            >
-              Use Assign Equipment to move inventory from the shop or create a new item.
-            </EmptyState>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
@@ -521,9 +669,9 @@ export default function VehicleDetailClient() {
             <div className="card card-pad">
               <EmptyState
                 icon={<CheckCircle2 className="h-12 w-12 text-[var(--ok)]" aria-hidden />}
-                title="No issues reported"
+                title="No issues"
               >
-                All equipment on this vehicle is operating in standard condition.
+                Nothing open on this vehicle.
               </EmptyState>
             </div>
           )}

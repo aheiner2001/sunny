@@ -113,3 +113,33 @@ export function EquipmentStatusBadge({ status }: { status: EquipmentStatus }) {
       return <Badge status="ok" label="Fixed" icon={<CheckCircle className={ICON} />} />;
   }
 }
+
+export function LifespanStatusBadge({
+  status,
+  isEmployee = false,
+  isRetired = false
+}: {
+  status?: 'ok' | 'getting_low' | 'due_for_review' | null;
+  isEmployee?: boolean;
+  isRetired?: boolean;
+}) {
+  if (isRetired) {
+    return <Badge status="idle" label="Retired" />;
+  }
+  if (!status) return null;
+  switch (status) {
+    case 'ok':
+      return <Badge status="ok" label="OK" icon={<CheckCircle className={ICON} />} />;
+    case 'getting_low':
+      return <Badge status="flagged" label="Getting low" icon={<AlertTriangle className={ICON} />} />;
+    case 'due_for_review':
+      return (
+        <Badge
+          status="critical"
+          label={isEmployee ? 'Due for check' : 'Due for review'}
+          icon={<AlertTriangle className={ICON} />}
+        />
+      );
+  }
+}
+

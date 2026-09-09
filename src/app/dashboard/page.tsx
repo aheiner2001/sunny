@@ -13,12 +13,20 @@ import {
   Clock,
   Wrench,
   RotateCcw,
+  Sparkles,
+  Archive,
+  ShieldAlert,
+  LogOut,
+  UserCheck,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
-import { Vehicle, Inspection, Issue, IssueType } from '@/types';
-import { InspectionStatusBadge, IssueStatusBadge, VehicleStatusBadge } from '@/components/StatusBadges';
+import { Vehicle, Inspection, Issue, IssueType, Equipment, User } from '@/types';
+import { InspectionStatusBadge, IssueStatusBadge, VehicleStatusBadge, LifespanStatusBadge } from '@/components/StatusBadges';
 import { InspectionCalendar } from '@/components/InspectionCalendar';
 import { EmptyState } from '@/components/EmptyState';
+import { LifespanActionModal } from '@/components/LifespanActionModal';
 
 const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
   stock_low_inventory: 'Stock / Low Inventory',
@@ -43,12 +51,28 @@ export default function DashboardPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
+  const [lifespanAction, setLifespanAction] = useState<{ item: Equipment; mode: 'extend' | 'replace' | 'retire' } | null>(null);
+
+  // 1.1 Activity Stream Filter state
+  const [activityFilter, setActivityFilter] = useState<'all' | 'inspections' | 'issues'>('all');
+
+  // 1.3 Quick Shift Reassignment state
+  const [reassignModalVehicle, setReassignModalVehicle] = useState<Vehicle | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+
+  // 2.2 Batch Lifespan selection
+  const [selectedLifespanIds, setSelectedLifespanIds] = useState<string[]>([]);
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
 
   const loadData = () => {
     setVehicles(dbService.getVehicles());
     setInspections(dbService.getInspections());
     setIssues(dbService.getIssues());
+    setEquipment(dbService.getEquipment());
+    setUsers(dbService.getUsers().filter(u => u.status === 'active'));
   };
 
   useEffect(() => {
@@ -66,6 +90,12 @@ export default function DashboardPage() {
   const openIssuesCount = issues.filter(i => i.status !== 'fixed').length;
   const openIssues = issues.filter(i => i.status !== 'fixed');
   const vehiclesInUse = vehicles.filter(v => v.status === 'in_use');
+  const dueForReviewEquipment = equipment.filter(e => e.lifespanEnabled && !e.retiredAt && e.lifespanStatus === 'due_for_review');
+
+  // 1.2 Urgent Vehicle Safety Flag
+  const urgentSafetyVehicles = vehiclesInUse.filter(
+    v => v.lastInspectionStatus === 'issues_found' || openIssues.some(i => i.vehicleId === v.id && i.priority === 'critical')
+  );
 
   const inspectionStatusFor = (status: Inspection['status'] | null | undefined) =>
     status === 'passed' ? 'ok' : status === 'issues_found' ? 'flagged' : 'info';
@@ -77,8 +107,105 @@ export default function DashboardPage() {
     </Link>
   );
 
+  // Quick check-in action
+  const handleQuickCheckIn = async (vehicleId: string) => {
+    try {
+      await dbService.checkInVehicle(vehicleId);
+      loadData();
+    } catch (e: any) {
+      alert(e.message || 'Failed to check in vehicle');
+    }
+  };
+
+  // Quick reassign action
+  const handleReassignSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reassignModalVehicle || !selectedUserId) return;
+    const user = users.find(u => u.id === selectedUserId);
+    if (!user) return;
+    try {
+      await dbService.checkOutVehicle(reassignModalVehicle.id, { id: user.id, name: user.name });
+      setReassignModalVehicle(null);
+      setSelectedUserId('');
+      loadData();
+    } catch (e: any) {
+      alert(e.message || 'Failed to reassign vehicle');
+    }
+  };
+
+  // Batch Replace Lifespan
+  const handleBatchReplace = async () => {
+    if (selectedLifespanIds.length === 0) return;
+    if (!window.confirm(`Mark ${selectedLifespanIds.length} items as replaced?`)) return;
+    try {
+      setIsBatchProcessing(true);
+      await dbService.batchReplaceLifespan(selectedLifespanIds, { reason: 'Batch replaced via Dashboard' });
+      setSelectedLifespanIds([]);
+      loadData();
+    } catch (e: any) {
+      alert(e.message || 'Failed to replace equipment batch');
+    } finally {
+      setIsBatchProcessing(false);
+    }
+  };
+
+  const toggleLifespanSelection = (id: string) => {
+    setSelectedLifespanIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllLifespan = () => {
+    if (selectedLifespanIds.length === dueForReviewEquipment.length) {
+      setSelectedLifespanIds([]);
+    } else {
+      setSelectedLifespanIds(dueForReviewEquipment.map(e => e.id));
+    }
+  };
+
+  // Activity list filtered
+  const rawActivities = [
+    ...(activityFilter !== 'issues' ? todayInspections.map(insp => ({ type: 'inspection' as const, insp, at: insp.submittedAt })) : []),
+    ...(activityFilter !== 'inspections' ? todayIssues.map(issue => ({ type: 'issue' as const, issue, at: issue.reportedAt })) : [])
+  ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
   return (
-    <div className="page max-w-full overflow-x-hidden">
+    <div className="page max-w-full overflow-x-hidden stack gap-6">
+      {/* 1.2 Urgent Vehicle Safety Banner */}
+      {urgentSafetyVehicles.length > 0 && (
+        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <ShieldAlert className="w-6 h-6 text-red-600 dark:text-red-400 shrink-0" />
+            <div>
+              <h3 className="font-bold text-sm text-red-900 dark:text-red-200">
+                Urgent Vehicle Safety Alert ({urgentSafetyVehicles.length} {urgentSafetyVehicles.length === 1 ? 'vehicle' : 'vehicles'} in use with active issues)
+              </h3>
+              <p className="text-xs text-red-800 dark:text-red-300">
+                The following vans are currently checked out despite flagged inspection failures:
+                {' '}
+                {urgentSafetyVehicles.map(v => `${v.vehicleNumber} (${v.currentUserName || 'Driver'})`).join(', ')}.
+              </p>
+            </div>
+          </div>
+          <div className="cluster gap-2">
+            <Link href="/issues" className="btn btn-secondary btn-sm">
+              View Issues
+            </Link>
+            {urgentSafetyVehicles.map(v => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => handleQuickCheckIn(v.id)}
+                className="btn btn-primary btn-sm bg-red-600 hover:bg-red-700 text-white"
+              >
+                Ground / Check In {v.vehicleNumber}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Metric Tiles */}
       <div className="grid-auto" style={{ '--min': '15rem' } as React.CSSProperties}>
         <div className="card card-pad flex flex-col">
           <div className="spread items-start">
@@ -154,50 +281,211 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+
+        {dueForReviewEquipment.length > 0 && (
+          <Link
+            href="/equipment?lifespan=due"
+            className="card card-pad flex flex-col"
+            data-status="flagged"
+          >
+            <div className="spread items-start">
+              <span className="icon-tile icon-tile-lg" data-status="flagged">
+                <AlertTriangle className="w-6 h-6" />
+              </span>
+              <div className="stat text-right" data-status="flagged">
+                <span className="stat-value">{dueForReviewEquipment.length}</span>
+                <span className="stat-label">Due for review</span>
+              </div>
+            </div>
+            <div className="card-foot mt-auto">
+              <span className="link-action">
+                <span>Review lifespan tools</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </div>
+          </Link>
+        )}
       </div>
 
+      {/* Equipment Due for Review Section with 2.2 Batch Actions */}
+      {dueForReviewEquipment.length > 0 && (
+        <div className="card card-pad stack">
+          <div className="spread items-center border-b border-line pb-3 flex-wrap gap-2">
+            <div>
+              <h2 className="card-title cluster gap-2">
+                <AlertTriangle className="w-4 h-4 text-[var(--amber-text)]" />
+                Equipment Due for Review ({dueForReviewEquipment.length})
+              </h2>
+              <p className="hint">
+                Tools that have reached their expected cars cleaned or calendar life expiration.
+              </p>
+            </div>
+            <div className="cluster gap-2">
+              <button
+                type="button"
+                onClick={toggleSelectAllLifespan}
+                className="btn btn-secondary btn-sm cluster gap-1"
+              >
+                {selectedLifespanIds.length === dueForReviewEquipment.length ? (
+                  <>
+                    <CheckSquare className="w-3.5 h-3.5" /> Deselect All
+                  </>
+                ) : (
+                  <>
+                    <Square className="w-3.5 h-3.5" /> Select All ({dueForReviewEquipment.length})
+                  </>
+                )}
+              </button>
+              {selectedLifespanIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleBatchReplace}
+                  disabled={isBatchProcessing}
+                  className="btn btn-primary btn-sm cluster gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Mark Selected as Replaced ({selectedLifespanIds.length})
+                </button>
+              )}
+              <Link href="/equipment?lifespan=due" className="link-action text-xs ml-2">
+                View all due tools <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+          </div>
+
+          <div className="grid-auto">
+            {dueForReviewEquipment.map((eq) => {
+              const isSelected = selectedLifespanIds.includes(eq.id);
+              return (
+                <div
+                  key={eq.id}
+                  className={`card card-pad bg-[var(--surface-alt)] stack-tight transition-all ${
+                    isSelected ? 'ring-2 ring-primary border-transparent' : ''
+                  }`}
+                >
+                  <div className="spread items-start">
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleLifespanSelection(eq.id)}
+                        className="mt-1 cursor-pointer"
+                        aria-label={`Select ${eq.name}`}
+                      />
+                      <div>
+                        <h3 className="card-title text-sm">{eq.name}</h3>
+                        <p className="hint text-xs">
+                          {eq.vehicleNumber ? `Assigned to ${eq.vehicleNumber}` : 'In shop / unassigned'}
+                        </p>
+                      </div>
+                    </div>
+                    <LifespanStatusBadge status={eq.lifespanStatus} />
+                  </div>
+                  <p className="text-xs text-ink-muted">
+                    {eq.lifespanMode === 'usage'
+                      ? `Worn ${eq.carsUsed ?? 0} / ${eq.expectedCars ?? 0} cars`
+                      : `Due date: ${eq.dueDate ? new Date(eq.dueDate).toLocaleDateString() : '—'}`}
+                  </p>
+                  <div className="cluster gap-2 mt-2 pt-2 border-t border-line">
+                    <button
+                      type="button"
+                      onClick={() => setLifespanAction({ item: eq, mode: 'extend' })}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Extend
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLifespanAction({ item: eq, mode: 'replace' })}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Replaced
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLifespanAction({ item: eq, mode: 'retire' })}
+                      className="btn btn-ghost btn-sm text-[var(--critical)]"
+                    >
+                      <Archive className="w-3.5 h-3.5" />
+                      Retire
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Main 3-column content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--gutter)]">
+        {/* 1.1 Activity Stream with Filter Chips */}
         <div className="card flex flex-col">
-          <div className="card-head">
-            <h2 className="card-title">Today&apos;s activity</h2>
-            <Link href="/inspections" className="link-action">
+          <div className="card-head spread items-center pb-2">
+            <div>
+              <h2 className="card-title">Today&apos;s activity</h2>
+            </div>
+            <Link href="/inspections" className="link-action text-xs">
               View all <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
 
-          <div>
-            {[...todayInspections.map(insp => ({ type: 'inspection' as const, insp, at: insp.submittedAt })),
-              ...todayIssues.map(issue => ({ type: 'issue' as const, issue, at: issue.reportedAt }))]
-              .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-              .slice(0, 5)
-              .map((activity) => (
-                <div
-                  key={activity.type === 'inspection' ? activity.insp.id : activity.issue.id}
-                  className="row"
-                  data-status={activity.type === 'inspection' ? 'ok' : 'flagged'}
-                >
-                  <span className="icon-tile" data-status={activity.type === 'inspection' ? 'ok' : 'flagged'}>
-                    {activity.type === 'inspection' ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="spread gap-2">
-                      <p className="text-xs font-semibold truncate m-0">
-                        {activity.type === 'inspection' ? 'Inspection completed' : 'Issue reported'}
-                      </p>
-                      <time className="unit-tag">
-                        {new Date(activity.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                      </time>
-                    </div>
-                    <p className="unit-tag truncate m-0">
-                      {activity.type === 'inspection'
-                        ? `${activity.insp.vehicleNumber} · ${activity.insp.userName}`
-                        : `${activity.issue.vehicleNumber} · ${activity.issue.equipmentName}`}
-                    </p>
-                  </div>
-                </div>
-              ))}
+          {/* Filter Chips */}
+          <div className="px-5 pb-3 cluster gap-1.5 border-b border-line">
+            <button
+              type="button"
+              onClick={() => setActivityFilter('all')}
+              className={`btn btn-xs rounded-full px-2.5 ${activityFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              All ({todayInspections.length + todayIssues.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActivityFilter('inspections')}
+              className={`btn btn-xs rounded-full px-2.5 ${activityFilter === 'inspections' ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              Inspections ({todayInspections.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActivityFilter('issues')}
+              className={`btn btn-xs rounded-full px-2.5 ${activityFilter === 'issues' ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              Issues ({todayIssues.length})
+            </button>
+          </div>
 
-            {todayInspections.length === 0 && todayIssues.length === 0 && (
+          <div>
+            {rawActivities.slice(0, 6).map((activity) => (
+              <div
+                key={activity.type === 'inspection' ? activity.insp.id : activity.issue.id}
+                className="row"
+                data-status={activity.type === 'inspection' ? 'ok' : 'flagged'}
+              >
+                <span className="icon-tile" data-status={activity.type === 'inspection' ? 'ok' : 'flagged'}>
+                  {activity.type === 'inspection' ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="spread gap-2">
+                    <p className="text-xs font-semibold truncate m-0">
+                      {activity.type === 'inspection' ? 'Inspection completed' : 'Issue reported'}
+                    </p>
+                    <time className="unit-tag">
+                      {new Date(activity.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                    </time>
+                  </div>
+                  <p className="unit-tag truncate m-0">
+                    {activity.type === 'inspection'
+                      ? `${activity.insp.vehicleNumber} · ${activity.insp.userName}`
+                      : `${activity.issue.vehicleNumber} · ${activity.issue.equipmentName}`}
+                  </p>
+                </div>
+              </div>
+            ))}
+
+            {rawActivities.length === 0 && (
               <EmptyState
                 icon={
                   <span className="icon-tile icon-tile-lg" data-status="idle">
@@ -212,12 +500,15 @@ export default function DashboardPage() {
                   </>
                 }
               >
-                Inspections and issues appear here as crews submit them.
+                {activityFilter === 'all'
+                  ? 'Inspections and issues appear here as crews submit them.'
+                  : `No ${activityFilter} recorded today.`}
               </EmptyState>
             )}
           </div>
         </div>
 
+        {/* Compact Calendar */}
         <div
           onClick={() => router.push('/calendar')}
           className="card card-link card-pad flex flex-col cursor-pointer"
@@ -232,6 +523,7 @@ export default function DashboardPage() {
           />
         </div>
 
+        {/* Open Issues Tile */}
         <div className="card flex flex-col">
           <div className="card-head">
             <h2 className="card-title">Open issues</h2>
@@ -245,7 +537,7 @@ export default function DashboardPage() {
               <div
                 key={issue.id}
                 className="row"
-                data-status={issue.status === 'needs_repair' ? 'critical' : issue.status === 'being_repaired' ? 'info' : 'flagged'}
+                data-status={issue.priority === 'critical' ? 'critical' : issue.status === 'needs_repair' ? 'critical' : issue.status === 'being_repaired' ? 'info' : 'flagged'}
               >
                 <span className="icon-tile" data-status="idle">
                   <Wrench className="w-4 h-4" />
@@ -285,6 +577,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* 1.3 Vehicles in Use Table with Quick Shift Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--gutter)]">
         <div className="card lg:col-span-2">
           <div className="card-head">
@@ -302,7 +595,7 @@ export default function DashboardPage() {
                   <th>Current user</th>
                   <th>Start time</th>
                   <th>Last inspection</th>
-                  <th className="pr-5 text-right">Status</th>
+                  <th className="pr-5 text-right">Shift Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -321,7 +614,11 @@ export default function DashboardPage() {
                         </Link>
                       </span>
                     </td>
-                    <td>{vehicle.currentUserName || '—'}</td>
+                    <td>
+                      <span className="cluster gap-1.5">
+                        <span className="font-medium">{vehicle.currentUserName || '—'}</span>
+                      </span>
+                    </td>
                     <td className="text-ink-muted">{formatStartTime(vehicle.currentUserStartTime)}</td>
                     <td>
                       <span className="cluster gap-1.5">
@@ -336,7 +633,29 @@ export default function DashboardPage() {
                       </span>
                     </td>
                     <td className="pr-5 text-right">
-                      <VehicleStatusBadge status={vehicle.status} />
+                      <div className="cluster justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReassignModalVehicle(vehicle);
+                            setSelectedUserId(vehicle.currentUserId || '');
+                          }}
+                          className="btn btn-secondary btn-xs cluster gap-1"
+                          title="Reassign driver"
+                        >
+                          <UserCheck className="w-3 h-3" />
+                          Reassign
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickCheckIn(vehicle.id)}
+                          className="btn btn-secondary btn-xs cluster gap-1 text-[var(--critical)]"
+                          title="End shift and return to shop"
+                        >
+                          <LogOut className="w-3 h-3" />
+                          Check In
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -368,6 +687,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Recent Inspections Card */}
         <div className="card flex flex-col">
           <div className="card-head">
             <h2 className="card-title">Recent inspections</h2>
@@ -427,6 +747,66 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Lifespan Action Modal */}
+      <LifespanActionModal
+        item={lifespanAction?.item || null}
+        mode={lifespanAction?.mode || null}
+        onClose={() => setLifespanAction(null)}
+        onSuccess={loadData}
+      />
+
+      {/* 1.3 Quick Reassign Driver Modal */}
+      {reassignModalVehicle && (
+        <div className="modal-backdrop" onClick={() => setReassignModalVehicle(null)}>
+          <div className="modal card card-pad max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="card-head border-b border-line pb-3">
+              <h2 className="card-title cluster gap-2">
+                <UserCheck className="w-5 h-5 text-primary" />
+                Reassign Vehicle: {reassignModalVehicle.vehicleNumber}
+              </h2>
+            </div>
+            <form onSubmit={handleReassignSubmit} className="stack gap-4 mt-4">
+              <div>
+                <label className="label text-xs font-semibold">Select Detailer / Driver</label>
+                <select
+                  value={selectedUserId}
+                  onChange={(e) => setSelectedUserId(e.target.value)}
+                  className="input w-full mt-1"
+                  required
+                >
+                  <option value="">-- Choose employee --</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="hint text-xs">
+                This will immediately transfer operational custody of {reassignModalVehicle.vehicleNumber} to the selected team member.
+              </p>
+              <div className="cluster justify-end gap-2 border-t border-line pt-3 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setReassignModalVehicle(null)}
+                  className="btn btn-secondary btn-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!selectedUserId}
+                  className="btn btn-primary btn-sm"
+                >
+                  Confirm Reassignment
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

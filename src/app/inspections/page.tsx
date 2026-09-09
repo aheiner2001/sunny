@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ClipboardCheck,
@@ -9,6 +9,12 @@ import {
   ChevronDown,
   ChevronUp,
   Trash2,
+  Gauge,
+  Fuel,
+  PenLine,
+  Image as ImageIcon,
+  WifiOff,
+  RefreshCw,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Inspection } from '@/types';
@@ -25,9 +31,25 @@ export default function InspectionsPage() {
   const [vehicleFilter, setVehicleFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'status' | 'vehicle' | 'driver'>('date_desc');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [offlineCount, setOfflineCount] = useState(0);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const loadData = () => {
     setInspections(dbService.getInspections());
+    setOfflineCount(dbService.getOfflineInspections().length);
+  };
+
+  const handleSyncOffline = async () => {
+    try {
+      setIsSyncing(true);
+      const synced = await dbService.syncOfflineInspections();
+      loadData();
+      alert(`Synchronized ${synced} offline inspection(s)!`);
+    } catch (e: any) {
+      alert(`Sync error: ${e.message}`);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleDeleteInspection = async (e: React.MouseEvent, inspectionId: string, vehicleNumber: string) => {
@@ -86,6 +108,32 @@ export default function InspectionsPage() {
           </Link>
         }
       />
+
+      {/* Offline Sync Banner */}
+      {offlineCount > 0 && (
+        <div className="card card-pad bg-blue-50 border-blue-200 spread items-center">
+          <div className="flex items-center gap-3">
+            <WifiOff className="h-5 w-5 text-blue-600 shrink-0" />
+            <div>
+              <div className="text-sm font-bold text-blue-900">
+                {offlineCount} Offline Inspection{offlineCount > 1 ? 's' : ''} Stored Locally
+              </div>
+              <p className="text-xs text-blue-700">
+                Records captured while offline will sync automatically or can be uploaded now.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleSyncOffline}
+            disabled={isSyncing}
+            className="btn btn-primary btn-sm shrink-0 gap-1.5"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Syncing...' : 'Sync Now'}</span>
+          </button>
+        </div>
+      )}
 
       <div className="card card-pad">
         <div className="spread flex-col md:flex-row gap-3">
@@ -198,10 +246,47 @@ export default function InspectionsPage() {
 
               {isExpanded && (
                 <div className="card-pad pt-0 border-t border-line bg-[var(--surface-alt)] stack">
+                  {/* Vehicle Readings (Odometer & Fuel) */}
+                  {(insp.odometer !== undefined && insp.odometer !== null || insp.fuelLevel !== undefined && insp.fuelLevel !== null) && (
+                    <div className="card card-pad text-xs bg-surface flex flex-wrap gap-4 items-center">
+                      {insp.odometer !== undefined && insp.odometer !== null && (
+                        <div className="flex items-center gap-1.5 font-bold text-ink">
+                          <Gauge className="w-3.5 h-3.5 text-ink-muted" />
+                          <span>Odometer: {insp.odometer.toLocaleString()} mi</span>
+                        </div>
+                      )}
+                      {insp.fuelLevel !== undefined && insp.fuelLevel !== null && (
+                        <div className="flex items-center gap-1.5 font-bold text-ink">
+                          <Fuel className="w-3.5 h-3.5 text-ink-muted" />
+                          <span>Fuel Level: {insp.fuelLevel}%</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {insp.generalNotes && (
                     <div className="card card-pad text-xs">
                       <span className="eyebrow mb-1">Operator Notes</span>
                       <p className="text-ink-muted italic">&ldquo;{insp.generalNotes}&rdquo;</p>
+                    </div>
+                  )}
+
+                  {/* Attached Overview Photos */}
+                  {insp.photoUrls && insp.photoUrls.length > 0 && (
+                    <div>
+                      <h4 className="eyebrow mb-2 flex items-center gap-1">
+                        <ImageIcon className="w-3 h-3" /> Attached Photos
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {insp.photoUrls.map((pUrl, pIdx) => (
+                          <img
+                            key={pIdx}
+                            src={pUrl}
+                            alt={`Inspection capture ${pIdx + 1}`}
+                            className="w-20 h-20 object-cover rounded-xl border border-line shadow-xs"
+                          />
+                        ))}
+                      </div>
                     </div>
                   )}
 
@@ -212,21 +297,51 @@ export default function InspectionsPage() {
                         {insp.responses.map((resp, idx) => (
                           <div
                             key={idx}
-                            className={`card card-pad text-xs flex items-center justify-between ${
+                            className={`card card-pad text-xs space-y-1.5 ${
                               resp.isFlagged ? 'bg-[var(--hivis-wash)]' : ''
                             }`}
                             data-status={resp.isFlagged ? 'flagged' : 'ok'}
                           >
-                            <span className="truncate pr-2">{resp.questionText}</span>
-                            <span className="badge" data-status={resp.isFlagged ? 'flagged' : 'ok'}>
-                              {resp.value}
-                            </span>
+                            <div className="flex items-center justify-between">
+                              <span className="truncate pr-2 font-medium">{resp.questionText}</span>
+                              <span className="badge" data-status={resp.isFlagged ? 'flagged' : 'ok'}>
+                                {resp.value}
+                              </span>
+                            </div>
+                            {resp.notes && (
+                              <p className="text-[11px] text-amber-900 bg-amber-100/50 p-1.5 rounded">
+                                {resp.notes}
+                              </p>
+                            )}
+                            {resp.photoUrl && (
+                              <div className="pt-1">
+                                <img
+                                  src={resp.photoUrl}
+                                  alt="Issue photo"
+                                  className="w-16 h-16 object-cover rounded-lg border border-amber-300"
+                                />
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
                     </div>
                   ) : (
                     <p className="text-xs text-ink-faint">Standard checklist verified without anomalies.</p>
+                  )}
+
+                  {/* Operator Signature Display */}
+                  {insp.signatureBase64 && (
+                    <div className="card card-pad bg-surface border border-line">
+                      <div className="text-[10px] font-bold text-ink-faint uppercase tracking-wider flex items-center gap-1 mb-1">
+                        <PenLine className="w-3 h-3" /> Certified Operator Signature
+                      </div>
+                      <img
+                        src={insp.signatureBase64}
+                        alt="Operator signature"
+                        className="h-14 object-contain bg-white border border-line rounded p-1"
+                      />
+                    </div>
                   )}
 
                   <div className="spread pt-2">
