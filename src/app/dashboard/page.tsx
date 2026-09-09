@@ -121,6 +121,10 @@ export default function DashboardPage() {
   const handleReassignSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reassignModalVehicle || !selectedUserId) return;
+    if (selectedUserId === reassignModalVehicle.currentUserId) {
+      alert('Pick a different person than the current driver.');
+      return;
+    }
     const user = users.find(u => u.id === selectedUserId);
     if (!user) return;
     try {
@@ -638,22 +642,26 @@ export default function DashboardPage() {
                           type="button"
                           onClick={() => {
                             setReassignModalVehicle(vehicle);
-                            setSelectedUserId(vehicle.currentUserId || '');
+                            setSelectedUserId('');
                           }}
                           className="btn btn-secondary btn-xs cluster gap-1"
-                          title="Reassign driver"
+                          title="Hand this van to a different driver (keeps it in use)"
                         >
                           <UserCheck className="w-3 h-3" />
-                          Reassign
+                          Change driver
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleQuickCheckIn(vehicle.id)}
+                          onClick={() => {
+                            if (window.confirm(`Check in ${vehicle.vehicleNumber}? This ends the current shift and returns the van to the shop.`)) {
+                              void handleQuickCheckIn(vehicle.id);
+                            }
+                          }}
                           className="btn btn-secondary btn-xs cluster gap-1 text-[var(--critical)]"
-                          title="End shift and return to shop"
+                          title="End shift — clear operator and return van to shop"
                         >
                           <LogOut className="w-3 h-3" />
-                          Check In
+                          Return to shop
                         </button>
                       </div>
                     </td>
@@ -756,37 +764,51 @@ export default function DashboardPage() {
         onSuccess={loadData}
       />
 
-      {/* 1.3 Quick Reassign Driver Modal */}
+      {/* Change driver modal */}
       {reassignModalVehicle && (
-        <div className="modal-backdrop" onClick={() => setReassignModalVehicle(null)}>
-          <div className="modal card card-pad max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="card-head border-b border-line pb-3">
-              <h2 className="card-title cluster gap-2">
-                <UserCheck className="w-5 h-5 text-primary" />
-                Reassign Vehicle: {reassignModalVehicle.vehicleNumber}
-              </h2>
-            </div>
-            <form onSubmit={handleReassignSubmit} className="stack gap-4 mt-4">
-              <div>
-                <label className="label text-xs font-semibold">Select Detailer / Driver</label>
+        <div
+          className="fixed inset-0 z-50 bg-ink/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setReassignModalVehicle(null)}
+        >
+          <div
+            className="card card-pad max-w-md w-full"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reassign-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="reassign-title" className="card-title cluster gap-2 mb-1">
+              <UserCheck className="w-5 h-5" aria-hidden />
+              Change driver · {reassignModalVehicle.vehicleNumber}
+            </h2>
+            <p className="hint mb-4">
+              Current driver:{' '}
+              <strong>{reassignModalVehicle.currentUserName || 'None'}</strong>
+              . Van stays in use — only the assigned person changes.
+            </p>
+            <form onSubmit={handleReassignSubmit} className="stack gap-4">
+              <div className="field">
+                <label className="label" htmlFor="reassign-driver">
+                  New driver
+                </label>
                 <select
+                  id="reassign-driver"
                   value={selectedUserId}
                   onChange={(e) => setSelectedUserId(e.target.value)}
-                  className="input w-full mt-1"
+                  className="select w-full"
                   required
                 >
-                  <option value="">-- Choose employee --</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.role})
-                    </option>
-                  ))}
+                  <option value="">Choose someone else…</option>
+                  {users
+                    .filter((u) => u.status === 'active' && u.id !== reassignModalVehicle.currentUserId)
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} ({u.role})
+                      </option>
+                    ))}
                 </select>
               </div>
-              <p className="hint text-xs">
-                This will immediately transfer operational custody of {reassignModalVehicle.vehicleNumber} to the selected team member.
-              </p>
-              <div className="cluster justify-end gap-2 border-t border-line pt-3 mt-2">
+              <div className="cluster justify-end gap-2 border-t border-line pt-3">
                 <button
                   type="button"
                   onClick={() => setReassignModalVehicle(null)}
@@ -796,10 +818,10 @@ export default function DashboardPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={!selectedUserId}
+                  disabled={!selectedUserId || selectedUserId === reassignModalVehicle.currentUserId}
                   className="btn btn-primary btn-sm"
                 >
-                  Confirm Reassignment
+                  Hand off van
                 </button>
               </div>
             </form>
