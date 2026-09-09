@@ -1052,8 +1052,8 @@ function EquipmentPageContent() {
                   <label className="label" htmlFor="equipment-total-qty">
                     {form.lifespanEnabled
                       ? modal === 'add'
-                        ? 'Units to create'
-                        : 'Quantity (1 when tracked)'
+                        ? 'How many separate tools?'
+                        : 'Quantity (always 1 when tracked)'
                       : 'Total quantity owned'}
                   </label>
                   <input
@@ -1067,6 +1067,18 @@ function EquipmentPageContent() {
                     placeholder="e.g. 3"
                     disabled={form.lifespanEnabled && modal === 'edit'}
                   />
+                  {form.lifespanEnabled && modal === 'add' && (
+                    <p className="hint text-xs">
+                      {Number(form.totalQuantity) > 1
+                        ? `Creates ${Number(form.totalQuantity)} separate tools (${form.name.trim() || 'Name'} #1–#${Number(form.totalQuantity)}), each with its own life bar and QR.`
+                        : 'Creates one tracked tool with its own life bar and QR. Enter 3 to add three separate washers, not one shared pool.'}
+                    </p>
+                  )}
+                  {!form.lifespanEnabled && (
+                    <p className="hint text-xs">
+                      One inventory pool (shared count). Turn on Track lifespan below if each unit needs its own wear tracking.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -1107,7 +1119,7 @@ function EquipmentPageContent() {
                   <span>Track lifespan</span>
                 </label>
                 <p className="hint text-xs">
-                  Each physical tool gets its own life. Usage mode wears when cars are logged on the van that holds the tool; time mode flags by calendar date.
+                  Each physical tool is its own record with its own life. Example: 3 pressure washers → Washer #1, #2, and #3. Usage wears when cars are logged on the van that holds that tool; time mode flags by calendar date.
                 </p>
 
                 {form.lifespanEnabled && (
