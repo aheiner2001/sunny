@@ -37,7 +37,11 @@ import {
   formatIndividualToolName,
   isMultiQtyLifespanItem
 } from './lifespan';
-import { stripInstanceSuffix } from './equipmentGrouping';
+import {
+  getEquipmentFamilyKey,
+  getEquipmentFamilyLabel,
+  stripInstanceSuffix
+} from './equipmentGrouping';
 import { 
   INITIAL_VEHICLES, 
   INITIAL_EQUIPMENT, 
@@ -1342,6 +1346,92 @@ class DataStore {
     }
 
     return created;
+  }
+
+  /**
+   * Adds N new lifespan-tracked units to an existing tool family (shop stock, fresh life).
+   * Copies settings from the template / family; renumbers active units to Label #1…#N.
+   */
+  public async addLifespanUnitsToFamily(templateEquipmentId: string, count: number): Promise<Equipment[]> {
+    if (!this.isClient()) throw new Error('Client only');
+    this.init();
+
+    const unitCount = Math.max(1, Math.min(50, Math.floor(Number(count) || 1)));
+    const template = this.getEquipmentItem(templateEquipmentId);
+    if (!template) throw new Error('Equipment not found.');
+    if (!template.lifespanEnabled) {
+      throw new Error('Only lifespan-tracked tool types support Add another.');
+    }
+
+    const familyKey = getEquipmentFamilyKey(template);
+    const label = getEquipmentFamilyLabel(template);
+    const familyItems = this.getEquipment().filter(e => getEquipmentFamilyKey(e) === familyKey);
+    const activeLifespan = familyItems.filter(e => e.lifespanEnabled && !e.retiredAt);
+    const settingsSource =
+      activeLifespan.find(e => e.id === template.id) || activeLifespan[0] || template;
+
+    const cleanPrefix = (
+      settingsSource.assetTag?.replace(/-\d+$/, '').trim() ||
+      label.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) ||
+      'EQ'
+    );
+
+    let nextTagNum = 0;
+    for (const eq of familyItems) {
+      const match = eq.assetTag?.match(/-(\d+)$/);
+      if (match) nextTagNum = Math.max(nextTagNum, Number(match[1]));
+    }
+
+    const nowIso = new Date().toISOString();
+    const created: Equipment[] = [];
+
+    for (let i = 0; i < unitCount; i++) {
+      nextTagNum += 1;
+      const unitTag = `${cleanPrefix}-${String(nextTagNum).padStart(3, '0')}`;
+      const item = await this.createEquipment({
+        name: label,
+        assetTag: unitTag,
+        toolFamily: label,
+        category: settingsSource.category,
+        kind: settingsSource.kind,
+        status: 'working',
+        totalQuantity: 1,
+        lowWearThresholdPercent: settingsSource.lowWearThresholdPercent,
+        qrCodeToken: unitTag.toLowerCase(),
+        lifespanEnabled: true,
+        lifespanMode: settingsSource.lifespanMode || 'usage',
+        expectedCars: settingsSource.expectedCars,
+        expectedMonths: settingsSource.expectedMonths,
+        lifeStartedAt: settingsSource.lifespanMode === 'time' ? nowIso : null,
+        carsUsed: 0
+      });
+      created.push(item);
+    }
+
+    const activeAfter = this.getEquipment()
+      .filter(e => getEquipmentFamilyKey(e) === familyKey && e.lifespanEnabled && !e.retiredAt)
+      .slice()
+      .sort((a, b) => {
+        const ca = a.createdAt || '';
+        const cb = b.createdAt || '';
+        if (ca !== cb) return ca.localeCompare(cb);
+        return a.id.localeCompare(b.id);
+      });
+
+    const total = activeAfter.length;
+    for (let i = 0; i < activeAfter.length; i++) {
+      const eq = activeAfter[i];
+      const newName = formatIndividualToolName(label, i + 1, total);
+      if (eq.name === newName && (eq.toolFamily || '') === label) continue;
+      await this.updateEquipment({
+        ...eq,
+        name: newName,
+        toolFamily: label
+      });
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return created.map(c => this.getEquipmentItem(c.id)).filter((c): c is Equipment => Boolean(c));
   }
 
   /**

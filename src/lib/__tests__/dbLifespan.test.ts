@@ -183,6 +183,35 @@ describe('dbService lifespan and vehicle daily job log tracking', () => {
     }
   });
 
+  it('adds more units to an existing lifespan family and renumbers to #1…#N', async () => {
+    const first = await dbService.createEquipment({
+      name: 'Pressure Washer',
+      category: 'equipment',
+      kind: 'reusable',
+      lifespanEnabled: true,
+      lifespanMode: 'usage',
+      expectedCars: 300,
+      carsUsed: 40
+    });
+
+    expect(dbService.getEquipmentItem(first.id)?.name).toBe('Pressure Washer');
+
+    const added = await dbService.addLifespanUnitsToFamily(first.id, 2);
+    expect(added).toHaveLength(2);
+
+    const family = dbService
+      .getEquipment()
+      .filter(e => e.toolFamily === 'Pressure Washer' && !e.retiredAt)
+      .map(e => ({ name: e.name, carsUsed: e.carsUsed, expectedCars: e.expectedCars, available: e.availableQuantity }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    expect(family).toEqual([
+      { name: 'Pressure Washer #1', carsUsed: 40, expectedCars: 300, available: 1 },
+      { name: 'Pressure Washer #2', carsUsed: 0, expectedCars: 300, available: 1 },
+      { name: 'Pressure Washer #3', carsUsed: 0, expectedCars: 300, available: 1 }
+    ]);
+  });
+
   it('wears only the individual tools assigned to the van when jobs are logged', async () => {
     const vehicle = dbService.getVehicles()[0];
     expect(vehicle).toBeDefined();

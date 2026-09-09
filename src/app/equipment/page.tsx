@@ -96,6 +96,10 @@ function EquipmentPageContent() {
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
   const [restockTarget, setRestockTarget] = useState<Equipment | null>(null);
+  const [addAnotherTarget, setAddAnotherTarget] = useState<{
+    templateId: string;
+    label: string;
+  } | null>(null);
   const [allocationTarget, setAllocationTarget] = useState<Equipment | null>(null);
   const [lifespanAction, setLifespanAction] = useState<{ item: Equipment; mode: 'extend' | 'replace' | 'retire' } | null>(null);
 
@@ -433,6 +437,19 @@ function EquipmentPageContent() {
       setRestockTarget(null);
     } catch (err: any) {
       alert(err.message || 'Could not add stock.');
+    }
+  };
+
+  const handleAddAnotherConfirm = async (amount: number) => {
+    if (!addAnotherTarget) return;
+    try {
+      setLoading(true);
+      await dbService.addLifespanUnitsToFamily(addAnotherTarget.templateId, amount);
+      setAddAnotherTarget(null);
+    } catch (err: any) {
+      alert(err.message || 'Could not add tools.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -908,14 +925,18 @@ function EquipmentPageContent() {
         <div className="stack">
           {groupEquipmentByFamily(filtered).map(family => {
             const expanded = expandedFamilies[family.key] ?? (family.summary.unitCount <= 3 || family.summary.dueForReview > 0);
+            const lifespanTemplate =
+              family.items.find(eq => eq.lifespanEnabled && !eq.retiredAt) ||
+              family.items.find(eq => eq.lifespanEnabled) ||
+              null;
             return (
               <div key={family.key} className="card overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setExpandedFamilies(x => ({ ...x, [family.key]: !expanded }))}
-                  className="card-head w-full text-left min-h-12"
-                >
-                  <span className="cluster items-start min-w-0">
+                <div className="card-head min-h-12 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedFamilies(x => ({ ...x, [family.key]: !expanded }))}
+                    className="cluster items-start min-w-0 flex-1 text-left"
+                  >
                     {expanded ? (
                       <ChevronDown className="h-4 w-4 shrink-0 text-ink-muted mt-0.5" aria-hidden />
                     ) : (
@@ -930,15 +951,32 @@ function EquipmentPageContent() {
                         {family.summary.lifespanTracked ? ' · lifespan tracked' : ''}
                       </span>
                     </span>
-                  </span>
+                  </button>
                   <span className="cluster gap-1.5 shrink-0">
                     {family.summary.dueForReview > 0 && (
                       <span className="badge" data-status="critical">
                         {family.summary.dueForReview} due
                       </span>
                     )}
+                    {lifespanTemplate && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm cluster gap-1"
+                        disabled={loading}
+                        title={`Add more ${family.label}`}
+                        onClick={() =>
+                          setAddAnotherTarget({
+                            templateId: lifespanTemplate.id,
+                            label: family.label
+                          })
+                        }
+                      >
+                        <Plus className="h-3.5 w-3.5" aria-hidden />
+                        Add another
+                      </button>
+                    )}
                   </span>
-                </button>
+                </div>
                 {expanded ? <div>{family.items.map(compactRow)}</div> : null}
               </div>
             );
@@ -1429,6 +1467,21 @@ function EquipmentPageContent() {
         min={1}
         onConfirm={handleRestockConfirm}
         onCancel={() => setRestockTarget(null)}
+      />
+
+      <QuantityModal
+        open={addAnotherTarget !== null}
+        title={addAnotherTarget ? `Add more ${addAnotherTarget.label}` : 'Add another'}
+        description={
+          addAnotherTarget
+            ? `How many more separate ${addAnotherTarget.label} tools? Each gets its own life bar and QR. Existing units will be numbered #1, #2, …`
+            : 'How many more?'
+        }
+        initialValue={1}
+        min={1}
+        max={50}
+        onConfirm={(qty) => void handleAddAnotherConfirm(qty)}
+        onCancel={() => setAddAnotherTarget(null)}
       />
 
       <EquipmentAllocationModal
