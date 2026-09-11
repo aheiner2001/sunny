@@ -13,7 +13,7 @@ export function Sidebar() {
   const { role } = useAuth();
 
   return (
-    <aside className="w-64 bg-surface border-r border-line min-h-screen flex flex-col justify-between shrink-0 select-none z-30">
+    <aside className="w-64 h-full bg-surface border-r border-line flex flex-col justify-between shrink-0 select-none z-30 overflow-y-auto">
       <div>
         {/* Brand Header */}
         <div className="px-6 py-5 border-b border-line">
