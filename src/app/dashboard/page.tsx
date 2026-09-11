@@ -19,7 +19,8 @@ import {
   LogOut,
   UserCheck,
   CheckSquare,
-  Square
+  Square,
+  Trash2
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Vehicle, Inspection, Issue, IssueType, Equipment, User } from '@/types';
@@ -27,6 +28,7 @@ import { InspectionStatusBadge, IssueStatusBadge, VehicleStatusBadge, LifespanSt
 import { InspectionCalendar } from '@/components/InspectionCalendar';
 import { EmptyState } from '@/components/EmptyState';
 import { LifespanActionModal } from '@/components/LifespanActionModal';
+import { useAuth } from '@/context/AuthContext';
 
 const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
   stock_low_inventory: 'Stock / Low Inventory',
@@ -48,6 +50,7 @@ function issueTypeLabel(issue: Issue): string {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { role } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -91,6 +94,9 @@ export default function DashboardPage() {
   const openIssues = issues.filter(i => i.status !== 'fixed');
   const vehiclesInUse = vehicles.filter(v => v.status === 'in_use');
   const dueForReviewEquipment = equipment.filter(e => e.lifespanEnabled && !e.retiredAt && e.lifespanStatus === 'due_for_review');
+  const pendingInspectionDeletes = inspections
+    .filter(i => Boolean(i.deleteRequestedAt))
+    .sort((a, b) => new Date(b.deleteRequestedAt || 0).getTime() - new Date(a.deleteRequestedAt || 0).getTime());
 
   // 1.2 Urgent Vehicle Safety Flag
   const urgentSafetyVehicles = vehiclesInUse.filter(
@@ -209,107 +215,69 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Metric Tiles */}
-      <div className="grid-auto" style={{ '--min': '15rem' } as React.CSSProperties}>
-        <div className="card card-pad flex flex-col">
-          <div className="spread items-start">
-            <span className="icon-tile icon-tile-lg" data-status="idle">
-              <Truck className="w-6 h-6" />
-            </span>
-            <div className="stat text-right">
-              <span className="stat-value">{totalVehiclesCount}</span>
-              <span className="stat-label">Total vehicles</span>
-            </div>
+      {role === 'manager' && pendingInspectionDeletes.length > 0 && (
+        <div className="card card-pad stack" data-status="flagged">
+          <div>
+            <h2 className="card-title cluster gap-2">
+              <Trash2 className="w-4 h-4" aria-hidden />
+              Inspection delete requests ({pendingInspectionDeletes.length})
+            </h2>
+            <p className="hint">Employees asked to remove a record they submitted by mistake. Approve deletes it; deny leaves it in place.</p>
           </div>
-          <div className="card-foot mt-auto">
-            <Link href="/vehicles" className="link-action">
-              <span>View all vehicles</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
+          <ul className="stack gap-2">
+            {pendingInspectionDeletes.map(insp => (
+              <li key={insp.id} className="spread items-start flex-wrap gap-2 border-t border-line pt-2 first:border-0 first:pt-0">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold">
+                    {insp.vehicleNumber} · {insp.userName}
+                  </p>
+                  <p className="text-xs text-ink-muted">
+                    {new Date(insp.submittedAt).toLocaleString()}
+                    {insp.deleteRequestedByName ? ` · requested by ${insp.deleteRequestedByName}` : ''}
+                  </p>
+                  {insp.deleteRequestNote ? (
+                    <p className="text-xs mt-1">&ldquo;{insp.deleteRequestNote}&rdquo;</p>
+                  ) : null}
+                </div>
+                <div className="cluster gap-2 shrink-0">
+                  <Link href={`/inspections?id=${insp.id}`} className="btn btn-ghost btn-sm">
+                    View
+                  </Link>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={async () => {
+                      try {
+                        await dbService.denyInspectionDelete(insp.id);
+                        loadData();
+                      } catch (e: any) {
+                        alert(e.message || 'Could not deny request');
+                      }
+                    }}
+                  >
+                    Deny
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    onClick={async () => {
+                      if (!confirm(`Delete inspection for ${insp.vehicleNumber}?`)) return;
+                      try {
+                        await dbService.approveInspectionDelete(insp.id);
+                        loadData();
+                      } catch (e: any) {
+                        alert(e.message || 'Could not delete inspection');
+                      }
+                    }}
+                  >
+                    Approve
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
-
-        <div className="card card-pad flex flex-col">
-          <div className="spread items-start">
-            <span className="icon-tile icon-tile-lg" data-status="ok">
-              <CheckCircle2 className="w-6 h-6" />
-            </span>
-            <div className="stat text-right">
-              <span className="stat-value">{todayInspectionsCount}</span>
-              <span className="stat-label">Inspections today</span>
-            </div>
-          </div>
-          <div className="card-foot mt-auto">
-            <Link href="/inspections" className="link-action">
-              <span>View today&apos;s inspections</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        </div>
-
-        <div
-          className="card card-pad flex flex-col"
-          data-status={openIssuesCount > 0 ? 'flagged' : undefined}
-        >
-          <div className="spread items-start">
-            <span className="icon-tile icon-tile-lg" data-status={openIssuesCount > 0 ? 'flagged' : 'ok'}>
-              <AlertTriangle className="w-6 h-6" />
-            </span>
-            <div className="stat text-right" data-status={openIssuesCount > 0 ? 'flagged' : undefined}>
-              <span className="stat-value">{openIssuesCount}</span>
-              <span className="stat-label">Open issues</span>
-            </div>
-          </div>
-          <div className="card-foot mt-auto">
-            <Link href="/issues" className="link-action">
-              <span>View all issues</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        </div>
-
-        <div className="card card-pad flex flex-col">
-          <div className="spread items-start">
-            <span className="icon-tile icon-tile-lg" data-status="info">
-              <Users className="w-6 h-6" />
-            </span>
-            <div className="stat text-right">
-              <span className="stat-value">{vehiclesInUse.length}</span>
-              <span className="stat-label">Vehicles in use</span>
-            </div>
-          </div>
-          <div className="card-foot mt-auto">
-            <Link href="/employees" className="link-action">
-              <span>View active users</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        </div>
-
-        {dueForReviewEquipment.length > 0 && (
-          <Link
-            href="/equipment?lifespan=due"
-            className="card card-pad flex flex-col"
-            data-status="flagged"
-          >
-            <div className="spread items-start">
-              <span className="icon-tile icon-tile-lg" data-status="flagged">
-                <AlertTriangle className="w-6 h-6" />
-              </span>
-              <div className="stat text-right" data-status="flagged">
-                <span className="stat-value">{dueForReviewEquipment.length}</span>
-                <span className="stat-label">Due for review</span>
-              </div>
-            </div>
-            <div className="card-foot mt-auto">
-              <span className="link-action">
-                <span>Review lifespan tools</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </span>
-            </div>
-          </Link>
-        )}
-      </div>
+      )}
 
       {/* Equipment Due for Review Section with 2.2 Batch Actions */}
       {dueForReviewEquipment.length > 0 && (
@@ -422,6 +390,108 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+
+      {/* Metric Tiles */}
+      <div className="grid-auto" style={{ '--min': '15rem' } as React.CSSProperties}>
+        <div className="card card-pad flex flex-col">
+          <div className="spread items-start">
+            <span className="icon-tile icon-tile-lg" data-status="idle">
+              <Truck className="w-6 h-6" />
+            </span>
+            <div className="stat text-right">
+              <span className="stat-value">{totalVehiclesCount}</span>
+              <span className="stat-label">Total vehicles</span>
+            </div>
+          </div>
+          <div className="card-foot mt-auto">
+            <Link href="/vehicles" className="link-action">
+              <span>View all vehicles</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+
+        <div className={`card card-pad flex flex-col ${todayInspectionsCount === 0 ? 'opacity-60' : ''}`}>
+          <div className="spread items-start">
+            <span className="icon-tile icon-tile-lg" data-status={todayInspectionsCount === 0 ? 'idle' : 'ok'}>
+              <CheckCircle2 className="w-6 h-6" />
+            </span>
+            <div className="stat text-right">
+              <span className="stat-value">{todayInspectionsCount}</span>
+              <span className="stat-label">Inspections today</span>
+            </div>
+          </div>
+          <div className="card-foot mt-auto">
+            <Link href="/inspections" className="link-action">
+              <span>View today&apos;s inspections</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+
+        <div
+          className={`card card-pad flex flex-col ${openIssuesCount === 0 ? 'opacity-60' : ''}`}
+          data-status={openIssuesCount > 0 ? 'flagged' : undefined}
+        >
+          <div className="spread items-start">
+            <span className="icon-tile icon-tile-lg" data-status={openIssuesCount > 0 ? 'flagged' : 'idle'}>
+              <AlertTriangle className="w-6 h-6" />
+            </span>
+            <div className="stat text-right" data-status={openIssuesCount > 0 ? 'flagged' : undefined}>
+              <span className="stat-value">{openIssuesCount}</span>
+              <span className="stat-label">Open issues</span>
+            </div>
+          </div>
+          <div className="card-foot mt-auto">
+            <Link href="/issues" className="link-action">
+              <span>View all issues</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+
+        <div className={`card card-pad flex flex-col ${vehiclesInUse.length === 0 ? 'opacity-60' : ''}`}>
+          <div className="spread items-start">
+            <span className="icon-tile icon-tile-lg" data-status={vehiclesInUse.length === 0 ? 'idle' : 'info'}>
+              <Users className="w-6 h-6" />
+            </span>
+            <div className="stat text-right">
+              <span className="stat-value">{vehiclesInUse.length}</span>
+              <span className="stat-label">Vehicles in use</span>
+            </div>
+          </div>
+          <div className="card-foot mt-auto">
+            <Link href="/employees" className="link-action">
+              <span>View active users</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </div>
+
+        <Link
+          href="/equipment?lifespan=due"
+          className={`card card-pad flex flex-col ${dueForReviewEquipment.length === 0 ? 'opacity-60' : ''}`}
+          data-status={dueForReviewEquipment.length > 0 ? 'flagged' : undefined}
+        >
+          <div className="spread items-start">
+            <span className="icon-tile icon-tile-lg" data-status={dueForReviewEquipment.length > 0 ? 'flagged' : 'idle'}>
+              <AlertTriangle className="w-6 h-6" />
+            </span>
+            <div className="stat text-right" data-status={dueForReviewEquipment.length > 0 ? 'flagged' : undefined}>
+              <span className="stat-value">{dueForReviewEquipment.length}</span>
+              <span className="stat-label">Due for review</span>
+            </div>
+          </div>
+          <div className="card-foot mt-auto">
+            <span className="link-action">
+              <span>Review lifespan tools</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+        </Link>
+      </div>
+
 
       {/* Main 3-column content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--gutter)]">
@@ -623,7 +693,7 @@ export default function DashboardPage() {
                         <span className="font-medium">{vehicle.currentUserName || '—'}</span>
                       </span>
                     </td>
-                    <td className="text-ink-muted">{formatStartTime(vehicle.currentUserStartTime)}</td>
+                    <td className="text-ink-muted">{formatStartTime(vehicle.currentUserStartAt || vehicle.currentUserStartTime)}</td>
                     <td>
                       <span className="cluster gap-1.5">
                         <span className="text-ink-muted">

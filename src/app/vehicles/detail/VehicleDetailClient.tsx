@@ -6,6 +6,7 @@ import Link from 'next/link';
 import {
   Truck,
   ArrowLeft,
+  ArrowRight,
   QrCode,
   Wrench,
   ClipboardCheck,
@@ -521,7 +522,10 @@ export default function VehicleDetailClient() {
                     >
                       <div className={`h-1.5 w-1.5 rounded-full ${isPassed ? 'bg-[var(--ok)]' : 'bg-[var(--amber)]'}`} />
                     </div>
-                    <div className="rounded-xl border border-line bg-[var(--surface-alt)] px-3 py-2.5 stack-tight">
+                    <Link
+                      href={`/inspections?id=${encodeURIComponent(insp.id)}`}
+                      className="block rounded-xl border border-line bg-[var(--surface-alt)] px-3 py-2.5 stack-tight hover:bg-[var(--idle-wash)] transition-colors"
+                    >
                       <div className="spread flex-wrap gap-2">
                         <div className="cluster">
                           <span className="text-xs font-bold">Inspection</span>
@@ -540,7 +544,11 @@ export default function VehicleDetailClient() {
                           &ldquo;{insp.generalNotes}&rdquo;
                         </p>
                       ) : null}
-                    </div>
+                      <span className="text-xs font-medium text-ink-muted cluster mt-1">
+                        View inspection
+                        <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                      </span>
+                    </Link>
                   </div>
                 );
               }

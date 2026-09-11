@@ -21,11 +21,13 @@ import {
   RefreshCw,
   Gauge,
   Fuel,
+  LogOut,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { Vehicle, ChecklistQuestion, ChecklistCategoryConfig, InspectionResponse, FleetTask, Inspection } from '@/types';
 import { canSubmitInspection } from './inspectionValidation';
+import { occupancyKind, formatCheckoutStarted, vehicleInspectedOnLocalDay } from '@/lib/occupancy';
 import { RecentInspectors } from '@/components/RecentInspectors';
 import { RejectedInspectionBanner } from '@/components/RejectedInspectionBanner';
 import { SignaturePad } from '@/components/SignaturePad';
@@ -48,6 +50,8 @@ export default function InspectClient() {
   const [signatureBase64, setSignatureBase64] = useState<string | null>(null);
   const [odometer, setOdometer] = useState<string>('');
   const [fuelLevel, setFuelLevel] = useState<number>(100);
+  const [collectOdometer, setCollectOdometer] = useState(true);
+  const [collectFuelLevel, setCollectFuelLevel] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedInspection, setSubmittedInspection] = useState<any | null>(null);
   const [tasks, setTasks] = useState<FleetTask[]>([]);
@@ -63,6 +67,7 @@ export default function InspectClient() {
   const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
   const [showDraftRecovery, setShowDraftRecovery] = useState(false);
   const [rejectedInspection, setRejectedInspection] = useState<any | null>(null);
+  const [occupancyBusy, setOccupancyBusy] = useState(false);
 
   const loadData = async () => {
     if (!vehicleId) {
@@ -87,10 +92,11 @@ export default function InspectClient() {
         setVehicle(null);
       }
 
-      const cats = dbService.getChecklistCategories();
-      const qList = dbService.getChecklistQuestions();
-      setCategories(cats);
-      setQuestions(qList);
+      const checklist = dbService.getChecklistConfig();
+      setCategories(checklist.categories || []);
+      setQuestions(checklist.questions || []);
+      setCollectOdometer(checklist.collectOdometer !== false);
+      setCollectFuelLevel(checklist.collectFuelLevel !== false);
       const vehicleTasks = dbService.getTasks().filter(task => !task.vehicleId || task.vehicleId === v?.id);
       setTasks(vehicleTasks);
       const openTask = vehicleTasks.find(task => task.status === 'open');
@@ -268,7 +274,7 @@ export default function InspectClient() {
     return () => clearInterval(interval);
   }, [vehicleId, responses, flagIssues, generalNotes, generalPhotos, odometer, fuelLevel, signatureBase64]);
 
-  if (isLoading) {
+  if (isLoading || (vehicle && occupancyKind(vehicle, user?.id) === 'pending')) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <div className="text-center space-y-3">
@@ -426,10 +432,9 @@ export default function InspectClient() {
       }
     }
 
-    // Odometer delta validation check
     const currentOdo = vehicle.odometer || 0;
-    const parsedOdo = odometer ? Number(odometer) : null;
-    if (parsedOdo !== null && parsedOdo < currentOdo) {
+    const parsedOdo = collectOdometer && odometer ? Number(odometer) : null;
+    if (collectOdometer && parsedOdo !== null && parsedOdo < currentOdo) {
       if (!confirm(`Warning: Entered odometer (${parsedOdo} mi) is less than previous recorded mileage (${currentOdo} mi). Do you wish to proceed?`)) {
         return;
       }
@@ -479,8 +484,8 @@ export default function InspectClient() {
         flaggedIssues: flaggedList,
         generalNotes: generalNotes.trim() || null,
         photoUrls: generalPhotos.length > 0 ? generalPhotos : null,
-        odometer: parsedOdo,
-        fuelLevel: fuelLevel !== undefined ? Number(fuelLevel) : null,
+        odometer: collectOdometer ? parsedOdo : null,
+        fuelLevel: collectFuelLevel ? Number(fuelLevel) : null,
         signatureBase64: signatureBase64 || null,
         taskId: selectedTaskId || null,
         scheduleLabel: selectedTask?.scheduleLabel || null,
@@ -558,6 +563,42 @@ export default function InspectClient() {
   };
 
   const selectedTask = tasks.find(task => task.id === selectedTaskId);
+  const kind = vehicle ? occupancyKind(vehicle, user?.id) : 'free';
+  const inspectedToday = vehicle
+    ? vehicleInspectedOnLocalDay(vehicle, dbService.getInspections())
+    : false;
+
+  const handleTakeOver = async (thenInspect: boolean) => {
+    if (!vehicle || !user) return;
+    try {
+      setOccupancyBusy(true);
+      await dbService.checkOutVehicle(vehicle.id, { id: user.id, name: user.name });
+      const next = dbService.getVehicle(vehicle.id);
+      if (next) setVehicle(next);
+      if (thenInspect) {
+        /* stay on inspect — occupancy is now mine */
+      } else {
+        router.push(employeeFlow ? '/home' : '/dashboard');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Could not take over this van');
+    } finally {
+      setOccupancyBusy(false);
+    }
+  };
+
+  const handleReturnToShop = async () => {
+    if (!vehicle) return;
+    try {
+      setOccupancyBusy(true);
+      await dbService.checkInVehicle(vehicle.id);
+      router.push(employeeFlow ? '/home' : '/dashboard');
+    } catch (err: any) {
+      alert(err.message || 'Could not return van');
+    } finally {
+      setOccupancyBusy(false);
+    }
+  };
 
   if (submittedInspection) {
     const isPassed = submittedInspection.inspection.status === 'passed';
@@ -610,6 +651,43 @@ export default function InspectClient() {
                 View Vehicle Timeline
               </Link>
             )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (kind === 'theirs') {
+    return (
+      <div className="page max-w-md mx-auto py-8">
+        <div className="card card-pad stack">
+          <h1 className="card-title">{vehicle.vehicleNumber} is in use</h1>
+          <p className="text-sm text-ink-muted">
+            {vehicle.currentUserName || 'Another driver'} has this van since {formatCheckoutStarted(vehicle)}.
+            Take over to become the current driver.
+            {inspectedToday ? ' A checklist was already submitted today — inspect again only if you need a new record.' : ' This van has not been inspected yet today.'}
+          </p>
+          <div className="stack gap-2">
+            {inspectedToday ? (
+              <>
+                <button type="button" className="btn btn-primary" disabled={occupancyBusy || !user} onClick={() => void handleTakeOver(false)}>
+                  {occupancyBusy ? 'Working...' : 'Take over'}
+                </button>
+                <button type="button" className="btn btn-secondary" disabled={occupancyBusy || !user} onClick={() => void handleTakeOver(true)}>
+                  Take over and inspect
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="btn btn-primary" disabled={occupancyBusy || !user} onClick={() => void handleTakeOver(true)}>
+                  {occupancyBusy ? 'Working...' : 'Take over and inspect'}
+                </button>
+                <button type="button" className="btn btn-secondary" disabled={occupancyBusy || !user} onClick={() => void handleTakeOver(false)}>
+                  Take over without inspecting
+                </button>
+              </>
+            )}
+            <Link href="/scan" className="btn btn-ghost">Cancel</Link>
           </div>
         </div>
       </div>
@@ -776,7 +854,19 @@ export default function InspectClient() {
         </div>
       </div>
 
-      {/* 4.4 Odometer & Gas Level Tracking */}
+      {kind === 'mine' && (
+        <div className="card card-pad spread items-center flex-wrap gap-2" data-status="info">
+          <p className="text-sm">
+            You have {vehicle.vehicleNumber} since {formatCheckoutStarted(vehicle)}. Inspect again if you need another record, or return it to the shop.
+          </p>
+          <button type="button" className="btn btn-secondary btn-sm" disabled={occupancyBusy} onClick={() => void handleReturnToShop()}>
+            <LogOut className="w-3.5 h-3.5" aria-hidden />
+            Return to shop
+          </button>
+        </div>
+      )}
+
+      {(collectOdometer || collectFuelLevel) && (
       <div className="card card-pad space-y-4 bg-surface border border-line">
         <div className="border-b border-line pb-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -785,14 +875,15 @@ export default function InspectClient() {
               Vehicle Readings & Pre-Trip Check
             </h2>
           </div>
-          {vehicle.odometer && (
+          {collectOdometer && vehicle.odometer ? (
             <span className="text-[11px] text-ink-muted">
               Last Odometer: <strong>{vehicle.odometer.toLocaleString()} mi</strong>
             </span>
-          )}
+          ) : null}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {collectOdometer && (
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-ink flex items-center justify-between">
               <span>Current Odometer (Miles)</span>
@@ -816,7 +907,9 @@ export default function InspectClient() {
               </span>
             </div>
           </div>
+          )}
 
+          {collectFuelLevel && (
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-ink flex items-center gap-1.5">
@@ -850,8 +943,10 @@ export default function InspectClient() {
               className="w-full h-2 bg-surface-sunk rounded-lg appearance-none cursor-pointer accent-ink"
             />
           </div>
+          )}
         </div>
       </div>
+      )}
 
       <div className="sticky top-2 z-10 card card-pad space-y-3 shadow-sm">
         <div className="border-b border-line pb-2.5 flex items-center justify-between gap-3">
@@ -1055,6 +1150,49 @@ export default function InspectClient() {
                               onChange={(e) => handleSetResponse(q, e.target.value, isFlagged)}
                               className="w-full px-3 py-1.5 text-xs rounded-xl border border-line bg-surface focus:outline-none focus:ring-2 focus:ring-ink/20"
                             />
+                          </div>
+                        )}
+
+                        {q.type === 'photo' && (
+                          <div className="mt-2 space-y-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-line bg-surface text-xs font-bold text-ink hover:bg-surface-alt transition-colors">
+                                <Camera className="w-3.5 h-3.5" />
+                                <span>{resp?.photoUrl ? 'Change photo' : 'Take / attach photo'}</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  capture="environment"
+                                  className="sr-only"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      processImageFile(file, (dataUrl) => {
+                                        handleSetResponse(q, 'captured', isFlagged, undefined, dataUrl);
+                                      });
+                                    }
+                                  }}
+                                />
+                              </label>
+                              {resp?.photoUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSetResponse(q, '', isFlagged, undefined, '')}
+                                  className="text-xs text-[var(--critical)] hover:underline flex items-center gap-1"
+                                >
+                                  <X className="w-3.5 h-3.5" /> Remove photo
+                                </button>
+                              )}
+                            </div>
+                            {resp?.photoUrl ? (
+                              <img
+                                src={resp.photoUrl}
+                                alt="Captured answer"
+                                className="w-28 h-28 object-cover rounded-xl border border-line"
+                              />
+                            ) : q.required ? (
+                              <p className="text-[11px] text-ink-faint">A photo is required for this item.</p>
+                            ) : null}
                           </div>
                         )}
 

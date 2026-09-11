@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   ClipboardCheck,
   Search,
@@ -15,6 +16,7 @@ import {
   Image as ImageIcon,
   WifiOff,
   RefreshCw,
+  X,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Inspection } from '@/types';
@@ -24,7 +26,9 @@ import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 
 export default function InspectionsPage() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
+  const searchParams = useSearchParams();
+  const openId = searchParams?.get('id') || '';
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -33,6 +37,9 @@ export default function InspectionsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [offlineCount, setOfflineCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [requestTarget, setRequestTarget] = useState<Inspection | null>(null);
+  const [requestNote, setRequestNote] = useState('');
+  const [requestBusy, setRequestBusy] = useState(false);
 
   const loadData = () => {
     setInspections(dbService.getInspections());
@@ -54,16 +61,54 @@ export default function InspectionsPage() {
 
   const handleDeleteInspection = async (e: React.MouseEvent, inspectionId: string, vehicleNumber: string) => {
     e.stopPropagation();
+    if (role !== 'manager') return;
     if (confirm(`Are you sure you want to delete this inspection record for ${vehicleNumber}?`)) {
       await dbService.deleteInspection(inspectionId);
     }
   };
+
+  const openDeleteRequest = (e: React.MouseEvent, insp: Inspection) => {
+    e.stopPropagation();
+    setRequestNote('');
+    setRequestTarget(insp);
+  };
+
+  const submitDeleteRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!requestTarget || !user) return;
+    try {
+      setRequestBusy(true);
+      await dbService.requestInspectionDelete(requestTarget.id, { id: user.id, name: user.name }, requestNote);
+      setRequestTarget(null);
+      setRequestNote('');
+    } catch (err: any) {
+      alert(err.message || 'Could not send delete request');
+    } finally {
+      setRequestBusy(false);
+    }
+  };
+
+  const pendingDeletes = inspections.filter(i => Boolean(i.deleteRequestedAt));
 
   useEffect(() => {
     loadData();
     window.addEventListener('sunny_db_update', loadData);
     return () => window.removeEventListener('sunny_db_update', loadData);
   }, []);
+
+  useEffect(() => {
+    if (!openId) return;
+    setExpandedId(openId);
+    setStatusFilter('all');
+    setVehicleFilter('all');
+    setSearchTerm('');
+  }, [openId]);
+
+  useEffect(() => {
+    if (!expandedId) return;
+    const el = document.getElementById(`inspection-${expandedId}`);
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [expandedId, inspections]);
 
   const filteredInspections = inspections.filter((insp) => {
     const matchesSearch =
@@ -98,6 +143,13 @@ export default function InspectionsPage() {
 
   return (
     <div className="page">
+      {role === 'manager' && pendingDeletes.length > 0 && (
+        <div className="card card-pad" data-status="flagged">
+          <p className="text-sm font-bold">{pendingDeletes.length} delete request{pendingDeletes.length === 1 ? '' : 's'} waiting</p>
+          <p className="hint">Open a flagged row to approve or deny.</p>
+        </div>
+      )}
+
       <PageHeader
         title="Inspection History"
         subtitle="Complete archive of all daily pre-trip and post-trip vehicle checklists."
@@ -155,14 +207,19 @@ export default function InspectionsPage() {
           </div>
 
           <div className="cluster w-full md:w-auto md:justify-end">
-            {['all', 'passed', 'issues_found', 'in_progress'].map((st) => (
+            {([
+              ['all', 'All'],
+              ['passed', 'Passed'],
+              ['issues_found', 'Issues found'],
+              ['in_progress', 'In progress'],
+            ] as const).map(([st, label]) => (
               <button
                 key={st}
                 type="button"
                 onClick={() => setStatusFilter(st)}
-                className={`btn btn-sm capitalize ${statusFilter === st ? 'btn-primary' : 'btn-secondary'}`}
+                className={`btn btn-sm ${statusFilter === st ? 'bg-surface-sunk text-ink font-semibold border border-line' : 'btn-secondary'}`}
               >
-                {st.replace('_', ' ')}
+                {label}
               </button>
             ))}
 
@@ -196,12 +253,26 @@ export default function InspectionsPage() {
         </div>
       </div>
 
-      <div className="stack">
-        {sortedInspections.map((insp) => {
+      {sortedInspections.length > 0 && (
+      <div className="card overflow-hidden">
+        {(() => {
+          const groups: { day: string; items: typeof sortedInspections }[] = [];
+          for (const insp of sortedInspections) {
+            const day = new Date(insp.submittedAt).toLocaleDateString();
+            const last = groups[groups.length - 1];
+            if (!last || last.day !== day) groups.push({ day, items: [insp] });
+            else last.items.push(insp);
+          }
+          return groups.map((group) => (
+            <div key={group.day}>
+              <div className="px-4 py-2 bg-[var(--surface-alt)] border-b border-line text-xs font-bold text-ink-muted">
+                {group.day}
+              </div>
+              {group.items.map((insp) => {
           const isExpanded = expandedId === insp.id;
 
           return (
-            <div key={insp.id} className="card overflow-hidden">
+            <div key={insp.id} id={`inspection-${insp.id}`} className="border-b border-line last:border-b-0">
               <div
                 onClick={() => setExpandedId(isExpanded ? null : insp.id)} aria-expanded={isExpanded}
                 className="card-pad flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-[var(--surface-alt)] transition-colors select-none"
@@ -214,6 +285,9 @@ export default function InspectionsPage() {
                     <div className="cluster">
                       <span className="font-bold text-sm">{insp.vehicleNumber}</span>
                       <InspectionStatusBadge status={insp.status} />
+                      {insp.deleteRequestedAt && (
+                        <span className="badge" data-status="flagged">Delete requested</span>
+                      )}
                     </div>
                     <p className="text-xs text-ink-muted mt-0.5">
                       Submitted by <strong>{insp.userName}</strong> ({insp.userEmail})
@@ -229,6 +303,7 @@ export default function InspectionsPage() {
                     </div>
                   </div>
 
+                  {role === 'manager' && (
                   <button
                     type="button"
                     onClick={(e) => handleDeleteInspection(e, insp.id, insp.vehicleNumber)}
@@ -237,6 +312,17 @@ export default function InspectionsPage() {
                   >
                     <Trash2 className="h-4 w-4" aria-hidden />
                   </button>
+                  )}
+                  {role !== 'manager' && user?.id === insp.userId && !insp.deleteRequestedAt && (
+                  <button
+                    type="button"
+                    onClick={(e) => openDeleteRequest(e, insp)}
+                    className="btn btn-ghost btn-sm text-ink-muted"
+                    title="Request delete"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden />
+                  </button>
+                  )}
 
                   <span className="icon-tile text-ink-faint" aria-hidden>
                     {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -246,6 +332,12 @@ export default function InspectionsPage() {
 
               {isExpanded && (
                 <div className="card-pad pt-0 border-t border-line bg-[var(--surface-alt)] stack">
+                  {insp.deleteRequestedAt && (
+                    <div className="card card-pad text-xs" data-status="flagged">
+                      <p className="font-bold">Delete requested by {insp.deleteRequestedByName}</p>
+                      {insp.deleteRequestNote ? <p className="mt-1 text-ink-muted">&ldquo;{insp.deleteRequestNote}&rdquo;</p> : null}
+                    </div>
+                  )}
                   {/* Vehicle Readings (Odometer & Fuel) */}
                   {(insp.odometer !== undefined && insp.odometer !== null || insp.fuelLevel !== undefined && insp.fuelLevel !== null) && (
                     <div className="card card-pad text-xs bg-surface flex flex-wrap gap-4 items-center">
@@ -309,7 +401,7 @@ export default function InspectionsPage() {
                               </span>
                             </div>
                             {resp.notes && (
-                              <p className="text-[11px] text-amber-900 bg-amber-100/50 p-1.5 rounded">
+                              <p className="text-[11px] text-ink-muted bg-[var(--hivis-wash)] p-1.5 rounded">
                                 {resp.notes}
                               </p>
                             )}
@@ -318,7 +410,7 @@ export default function InspectionsPage() {
                                 <img
                                   src={resp.photoUrl}
                                   alt="Issue photo"
-                                  className="w-16 h-16 object-cover rounded-lg border border-amber-300"
+                                  className="w-16 h-16 object-cover rounded-lg border border-line"
                                 />
                               </div>
                             )}
@@ -352,7 +444,25 @@ export default function InspectionsPage() {
                       View Vehicle History
                     </Link>
 
-                    {role === 'manager' && (
+                    {role === 'manager' && insp.deleteRequestedAt && (
+                      <div className="cluster gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); void dbService.approveInspectionDelete(insp.id); }}
+                          className="btn btn-danger btn-sm"
+                        >
+                          Approve delete
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); void dbService.denyInspectionDelete(insp.id); }}
+                          className="btn btn-secondary btn-sm"
+                        >
+                          Deny
+                        </button>
+                      </div>
+                    )}
+                    {role === 'manager' && !insp.deleteRequestedAt && (
                       <button
                         type="button"
                         onClick={(e) => handleDeleteInspection(e, insp.id, insp.vehicleNumber)}
@@ -362,12 +472,30 @@ export default function InspectionsPage() {
                         Delete Record
                       </button>
                     )}
+                    {role !== 'manager' && user?.id === insp.userId && !insp.deleteRequestedAt && (
+                      <button
+                        type="button"
+                        onClick={(e) => openDeleteRequest(e, insp)}
+                        className="btn btn-ghost btn-sm text-[var(--critical)]"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                        Request delete
+                      </button>
+                    )}
+                    {role !== 'manager' && insp.deleteRequestedAt && user?.id === insp.userId && (
+                      <span className="text-xs text-ink-muted">Waiting on manager</span>
+                    )}
                   </div>
                 </div>
               )}
             </div>
           );
-        })}
+              })}
+            </div>
+          ));
+        })()}
+      </div>
+      )}
 
         {sortedInspections.length === 0 && (
           <div className="card card-pad">
@@ -379,7 +507,47 @@ export default function InspectionsPage() {
             </EmptyState>
           </div>
         )}
-      </div>
+
+      {requestTarget && (
+        <div className="fixed inset-0 z-50 bg-ink/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setRequestTarget(null)}>
+          <form
+            className="card card-pad max-w-md w-full stack"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-request-title"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={submitDeleteRequest}
+          >
+            <div className="spread items-start">
+              <h2 id="delete-request-title" className="card-title">Request delete</h2>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setRequestTarget(null)} aria-label="Close">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="text-xs text-ink-muted">
+              {requestTarget.vehicleNumber} · {new Date(requestTarget.submittedAt).toLocaleString()}. A manager has to approve before it is removed.
+            </p>
+            <div className="field">
+              <label className="label" htmlFor="delete-request-note">Why should this be deleted?</label>
+              <textarea
+                id="delete-request-note"
+                required
+                rows={3}
+                value={requestNote}
+                onChange={(e) => setRequestNote(e.target.value)}
+                placeholder="I submitted this by mistake..."
+                className="input"
+              />
+            </div>
+            <div className="cluster justify-end">
+              <button type="button" className="btn btn-secondary" onClick={() => setRequestTarget(null)}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={requestBusy || !requestNote.trim()}>
+                {requestBusy ? 'Sending...' : 'Submit request'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

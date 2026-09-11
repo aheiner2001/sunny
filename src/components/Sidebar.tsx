@@ -3,7 +3,6 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { QrCode } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { asset } from '@/lib/basePath';
 import { NAV_ITEMS } from '@/lib/navItems';
@@ -13,7 +12,7 @@ export function Sidebar() {
   const { role } = useAuth();
 
   return (
-    <aside className="w-64 h-full bg-surface border-r border-line flex flex-col justify-between shrink-0 select-none z-30 overflow-y-auto">
+    <aside className="w-64 h-full bg-surface border-r border-line flex flex-col shrink-0 select-none z-30 overflow-y-auto">
       <div>
         {/* Brand Header */}
         <div className="px-6 py-5 border-b border-line">
@@ -53,27 +52,6 @@ export function Sidebar() {
         </nav>
       </div>
 
-      {/* Bottom QR Scan Quick Launcher */}
-      <div className="p-4">
-        <Link
-          href="/scan"
-          className="group block p-4 rounded-card border border-dashed border-line-strong bg-surface-alt hover:border-ink hover:bg-surface-sunk transition-colors text-left"
-        >
-          <div className="flex items-center gap-3">
-            <div className="icon-tile w-10 h-10 bg-ink text-ink-inverse">
-              <QrCode className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-sm font-display font-semibold text-ink">
-                Scan vehicle QR
-              </div>
-              <p className="text-xs text-ink-muted m-0">
-                Start an inspection
-              </p>
-            </div>
-          </div>
-        </Link>
-      </div>
     </aside>
   );
 }

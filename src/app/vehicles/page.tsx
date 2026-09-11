@@ -5,18 +5,17 @@ import Link from 'next/link';
 import {
   Truck,
   Search,
-  QrCode,
   ArrowRight,
   CheckCircle2,
   AlertTriangle,
   Plus,
   Edit2,
   Trash2,
+  MoreHorizontal,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Vehicle, VehicleStatus, EquipmentOption } from '@/types';
 import { VehicleStatusBadge, InspectionStatusBadge } from '@/components/StatusBadges';
-import { QRScannerModal } from '@/components/QRScannerModal';
 import { ManagerOnly } from '@/components/ManagerOnly';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
@@ -33,7 +32,7 @@ function VehiclesPageContent() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [scannerOpen, setScannerOpen] = useState(false);
+  const [vehicleMenuId, setVehicleMenuId] = useState<string | null>(null);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -227,16 +226,10 @@ function VehiclesPageContent() {
         title="Fleet Vehicles"
         subtitle="Manage fleet vehicles, create new vans, print QR badges, and track maintenance history."
         actions={
-          <>
-            <button type="button" onClick={handleOpenAdd} className="btn btn-primary">
-              <Plus className="h-4 w-4" aria-hidden />
-              Add Vehicle
-            </button>
-            <button type="button" onClick={() => setScannerOpen(true)} className="btn btn-secondary">
-              <QrCode className="h-4 w-4 text-[var(--info)]" aria-hidden />
-              Scan Vehicle QR
-            </button>
-          </>
+          <button type="button" onClick={handleOpenAdd} className="btn btn-primary">
+            <Plus className="h-4 w-4" aria-hidden />
+            Add Vehicle
+          </button>
         }
       />
 
@@ -259,14 +252,19 @@ function VehiclesPageContent() {
             </div>
           </div>
           <div className="cluster w-full sm:w-auto sm:justify-end">
-            {['all', 'in_use', 'active', 'maintenance'].map((st) => (
+            {([
+              ['all', 'All'],
+              ['in_use', 'In use'],
+              ['active', 'Available'],
+              ['maintenance', 'Maintenance'],
+            ] as const).map(([st, label]) => (
               <button
                 key={st}
                 type="button"
                 onClick={() => setStatusFilter(st)}
-                className={`btn btn-sm capitalize ${statusFilter === st ? 'btn-primary' : 'btn-secondary'}`}
+                className={`btn btn-sm ${statusFilter === st ? 'bg-surface-sunk text-ink font-semibold border border-line' : 'btn-secondary'}`}
               >
-                {st.replace('_', ' ')}
+                {label}
               </button>
             ))}
           </div>
@@ -319,12 +317,14 @@ function VehiclesPageContent() {
                     {flaggedEqCount > 0 ? (
                       <span className="font-bold text-[var(--amber-text)] cluster">
                         <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-                        {flaggedEqCount} Flagged
+                        {flaggedEqCount} flagged
                       </span>
+                    ) : vehicleEquipment.length === 0 ? (
+                      <span className="text-ink-faint">No equipment assigned</span>
                     ) : (
-                      <span className="font-bold text-[var(--ok)] cluster">
-                        <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-                        All {vehicleEquipment.length} Working
+                      <span className="text-ink-muted cluster">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-[var(--ok)]" aria-hidden />
+                        All working
                       </span>
                     )}
                   </div>
@@ -332,38 +332,60 @@ function VehiclesPageContent() {
               </div>
 
               <div className="card-foot">
-                <div className="cluster w-full">
+                <div className="cluster w-full justify-between">
                   <Link
                     href={`/inspect?id=${encodeURIComponent(vehicle.id)}`}
-                    className="btn btn-secondary btn-sm flex-1"
+                    className="btn btn-primary btn-sm"
                   >
                     Inspect
                   </Link>
-                  <Link
-                    href={`/vehicles/detail?id=${encodeURIComponent(vehicle.id)}`}
-                    className="btn btn-primary btn-sm flex-1"
-                  >
-                    Vehicle Details
-                    <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-                  </Link>
-                </div>
-                <div className="cluster justify-end w-full pt-2">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEdit(vehicle)}
-                    className="btn btn-ghost btn-sm"
-                  >
-                    <Edit2 className="h-3 w-3" aria-hidden />
-                    Edit Van
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenDelete(vehicle)}
-                    className="btn btn-ghost btn-sm text-[var(--critical)]"
-                  >
-                    <Trash2 className="h-3 w-3" aria-hidden />
-                    Delete
-                  </button>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      aria-haspopup="menu"
+                      aria-expanded={vehicleMenuId === vehicle.id}
+                      aria-label={`More actions for ${vehicle.vehicleNumber}`}
+                      onClick={() => setVehicleMenuId(vehicleMenuId === vehicle.id ? null : vehicle.id)}
+                    >
+                      <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />
+                      More
+                    </button>
+                    {vehicleMenuId === vehicle.id && (
+                      <div
+                        role="menu"
+                        className="absolute right-0 bottom-full mb-1 z-20 min-w-[12rem] rounded-[var(--radius)] border border-line bg-surface shadow-lg p-1 stack-tight"
+                      >
+                        <Link
+                          role="menuitem"
+                          href={`/vehicles/detail?id=${encodeURIComponent(vehicle.id)}`}
+                          className="btn btn-ghost btn-sm w-full justify-start gap-2"
+                          onClick={() => setVehicleMenuId(null)}
+                        >
+                          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                          Details
+                        </Link>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="btn btn-ghost btn-sm w-full justify-start gap-2"
+                          onClick={() => { handleOpenEdit(vehicle); setVehicleMenuId(null); }}
+                        >
+                          <Edit2 className="h-3.5 w-3.5" aria-hidden />
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="btn btn-ghost btn-sm w-full justify-start gap-2 text-[var(--critical)]"
+                          onClick={() => { handleOpenDelete(vehicle); setVehicleMenuId(null); }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -725,10 +747,6 @@ function VehiclesPageContent() {
         </div>
       )}
 
-      <QRScannerModal
-        isOpen={scannerOpen}
-        onClose={() => setScannerOpen(false)}
-      />
     </div>
   );
 }

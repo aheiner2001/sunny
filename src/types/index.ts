@@ -43,6 +43,8 @@ export interface Vehicle {
   currentUserId?: string | null;
   currentUserName?: string | null;
   currentUserStartTime?: string | null;
+  /** ISO checkout time. Used for overnight auto-return. */
+  currentUserStartAt?: string | null;
   lastInspectionId?: string | null;
   lastInspectionStatus?: InspectionStatus | null;
   lastInspectionAt?: string | null;
@@ -163,12 +165,16 @@ export interface ChecklistConfig {
   categories: ChecklistCategoryConfig[];
   questions: ChecklistQuestion[];
   updatedAt?: string;
+  /** Built-in inspect fields. Default true when omitted. */
+  collectOdometer?: boolean;
+  collectFuelLevel?: boolean;
 }
 
 export type QuestionType = 
   | 'pass_fail'
   | 'yes_no'
   | 'text'
+  | 'photo'
   | 'equipment_status'
   | 'checkbox'
   | 'multiple_choice';
@@ -231,6 +237,11 @@ export interface Inspection {
   /** Mileage & fuel readings */
   odometer?: number;
   fuelLevel?: number;
+  /** Employee requested a manager to delete this record */
+  deleteRequestedAt?: string | null;
+  deleteRequestedById?: string | null;
+  deleteRequestedByName?: string | null;
+  deleteRequestNote?: string | null;
 }
 
 export type TaskStatus = 'open' | 'completed';

@@ -11,11 +11,11 @@ export function PageHeader({
 }) {
   return (
     <div className="page-head">
-      <div>
-        <h2 className="page-title">{title}</h2>
-        {subtitle ? <p className="page-sub">{subtitle}</p> : null}
+      <div className="min-w-0">
+        <h2 className="sr-only">{title}</h2>
+        {subtitle ? <p className="page-sub m-0">{subtitle}</p> : null}
       </div>
-      {actions ? <div className="cluster">{actions}</div> : null}
+      {actions ? <div className="cluster shrink-0">{actions}</div> : null}
     </div>
   );
 }

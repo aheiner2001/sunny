@@ -18,4 +18,15 @@ describe('canSubmitInspection', () => {
       'required-two': { value: 'yes', isFlagged: false },
     })).toBe(true);
   });
+
+  it('requires a photoUrl for required photo questions', () => {
+    const photoQuestions = [{ id: 'tire-photo', required: true, type: 'photo' }];
+    expect(canSubmitInspection(photoQuestions, {})).toBe(false);
+    expect(canSubmitInspection(photoQuestions, {
+      'tire-photo': { value: 'captured', isFlagged: false },
+    })).toBe(false);
+    expect(canSubmitInspection(photoQuestions, {
+      'tire-photo': { value: 'captured', isFlagged: false, photoUrl: 'data:image/jpeg;base64,abc' },
+    })).toBe(true);
+  });
 });
