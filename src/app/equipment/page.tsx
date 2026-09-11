@@ -109,6 +109,7 @@ function EquipmentPageContent() {
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<string[]>([]);
   const [batchTransferModalOpen, setBatchTransferModalOpen] = useState(false);
   const [batchTargetVehicleId, setBatchTargetVehicleId] = useState('');
+  const [batchQuantities, setBatchQuantities] = useState<Record<string, number>>({});
 
   // 3.4 Printable QR Sheet Modal
   const [printQrSheetOpen, setPrintQrSheetOpen] = useState(false);
@@ -261,6 +262,7 @@ function EquipmentPageContent() {
       setSelectedEquipmentIds([]);
       setBatchTransferModalOpen(false);
       setBatchTargetVehicleId('');
+      setBatchQuantities({});
       load();
     } catch (err: any) {
       alert(err.message || 'Batch transfer failed');
@@ -834,7 +836,7 @@ function EquipmentPageContent() {
           <div className="cluster gap-2">
             <button
               type="button"
-              onClick={() => setBatchTransferModalOpen(true)}
+              onClick={() => { setBatchQuantities({}); setBatchTransferModalOpen(true); }}
               className="btn btn-primary btn-sm cluster gap-1.5"
             >
               <ArrowRightLeft className="w-3.5 h-3.5" />
