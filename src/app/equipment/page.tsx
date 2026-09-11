@@ -24,6 +24,7 @@ import {
   CheckSquare,
   Square,
   ArrowRightLeft,
+  MoreHorizontal,
   Tag,
   TrendingDown
 } from 'lucide-react';
