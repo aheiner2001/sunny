@@ -24,7 +24,7 @@ export default function RootLayout({
         <title>Sunny Fleet - Vehicle & Equipment Accountability</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
-      <body className="min-h-screen">
+      <body className="h-svh overflow-hidden">
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:top-2 focus:left-2 focus:bg-surface focus:text-ink focus:px-3 focus:py-2 focus:rounded-md"
@@ -34,9 +34,9 @@ export default function RootLayout({
         <AuthProvider>
           <SPARedirectHandler />
           <PasscodeGate>
-            <div className="flex min-h-screen">
-              {/* Desktop Sidebar */}
-              <div className="hidden lg:block">
+            <div className="flex h-full min-h-0">
+              {/* Desktop Sidebar: viewport-tall so it never scrolls away with the page. */}
+              <div className="hidden lg:flex h-full shrink-0">
                 <Sidebar />
               </div>
 
@@ -65,12 +65,14 @@ export default function RootLayout({
                 </div>
               )}
 
-              {/* Main Content Area */}
-              <div className="flex-1 flex flex-col min-w-0">
+              {/* Main Content Area: header stays put; only this pane scrolls. */}
+              <div className="flex-1 flex flex-col min-w-0 min-h-0">
                 <Header onMobileMenuToggle={() => setMobileMenuOpen(true)} />
-                <main id="main-content" className="flex-1 w-full max-w-[1400px] mx-auto px-[var(--gutter)] py-4 sm:py-8 pb-24 lg:pb-8">
-                  {children}
-                </main>
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+                  <main id="main-content" className="w-full max-w-[1400px] mx-auto px-[var(--gutter)] py-4 sm:py-8 pb-24 lg:pb-8">
+                    {children}
+                  </main>
+                </div>
               </div>
             </div>
 
