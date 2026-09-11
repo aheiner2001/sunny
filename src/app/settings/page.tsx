@@ -27,6 +27,8 @@ import {
   Lock,
   KeyRound,
   History,
+  Gauge,
+  Fuel,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { ChecklistQuestion, ChecklistCategoryConfig, QuestionType, ChecklistConfig, EquipmentOption, FleetTask } from '@/types';
@@ -74,6 +76,8 @@ function SettingsPageContent() {
   const [tasks, setTasks] = useState<FleetTask[]>([]);
   const [taskForm, setTaskForm] = useState({ title: '', description: '', vehicleId: '', dueAt: '', scheduleLabel: '' });
   const [recentInspectorsDepth, setRecentInspectorsDepth] = useState<1 | 3>(3);
+  const [collectOdometer, setCollectOdometer] = useState(true);
+  const [collectFuelLevel, setCollectFuelLevel] = useState(true);
 
   // Category Modal State
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -119,6 +123,18 @@ function SettingsPageContent() {
     setTasks(dbService.getTasks());
     const settings = dbService.getAppSettings();
     setRecentInspectorsDepth(settings.recentInspectorsDepth);
+    setCollectOdometer(config.collectOdometer !== false);
+    setCollectFuelLevel(config.collectFuelLevel !== false);
+  };
+
+  const updateVehicleReading = async (field: 'collectOdometer' | 'collectFuelLevel', value: boolean) => {
+    if (field === 'collectOdometer') setCollectOdometer(value);
+    else setCollectFuelLevel(value);
+    const config = dbService.getChecklistConfig();
+    await dbService.saveChecklistConfig({
+      ...config,
+      [field]: value,
+    });
   };
 
   const updateRecentInspectorsDepth = async (value: 1 | 3) => {
@@ -455,6 +471,7 @@ function SettingsPageContent() {
       case 'pass_fail': return 'Pass / Fail';
       case 'yes_no': return 'Yes / No';
       case 'text': return 'Text Note';
+      case 'photo': return 'Photo';
       case 'equipment_status': return 'Equipment Status';
       default: return type;
     }
@@ -620,7 +637,7 @@ function SettingsPageContent() {
               <ListChecks className="w-5 h-5 text-ink" />
               <span>Inspection Questions & Answer Formats</span>
             </h2>
-            <p className="text-xs text-ink-faint">Configure questions, response choices (Pass/Fail, Yes/No, Text Note), and requirement rules.</p>
+            <p className="text-xs text-ink-faint">Configure questions, response choices (Pass/Fail, Yes/No, Text Note, Photo), and requirement rules.</p>
           </div>
 
           <button
@@ -630,6 +647,39 @@ function SettingsPageContent() {
             <Plus className="w-4 h-4" />
             <span>Add Question</span>
           </button>
+        </div>
+
+        <div className="rounded-xl border border-line bg-[var(--surface-alt)] p-3 stack-tight">
+          <p className="text-xs font-bold text-ink">Built-in vehicle readings</p>
+          <p className="text-[11px] text-ink-faint">
+            Shown first on the inspection form. Turn a field off if you already track it with a custom question, so it is not asked twice.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+            <label className="spread items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2.5 cursor-pointer">
+              <span className="cluster gap-2 min-w-0">
+                <Gauge className="w-4 h-4 text-ink-muted shrink-0" />
+                <span className="text-xs font-bold">Odometer</span>
+              </span>
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={collectOdometer}
+                onChange={(e) => void updateVehicleReading('collectOdometer', e.target.checked)}
+              />
+            </label>
+            <label className="spread items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2.5 cursor-pointer">
+              <span className="cluster gap-2 min-w-0">
+                <Fuel className="w-4 h-4 text-ink-muted shrink-0" />
+                <span className="text-xs font-bold">Fuel level</span>
+              </span>
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={collectFuelLevel}
+                onChange={(e) => void updateVehicleReading('collectFuelLevel', e.target.checked)}
+              />
+            </label>
+          </div>
         </div>
 
         {/* Filter Category Tabs */}
@@ -1130,6 +1180,7 @@ function SettingsPageContent() {
                     <option value="pass_fail">Pass / Fail</option>
                     <option value="yes_no">Yes / No</option>
                     <option value="text">Text Note</option>
+                    <option value="photo">Photo</option>
                     <option value="equipment_status">Equipment Status (Working/Flag)</option>
                   </select>
                 </div>

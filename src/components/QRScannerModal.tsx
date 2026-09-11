@@ -220,7 +220,7 @@ export function QRScannerModal({
                 >
                   <div>
                     <div className="text-xs font-bold group-hover:text-ink">{v.vehicleNumber}</div>
-                    <div className="text-2xs text-ink-faint truncate max-w-[120px]">{v.name.split('-')[0]}</div>
+                    <div className="text-2xs text-ink-faint truncate max-w-[120px]">{v.currentUserName ? `In use · ${v.currentUserName}` : v.name.split('-')[0]}</div>
                   </div>
                   <ArrowRight className="h-3.5 w-3.5 text-ink-faint group-hover:text-ink transition-transform group-hover:translate-x-0.5" aria-hidden />
                 </button>

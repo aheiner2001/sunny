@@ -28,6 +28,7 @@ import {
   VehicleDayLog
 } from '@/types';
 import { classifyIssueType } from './issueClassification';
+import { checkInFields, checkOutFields, occupancyAfterInspection, shouldAutoReturnVehicle, localDateString } from './occupancy';
 import { 
   computeLifespanStatus,
   calculateLifespanDueDate,
@@ -124,6 +125,7 @@ export function sanitizeForFirestore<T>(data: T): T {
 class DataStore {
   private initialized = false;
   private listening = false;
+  private overnightReconciledFor: string | null = null;
 
   private isClient(): boolean {
     return typeof window !== 'undefined';
@@ -803,11 +805,38 @@ class DataStore {
   // ==========================================
   // VEHICLES (Manager CRUD)
   // ==========================================
+  private readVehicleList(): Vehicle[] {
+    const data = localStorage.getItem(STORAGE_KEYS.VEHICLES);
+    return data ? JSON.parse(data) : [];
+  }
+
   public getVehicles(): Vehicle[] {
     if (!this.isClient()) return [];
     this.init();
-    const data = localStorage.getItem(STORAGE_KEYS.VEHICLES);
-    return data ? JSON.parse(data) : [];
+    this.reconcileOvernightCheckins();
+    return this.readVehicleList();
+  }
+
+  /** End yesterday's shifts the first time the app is opened today. */
+  private reconcileOvernightCheckins(): void {
+    const today = localDateString(new Date());
+    if (this.overnightReconciledFor === today) return;
+    this.overnightReconciledFor = today;
+    const list = this.readVehicleList();
+    const stale = list.filter(v => shouldAutoReturnVehicle(v));
+    if (stale.length === 0) return;
+    const returnedIds = new Set(stale.map(v => v.id));
+    const next = list.map(v => (returnedIds.has(v.id) ? checkInFields(v) : v));
+    localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(next));
+    if (db) {
+      stale.forEach((v) => {
+        const updated = checkInFields(v);
+        setDoc(doc(db, 'vehicles', updated.id), sanitizeForFirestore(updated), { merge: true }).catch((e) =>
+          console.warn('Firestore overnight check-in write error:', e)
+        );
+      });
+    }
+    window.dispatchEvent(new Event('sunny_db_update'));
   }
 
   public getVehicle(idOrToken: string): Vehicle | undefined {
@@ -932,6 +961,7 @@ class DataStore {
       currentUserId: vehicleData.currentUserId || null,
       currentUserName: vehicleData.currentUserName || null,
       currentUserStartTime: vehicleData.currentUserStartTime || null,
+      currentUserStartAt: vehicleData.currentUserStartAt || null,
       lastInspectionId: vehicleData.lastInspectionId || null,
       lastInspectionStatus: vehicleData.lastInspectionStatus || null,
       lastInspectionAt: vehicleData.lastInspectionAt || null,
@@ -1022,28 +1052,13 @@ class DataStore {
   public async checkInVehicle(vehicleId: string): Promise<Vehicle> {
     const vehicle = this.getVehicle(vehicleId);
     if (!vehicle) throw new Error('Vehicle not found');
-    const updated: Vehicle = {
-      ...vehicle,
-      status: 'active',
-      currentUserId: null,
-      currentUserName: null,
-      currentUserStartTime: null,
-    };
-    return this.updateVehicle(updated);
+    return this.updateVehicle(checkInFields(vehicle));
   }
 
   public async checkOutVehicle(vehicleId: string, user: { id: string; name: string }): Promise<Vehicle> {
     const vehicle = this.getVehicle(vehicleId);
     if (!vehicle) throw new Error('Vehicle not found');
-    const now = new Date();
-    const updated: Vehicle = {
-      ...vehicle,
-      status: 'in_use',
-      currentUserId: user.id,
-      currentUserName: user.name,
-      currentUserStartTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-    return this.updateVehicle(updated);
+    return this.updateVehicle(checkOutFields(vehicle, user));
   }
 
   public async deleteVehicle(
@@ -2269,19 +2284,28 @@ class DataStore {
         name: 'Standard Detailing Checklist',
         categories: INITIAL_CATEGORIES,
         questions: INITIAL_CHECKLIST_QUESTIONS,
+        collectOdometer: true,
+        collectFuelLevel: true,
       };
     }
     this.init();
     const raw = localStorage.getItem(STORAGE_KEYS.CHECKLIST_CONFIG);
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw) as ChecklistConfig;
+      return {
+        ...parsed,
+        collectOdometer: parsed.collectOdometer !== false,
+        collectFuelLevel: parsed.collectFuelLevel !== false,
+      };
     }
     const config: ChecklistConfig = {
       id: DEFAULT_CHECKLIST_ID,
       name: 'Standard Detailing Checklist',
       categories: this.getChecklistCategories(),
       questions: this.getChecklistQuestions(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      collectOdometer: true,
+      collectFuelLevel: true,
     };
     return config;
   }
@@ -2336,7 +2360,9 @@ class DataStore {
       name: 'Standard Detailing Checklist',
       categories: INITIAL_CATEGORIES,
       questions: INITIAL_CHECKLIST_QUESTIONS,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      collectOdometer: true,
+      collectFuelLevel: true,
     };
     await this.saveChecklistConfig(defaultConfig);
   }
@@ -2534,13 +2560,10 @@ class DataStore {
       localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(allIssues));
     }
 
-    // Update Vehicle state
+    // Update Vehicle state (checkout only if the van is free — never steal another driver)
+    const occupied = occupancyAfterInspection(vehicle, { id: data.userId, name: data.userName }, now);
     const updatedVehicle: Vehicle = {
-      ...vehicle,
-      status: 'in_use',
-      currentUserId: data.userId || null,
-      currentUserName: data.userName || null,
-      currentUserStartTime: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      ...occupied,
       lastInspectionId: inspectionId,
       lastInspectionStatus: status,
       lastInspectionAt: nowIso,
@@ -2817,6 +2840,60 @@ class DataStore {
     }
 
     window.dispatchEvent(new Event('sunny_db_update'));
+  }
+
+  private persistInspection(updated: Inspection): void {
+    const list = this.getInspections().map(i => (i.id === updated.id ? updated : i));
+    localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(list));
+    if (db) {
+      setDoc(doc(db, 'inspections', updated.id), sanitizeForFirestore(updated), { merge: true }).catch((e) =>
+        console.warn('Firestore inspection write error:', e)
+      );
+    }
+    window.dispatchEvent(new Event('sunny_db_update'));
+  }
+
+  public getPendingInspectionDeletes(): Inspection[] {
+    return this.getInspections()
+      .filter(i => Boolean(i.deleteRequestedAt))
+      .sort((a, b) => new Date(b.deleteRequestedAt || 0).getTime() - new Date(a.deleteRequestedAt || 0).getTime());
+  }
+
+  public async requestInspectionDelete(
+    inspectionId: string,
+    requester: { id: string; name: string },
+    note: string
+  ): Promise<void> {
+    if (!this.isClient()) return;
+    const noteTrim = note.trim();
+    if (!noteTrim) throw new Error('Add a short note so the manager knows why.');
+    const insp = this.getInspections().find(i => i.id === inspectionId);
+    if (!insp) throw new Error('Inspection not found.');
+    if (insp.userId !== requester.id) throw new Error('You can only request deletion of your own inspections.');
+    this.persistInspection({
+      ...insp,
+      deleteRequestedAt: new Date().toISOString(),
+      deleteRequestedById: requester.id,
+      deleteRequestedByName: requester.name,
+      deleteRequestNote: noteTrim,
+    });
+  }
+
+  public async denyInspectionDelete(inspectionId: string): Promise<void> {
+    if (!this.isClient()) return;
+    const insp = this.getInspections().find(i => i.id === inspectionId);
+    if (!insp) throw new Error('Inspection not found.');
+    this.persistInspection({
+      ...insp,
+      deleteRequestedAt: null,
+      deleteRequestedById: null,
+      deleteRequestedByName: null,
+      deleteRequestNote: null,
+    });
+  }
+
+  public async approveInspectionDelete(inspectionId: string): Promise<void> {
+    await this.deleteInspection(inspectionId);
   }
 
   // ==========================================

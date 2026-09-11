@@ -802,23 +802,23 @@ function EquipmentPageContent() {
         subtitle="Track equipment, minimum shop par thresholds, multi-van allocation, QR codes, and wear lifespans."
         actions={
           <div className="cluster flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setPrintQrSheetOpen(true)}
-              className="btn btn-secondary cluster gap-1.5"
-            >
-              <Printer className="h-4 w-4" aria-hidden />
-              Print All QR Labels
-            </button>
             <button type="button" onClick={openAdd} className="btn btn-primary cluster gap-1.5">
               <Plus className="h-4 w-4" aria-hidden />
               Add Equipment
             </button>
-            <Link href="/equipment/scan" className="btn btn-secondary cluster gap-1.5">
+            <button
+              type="button"
+              onClick={() => setPrintQrSheetOpen(true)}
+              className="btn btn-ghost cluster gap-1.5"
+            >
+              <Printer className="h-4 w-4" aria-hidden />
+              Print QR
+            </button>
+            <Link href="/equipment/scan" className="btn btn-ghost cluster gap-1.5">
               <QrCode className="h-4 w-4" aria-hidden />
-              Scan Equipment
+              Scan
             </Link>
-            <Link href="/issues" className="btn btn-attention cluster gap-1.5">
+            <Link href="/issues" className="btn btn-ghost cluster gap-1.5">
               <AlertTriangle className="h-4 w-4" aria-hidden />
               Issues
             </Link>
@@ -883,7 +883,7 @@ function EquipmentPageContent() {
         {lowStockCount > 0 && (
           <button
             type="button"
-            className={`card card-pad text-left w-full ${statusFilter === 'low_stock' ? 'ring-2 ring-red-500' : ''}`}
+            className={`card card-pad text-left w-full ${statusFilter === 'low_stock' ? 'border-[var(--critical)] bg-[var(--hivis-wash)]' : ''}`}
             data-status="critical"
             onClick={() => setStatusFilter(statusFilter === 'low_stock' ? 'all' : 'low_stock')}
           >
@@ -902,7 +902,7 @@ function EquipmentPageContent() {
         {dueForReviewCount > 0 && (
           <button
             type="button"
-            className={`card card-pad text-left w-full ${lifespanFilter === 'due' ? 'ring-2 ring-[var(--amber)]' : ''}`}
+            className={`card card-pad text-left w-full ${lifespanFilter === 'due' ? 'border-[var(--amber)] bg-[var(--hivis-wash)]' : ''}`}
             data-status="flagged"
             onClick={() => applyLifespanFilter(lifespanFilter === 'due' ? 'all' : 'due')}
             aria-pressed={lifespanFilter === 'due'}

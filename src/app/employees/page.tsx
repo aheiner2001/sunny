@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { 
   Users, 
@@ -25,7 +25,8 @@ import {
   Copy,
   Check,
   KeyRound,
-  RefreshCw
+  RefreshCw,
+  MoreHorizontal
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { User, UserRole, Inspection, Issue, Vehicle } from '@/types';
@@ -70,6 +71,8 @@ function EmployeesPageContent() {
   // Reveals the selected member's access code on demand; resets per selection.
   const [codeRevealed, setCodeRevealed] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [detailMenuOpen, setDetailMenuOpen] = useState(false);
+  const detailMenuRef = useRef<HTMLDivElement | null>(null);
 
   // Form states
   const [formData, setFormData] = useState<{
@@ -116,7 +119,25 @@ function EmployeesPageContent() {
   useEffect(() => {
     setCodeRevealed(false);
     setCodeCopied(false);
+    setDetailMenuOpen(false);
   }, [selectedUser?.id]);
+
+  useEffect(() => {
+    if (!detailMenuOpen) return;
+    const onPointer = (e: MouseEvent) => {
+      if (detailMenuRef.current?.contains(e.target as Node)) return;
+      setDetailMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDetailMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [detailMenuOpen]);
 
   const filteredEmployees = employees.filter(e =>
     e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -317,7 +338,7 @@ function EmployeesPageContent() {
                   onClick={() => setSelectedUser(emp)}
                   className={`w-full p-3 rounded-2xl flex items-center justify-between text-left transition-all cursor-pointer ${
                     isSelected
-                      ? 'ring-2 ring-ink bg-[var(--info-wash)] border border-line-strong'
+                      ? 'bg-[var(--info-wash)] border border-line'
                       : 'bg-[var(--surface-alt)] border border-line hover:bg-[var(--idle-wash)]/70'
                   }`}
                 >
@@ -325,7 +346,7 @@ function EmployeesPageContent() {
                     <img
                       src={getResolvedAvatarUrl(emp)}
                       alt={emp.name}
-                      className="w-10 h-10 rounded-full object-cover ring-2 ring-surface shadow-sm shrink-0"
+                      className="w-10 h-10 rounded-full object-cover shrink-0"
                     />
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
@@ -340,7 +361,7 @@ function EmployeesPageContent() {
                         <span className="text-[10px] text-ink-faint capitalize">{emp.role}</span>
                         <span className="text-ink-faint">•</span>
                         <span className={`text-[10px] font-semibold ${
-                          emp.status === 'active' ? 'text-emerald-600' : 'text-ink-faint'
+                          emp.status === 'active' ? 'text-[var(--ok)]' : 'text-ink-faint'
                         }`}>
                           {emp.status}
                         </span>
@@ -350,7 +371,7 @@ function EmployeesPageContent() {
 
                   <div className="flex items-center gap-1 shrink-0">
                     {assignedVan && (
-                      <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                      <span className="badge" data-status="info">
                         {assignedVan.vehicleNumber}
                       </span>
                     )}
@@ -375,12 +396,12 @@ function EmployeesPageContent() {
           {selectedUser ? (
             <>
               {/* Employee Profile Header Card */}
-              <div className="bg-surface rounded-3xl p-6 sm:p-8 border border-line shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="card card-pad flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                   <img
                     src={getResolvedAvatarUrl(selectedUser)}
                     alt={selectedUser.name}
-                    className="w-16 h-16 rounded-2xl object-cover ring-4 ring-ink/20 shadow-md shrink-0"
+                    className="w-16 h-16 rounded-2xl object-cover shrink-0"
                   />
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -393,15 +414,14 @@ function EmployeesPageContent() {
                         {selectedUser.role === 'manager' && <Shield className="w-3 h-3 text-[var(--info)]" />}
                         {selectedUser.role}
                       </span>
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-md border capitalize ${
-                        selectedUser.status === 'active'
-                          ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                          : 'text-ink-muted bg-[var(--surface-alt)] border-line'
-                      }`}>
+                      <span className="badge capitalize" data-status={selectedUser.status === 'active' ? 'ok' : 'idle'}>
                         {selectedUser.status}
                       </span>
                     </div>
                     <p className="text-xs text-ink-muted mt-1">{selectedUser.email}</p>
+                    <p className="text-xs text-ink-faint mt-1">
+                      {userInspections.length} inspection{userInspections.length === 1 ? '' : 's'} · {userIssues.length} issue{userIssues.length === 1 ? '' : 's'}
+                    </p>
                     
                     {/* Access passcode: masked until revealed, so an open
                         directory does not broadcast every sign-in code. */}
@@ -432,15 +452,18 @@ function EmployeesPageContent() {
                             aria-label="Copy access code"
                             className="p-1.5 rounded-lg text-ink-faint hover:text-ink-muted hover:bg-[var(--idle-wash)] transition-colors"
                           >
-                            {codeCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                            {codeCopied ? <Check className="w-3.5 h-3.5 text-[var(--ok)]" /> : <Copy className="w-3.5 h-3.5" />}
                           </button>
                         </>
                       ) : (
                         <button
+                          type="button"
                           onClick={() => handleOpenEdit(selectedUser)}
-                          className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 hover:bg-amber-100 transition-colors"
+                          title="No access code set — assign one"
+                          aria-label="No access code set, assign one"
+                          className="p-1.5 rounded-lg text-ink-faint hover:text-ink-muted hover:bg-[var(--idle-wash)] transition-colors"
                         >
-                          No code set — assign one
+                          <KeyRound className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
@@ -485,115 +508,100 @@ function EmployeesPageContent() {
                       </div>
                     )}
 
+                    {currentAssignedVehicle && (
                     <div className="mt-2 text-xs font-semibold text-ink-muted">
-                      Currently Operating:{' '}
-                      {currentAssignedVehicle ? (
-                        <Link
-                          href={`/vehicles/detail?id=${encodeURIComponent(currentAssignedVehicle.id)}`}
-                          className="text-[var(--info)] font-bold hover:underline"
-                        >
-                          {currentAssignedVehicle.vehicleNumber} ({currentAssignedVehicle.licensePlate})
-                        </Link>
-                      ) : (
-                        <span className="text-ink-faint font-normal">None (Off Route)</span>
-                      )}
+                      On van:{' '}
+                      <Link
+                        href={`/vehicles/detail?id=${encodeURIComponent(currentAssignedVehicle.id)}`}
+                        className="text-[var(--info)] font-bold hover:underline"
+                      >
+                        {currentAssignedVehicle.vehicleNumber} ({currentAssignedVehicle.licensePlate})
+                      </Link>
                     </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Management Action Buttons */}
-                <div className="flex flex-wrap items-center gap-2 pt-3 sm:pt-0 border-t sm:border-t-0 border-line">
+                <div className="relative pt-3 sm:pt-0" ref={detailMenuRef}>
                   <button
-                    onClick={() => handleToggleStatus(selectedUser)}
-                    className={`p-2.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-colors ${
-                      selectedUser.status === 'active'
-                        ? 'border-line text-ink-muted hover:bg-[var(--surface-alt)]'
-                        : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                    }`}
-                    title={selectedUser.status === 'active' ? 'Set Inactive' : 'Set Active'}
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    aria-haspopup="menu"
+                    aria-expanded={detailMenuOpen}
+                    aria-label={`More actions for ${selectedUser.name}`}
+                    onClick={() => setDetailMenuOpen((open) => !open)}
                   >
-                    {selectedUser.status === 'active' ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4 text-emerald-600" />}
-                    <span>{selectedUser.status === 'active' ? 'Deactivate' : 'Activate'}</span>
+                    <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />
+                    More
                   </button>
-
-                  <button
-                    onClick={() => handleOpenEdit(selectedUser)}
-                    className="p-2.5 rounded-xl bg-[var(--idle-wash)] hover:bg-[var(--surface-alt)] text-ink-muted font-bold text-xs flex items-center gap-1.5 transition-colors"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                    <span>Edit</span>
-                  </button>
-
-                  <button
-                    onClick={() => setIsDeleteModalOpen(true)}
-                    className="p-2.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold text-xs flex items-center gap-1.5 transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Delete</span>
-                  </button>
+                  {detailMenuOpen && (
+                    <div
+                      role="menu"
+                      className="absolute right-0 top-full mt-1 z-20 min-w-[12rem] rounded-[var(--radius)] border border-line bg-surface shadow-lg p-1 stack-tight"
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-ghost btn-sm w-full justify-start gap-2"
+                        onClick={() => { handleToggleStatus(selectedUser); setDetailMenuOpen(false); }}
+                      >
+                        {selectedUser.status === 'active' ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                        {selectedUser.status === 'active' ? 'Deactivate' : 'Activate'}
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-ghost btn-sm w-full justify-start gap-2"
+                        onClick={() => { handleOpenEdit(selectedUser); setDetailMenuOpen(false); }}
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn btn-ghost btn-sm w-full justify-start gap-2 text-[var(--critical)]"
+                        onClick={() => { setIsDeleteModalOpen(true); setDetailMenuOpen(false); }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Stats & History Log */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-surface rounded-2xl p-5 border border-line shadow-sm flex items-center gap-4">
-                  <span className="icon-tile" data-status="info" aria-hidden>
-                    <CheckCircle2 className="h-6 w-6" />
-                  </span>
-                  <div>
-                    <div className="text-2xl font-extrabold text-ink">{userInspections.length}</div>
-                    <div className="text-xs font-semibold text-ink-faint">Total Inspections</div>
-                  </div>
-                </div>
-
-                <div className="bg-surface rounded-2xl p-5 border border-line shadow-sm flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-                    <AlertTriangle className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <div className="text-2xl font-extrabold text-ink">{userIssues.length}</div>
-                    <div className="text-xs font-semibold text-ink-faint">Issues Reported</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Vehicle Usage & Inspection Log */}
-              <div className="bg-surface rounded-3xl p-6 sm:p-8 border border-line shadow-sm space-y-6">
-                <h3 className="text-base font-bold text-ink border-b border-line pb-3">
-                  Vehicle Usage History & Submissions
+              <div className="card card-pad stack">
+                <h3 className="eyebrow mb-0 px-0">
+                  History
                 </h3>
 
-                <div className="space-y-3">
+                <div className="-mx-4 sm:-mx-5">
                   {userInspections.map((insp) => (
                     <div
                       key={insp.id}
-                      className="p-4 rounded-2xl border border-line bg-[var(--surface-alt)] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      className="px-4 sm:px-5 py-2.5 border-t border-line flex flex-col sm:flex-row sm:items-center justify-between gap-2"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-surface border border-line flex items-center justify-center text-ink-muted font-bold">
-                          <Truck className="w-5 h-5" />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Link
+                            href={`/vehicles/detail?id=${encodeURIComponent(insp.vehicleId)}`}
+                            className="text-xs font-bold text-ink hover:text-[var(--info)]"
+                          >
+                            {insp.vehicleNumber}
+                          </Link>
+                          <InspectionStatusBadge status={insp.status} />
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <Link
-                              href={`/vehicles/detail?id=${encodeURIComponent(insp.vehicleId)}`}
-                              className="text-xs font-bold text-ink hover:text-[var(--info)]"
-                            >
-                              {insp.vehicleNumber}
-                            </Link>
-                            <InspectionStatusBadge status={insp.status} />
-                          </div>
-                          <span className="text-[11px] text-ink-faint">
-                            {new Date(insp.submittedAt).toLocaleDateString()} at {new Date(insp.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
+                        <span className="text-[11px] text-ink-faint">
+                          {new Date(insp.submittedAt).toLocaleDateString()} at {new Date(insp.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
                       </div>
 
                       <Link
                         href={`/vehicles/detail?id=${encodeURIComponent(insp.vehicleId)}`}
-                        className="text-xs font-bold text-[var(--info)] hover:text-ink flex items-center gap-1 self-end sm:self-auto"
+                        className="text-xs font-medium text-ink-muted hover:text-ink flex items-center gap-1 self-end sm:self-auto"
                       >
-                        <span>View Van</span>
+                        <span>View van</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </Link>
                     </div>

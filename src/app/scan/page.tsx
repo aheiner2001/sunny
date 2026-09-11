@@ -180,7 +180,7 @@ export default function ScanPage() {
                   </span>
                   <div>
                     <div className="text-xs font-bold">{v.vehicleNumber}</div>
-                    <div className="text-2xs text-ink-faint">{v.name.split('-')[0]}</div>
+                    <div className="text-2xs text-ink-faint">{v.currentUserName ? `In use · ${v.currentUserName}` : v.name.split('-')[0]}</div>
                   </div>
                 </div>
                 <ArrowRight className="h-4 w-4 text-ink-faint group-hover:text-ink transition-transform group-hover:translate-x-1" aria-hidden />
