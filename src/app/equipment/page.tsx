@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -110,6 +110,27 @@ function EquipmentPageContent() {
 
   // 3.4 Printable QR Sheet Modal
   const [printQrSheetOpen, setPrintQrSheetOpen] = useState(false);
+  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+  const actionMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!actionMenuId) return;
+    const onPointer = (e: MouseEvent) => {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(e.target as Node)) {
+        setActionMenuId(null);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setActionMenuId(null);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [actionMenuId]);
+
 
   const load = () => {
     setEquipment(dbService.getEquipment());
@@ -237,6 +258,81 @@ function EquipmentPageContent() {
     setSelected(null);
     setForm({ ...emptyForm, lifeStartedAt: new Date().toISOString().split('T')[0] });
     setModal('add');
+  };
+
+
+  const renderItemActions = (eq: Equipment, opts?: { showQrToggle?: boolean; showRestock?: boolean }) => {
+    const showQrToggle = opts?.showQrToggle !== false;
+    const showRestock = Boolean(opts?.showRestock && eq.kind === 'consumable');
+    const canLifespan = Boolean(eq.lifespanEnabled && !eq.retiredAt && totalQty(eq) <= 1);
+    const open = actionMenuId === eq.id;
+    const itemBtn = "btn btn-ghost btn-sm w-full justify-start gap-2";
+    return (
+      <div className="cluster gap-1 flex-wrap justify-end shrink-0 relative" ref={open ? actionMenuRef : undefined}>
+        <button
+          type="button"
+          onClick={() => { setActionMenuId(null); setAllocationTarget(eq); }}
+          className="btn btn-secondary btn-sm"
+        >
+          <Truck className="h-3.5 w-3.5" aria-hidden />
+          Assign
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={`More actions for ${eq.name}`}
+          onClick={() => setActionMenuId(open ? null : eq.id)}
+        >
+          <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />
+          More
+        </button>
+        {open && (
+          <div
+            role="menu"
+            className="absolute right-0 top-full mt-1 z-30 min-w-[13.5rem] rounded-[var(--radius)] border border-line bg-surface shadow-lg p-1 stack-tight"
+          >
+            {canLifespan && (
+              <>
+                <button type="button" role="menuitem" className={itemBtn} onClick={() => { setLifespanAction({ item: eq, mode: 'extend' }); setActionMenuId(null); }}>
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                  Extend lifespan
+                </button>
+                <button type="button" role="menuitem" className={itemBtn} onClick={() => { setLifespanAction({ item: eq, mode: 'replace' }); setActionMenuId(null); }}>
+                  <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+                  Mark replaced
+                </button>
+                <button type="button" role="menuitem" className={itemBtn + " text-[var(--critical)]"} onClick={() => { setLifespanAction({ item: eq, mode: 'retire' }); setActionMenuId(null); }}>
+                  <Archive className="h-3.5 w-3.5" aria-hidden />
+                  Retire
+                </button>
+              </>
+            )}
+            {showRestock && (
+              <button type="button" role="menuitem" className={itemBtn} onClick={() => { setRestockTarget(eq); setActionMenuId(null); }}>
+                <PackagePlus className="h-3.5 w-3.5" aria-hidden />
+                Add stock
+              </button>
+            )}
+            {showQrToggle && (
+              <button type="button" role="menuitem" className={itemBtn} onClick={() => { setExpandedQr(x => ({ ...x, [eq.id]: !x[eq.id] })); setActionMenuId(null); }}>
+                <QrCode className="h-3.5 w-3.5" aria-hidden />
+                {expandedQr[eq.id] ? 'Hide QR code' : 'Show QR code'}
+              </button>
+            )}
+            <button type="button" role="menuitem" className={itemBtn} onClick={() => { openEdit(eq); setActionMenuId(null); }}>
+              <Edit2 className="h-3.5 w-3.5" aria-hidden />
+              Edit
+            </button>
+            <button type="button" role="menuitem" className={itemBtn + " text-[var(--critical)]"} onClick={() => { setSelected(eq); setModal('delete'); setActionMenuId(null); }}>
+              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const openEdit = (eq: Equipment) => {
@@ -528,43 +624,7 @@ function EquipmentPageContent() {
               )}
             </div>
           </div>
-          <div className="cluster gap-1 flex-wrap justify-end shrink-0">
-            <button type="button" onClick={() => setAllocationTarget(eq)} className="btn btn-secondary btn-sm" title="Assign / transfer" aria-label="Assign / transfer">
-              <Truck className="h-3.5 w-3.5" aria-hidden />
-            </button>
-            {eq.lifespanEnabled && !eq.retiredAt && totalQty(eq) <= 1 && (
-              <>
-                <button type="button" onClick={() => setLifespanAction({ item: eq, mode: 'extend' })} className="btn btn-ghost btn-sm" title="Extend" aria-label="Extend lifespan">
-                  <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                </button>
-                <button type="button" onClick={() => setLifespanAction({ item: eq, mode: 'replace' })} className="btn btn-ghost btn-sm" title="Mark replaced" aria-label="Mark replaced">
-                  <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-                </button>
-                <button type="button" onClick={() => setLifespanAction({ item: eq, mode: 'retire' })} className="btn btn-ghost btn-sm text-[var(--critical)]" title="Retire" aria-label="Retire">
-                  <Archive className="h-3.5 w-3.5" aria-hidden />
-                </button>
-              </>
-            )}
-            <button
-              type="button"
-              onClick={() => setExpandedQr(x => ({ ...x, [eq.id]: !x[eq.id] }))}
-              className="btn btn-ghost btn-sm"
-              title="QR code" aria-label="Show QR code"
-            >
-              <QrCode className="h-3.5 w-3.5" aria-hidden />
-            </button>
-            <button type="button" onClick={() => openEdit(eq)} className="btn btn-ghost btn-sm" title="Edit" aria-label="Edit">
-              <Edit2 className="h-3.5 w-3.5" aria-hidden />
-            </button>
-            <button
-              type="button"
-              onClick={() => { setSelected(eq); setModal('delete'); }}
-              className="btn btn-ghost btn-sm text-[var(--critical)]"
-              title="Delete" aria-label="Delete"
-            >
-              <Trash2 className="h-3.5 w-3.5" aria-hidden />
-            </button>
-          </div>
+          {renderItemActions(eq, { showQrToggle: true })}
         </div>
         {totalQty(eq) > 1 && eq.lifespanEnabled && !eq.retiredAt && (
           <div className="mt-2 ml-6">
@@ -681,29 +741,7 @@ function EquipmentPageContent() {
 
         <div className="card-foot mt-0 pt-3">
           <EquipmentQRCodeDisplay equipment={eq} />
-          <div className="cluster">
-            {eq.kind === 'consumable' && (
-              <button
-                type="button"
-                onClick={() => setRestockTarget(eq)}
-                className="btn btn-ghost btn-sm"
-                title="Add stock (new delivery)" aria-label="Add stock"
-              >
-                <PackagePlus className="h-3.5 w-3.5" aria-hidden />
-              </button>
-            )}
-            <button type="button" onClick={() => openEdit(eq)} className="btn btn-ghost btn-sm" title="Edit / reassign" aria-label="Edit / reassign">
-              <Edit2 className="h-3.5 w-3.5" aria-hidden />
-            </button>
-            <button
-              type="button"
-              onClick={() => { setSelected(eq); setModal('delete'); }}
-              className="btn btn-ghost btn-sm text-[var(--critical)]"
-              title="Delete" aria-label="Delete"
-            >
-              <Trash2 className="h-3.5 w-3.5" aria-hidden />
-            </button>
-          </div>
+          {renderItemActions(eq, { showQrToggle: false, showRestock: true })}
         </div>
       </div>
     );
