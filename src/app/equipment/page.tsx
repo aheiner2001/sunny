@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -113,22 +114,50 @@ function EquipmentPageContent() {
   const [printQrSheetOpen, setPrintQrSheetOpen] = useState(false);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
+  const actionMenuBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  useLayoutEffect(() => {
+    if (!actionMenuId || !actionMenuBtnRef.current || !actionMenuRef.current) return;
+    const btn = actionMenuBtnRef.current;
+    const menu = actionMenuRef.current;
+    const rect = btn.getBoundingClientRect();
+    const mh = menu.offsetHeight;
+    const mw = menu.offsetWidth;
+    const gap = 4;
+    const maxH = window.innerHeight - 16;
+    menu.style.maxHeight = `${maxH}px`;
+    menu.style.overflowY = mh > maxH ? 'auto' : 'visible';
+    const height = Math.min(mh, maxH);
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const openUp = spaceBelow < height && rect.top > spaceBelow;
+    const top = openUp ? rect.top - gap - height : rect.bottom + gap;
+    let left = rect.right - mw;
+    left = Math.min(Math.max(8, left), window.innerWidth - mw - 8);
+    menu.style.top = `${Math.max(8, top)}px`;
+    menu.style.left = `${left}px`;
+  }, [actionMenuId]);
 
   useEffect(() => {
     if (!actionMenuId) return;
     const onPointer = (e: MouseEvent) => {
-      if (actionMenuRef.current && !actionMenuRef.current.contains(e.target as Node)) {
-        setActionMenuId(null);
-      }
+      const t = e.target as Node;
+      if (actionMenuRef.current?.contains(t)) return;
+      if (actionMenuBtnRef.current?.contains(t)) return;
+      setActionMenuId(null);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setActionMenuId(null);
     };
+    const onRepositionClose = () => setActionMenuId(null);
     document.addEventListener('mousedown', onPointer);
     document.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', onRepositionClose, true);
+    window.addEventListener('resize', onRepositionClose);
     return () => {
       document.removeEventListener('mousedown', onPointer);
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', onRepositionClose, true);
+      window.removeEventListener('resize', onRepositionClose);
     };
   }, [actionMenuId]);
 
@@ -268,31 +297,12 @@ function EquipmentPageContent() {
     const canLifespan = Boolean(eq.lifespanEnabled && !eq.retiredAt && totalQty(eq) <= 1);
     const open = actionMenuId === eq.id;
     const itemBtn = "btn btn-ghost btn-sm w-full justify-start gap-2";
-    return (
-      <div className="cluster gap-1 flex-wrap justify-end shrink-0 relative" ref={open ? actionMenuRef : undefined}>
-        <button
-          type="button"
-          onClick={() => { setActionMenuId(null); setAllocationTarget(eq); }}
-          className="btn btn-secondary btn-sm"
-        >
-          <Truck className="h-3.5 w-3.5" aria-hidden />
-          Assign
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          aria-haspopup="menu"
-          aria-expanded={open}
-          aria-label={`More actions for ${eq.name}`}
-          onClick={() => setActionMenuId(open ? null : eq.id)}
-        >
-          <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />
-          More
-        </button>
-        {open && (
+    const menu = open ? createPortal(
           <div
+            ref={actionMenuRef}
             role="menu"
-            className="absolute right-0 top-full mt-1 z-30 min-w-[13.5rem] rounded-[var(--radius)] border border-line bg-surface shadow-lg p-1 stack-tight"
+            className="fixed z-[80] min-w-[13.5rem] rounded-[var(--radius)] border border-line bg-surface shadow-lg p-1 stack-tight"
+            style={{ top: 0, left: 0 }}
           >
             {canLifespan && (
               <>
@@ -330,8 +340,32 @@ function EquipmentPageContent() {
               <Trash2 className="h-3.5 w-3.5" aria-hidden />
               Delete
             </button>
-          </div>
-        )}
+          </div>,
+          document.body
+        ) : null;
+    return (
+      <div className="cluster gap-1 flex-wrap justify-end shrink-0">
+        <button
+          type="button"
+          onClick={() => { setActionMenuId(null); setAllocationTarget(eq); }}
+          className="btn btn-secondary btn-sm"
+        >
+          <Truck className="h-3.5 w-3.5" aria-hidden />
+          Assign
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={`More actions for ${eq.name}`}
+          ref={open ? actionMenuBtnRef : undefined}
+          onClick={() => setActionMenuId(open ? null : eq.id)}
+        >
+          <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />
+          More
+        </button>
+        {menu}
       </div>
     );
   };
