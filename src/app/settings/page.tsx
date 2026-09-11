@@ -531,16 +531,16 @@ function SettingsPageContent() {
           )}
 
       {/* Section 1: Checklist Categories Management */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm space-y-4">
+      <div className="bg-surface rounded-[var(--radius-xl)] p-6 sm:p-8 border border-line shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
           <div>
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <h2 className="text-base font-bold text-ink flex items-center gap-2">
               <span>Inspection Categories</span>
-              <span className="text-xs font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200">
+              <span className="text-xs font-bold text-sky-700 bg-surface-sunk px-2 py-0.5 rounded-full border border-sky-200">
                 {categories.length} Total
               </span>
             </h2>
-            <p className="text-xs text-slate-400">Categories define the multi-step inspection workflow for drivers.</p>
+            <p className="text-xs text-ink-faint">Categories define the multi-step inspection workflow for drivers.</p>
           </div>
 
           <button
@@ -559,16 +559,16 @@ function SettingsPageContent() {
             return (
               <div
                 key={cat.id}
-                className="p-4 rounded-2xl border border-slate-200/80 bg-slate-50/60 hover:bg-slate-50 flex items-center justify-between gap-3 transition-colors"
+                className="p-4 rounded-2xl border border-line bg-surface-sunk/60 hover:bg-surface-sunk flex items-center justify-between gap-3 transition-colors"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="w-6 h-6 rounded-lg bg-sky-100 text-sky-700 font-extrabold text-xs flex items-center justify-center shrink-0">
                     {idx + 1}
                   </span>
                   <div className="min-w-0">
-                    <h3 className="text-xs font-bold text-slate-900 truncate">{cat.title}</h3>
-                    <p className="text-[11px] text-slate-400 truncate">{cat.subtitle || 'No description'}</p>
-                    <span className="text-[10px] font-bold text-slate-500 mt-1 inline-block">
+                    <h3 className="text-xs font-bold text-ink truncate">{cat.title}</h3>
+                    <p className="text-[11px] text-ink-faint truncate">{cat.subtitle || 'No description'}</p>
+                    <span className="text-[10px] font-bold text-ink-muted mt-1 inline-block">
                       {count} Question{count !== 1 ? 's' : ''}
                     </span>
                   </div>
@@ -578,7 +578,7 @@ function SettingsPageContent() {
                   <button
                     onClick={() => handleMoveCategory(idx, 'up')}
                     disabled={idx === 0}
-                    className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 disabled:opacity-20"
+                    className="p-1 rounded-lg text-ink-faint hover:text-ink hover:bg-slate-200 disabled:opacity-20"
                     title="Move Up"
                   >
                     <ArrowUp className="w-3.5 h-3.5" />
@@ -586,14 +586,14 @@ function SettingsPageContent() {
                   <button
                     onClick={() => handleMoveCategory(idx, 'down')}
                     disabled={idx === categories.length - 1}
-                    className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 disabled:opacity-20"
+                    className="p-1 rounded-lg text-ink-faint hover:text-ink hover:bg-slate-200 disabled:opacity-20"
                     title="Move Down"
                   >
                     <ArrowDown className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => handleOpenEditCategory(cat)}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-200"
+                    className="p-1.5 rounded-lg text-ink-muted hover:text-slate-800 hover:bg-slate-200"
                     title="Edit Category"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
@@ -613,19 +613,19 @@ function SettingsPageContent() {
       </div>
 
       {/* Section 2: Questions Customization Tool */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm space-y-4">
+      <div className="bg-surface rounded-[var(--radius-xl)] p-6 sm:p-8 border border-line shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
           <div>
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <ListChecks className="w-5 h-5 text-sky-600" />
+            <h2 className="text-base font-bold text-ink flex items-center gap-2">
+              <ListChecks className="w-5 h-5 text-ink" />
               <span>Inspection Questions & Answer Formats</span>
             </h2>
-            <p className="text-xs text-slate-400">Configure questions, response choices (Pass/Fail, Yes/No, Text Note), and requirement rules.</p>
+            <p className="text-xs text-ink-faint">Configure questions, response choices (Pass/Fail, Yes/No, Text Note), and requirement rules.</p>
           </div>
 
           <button
             onClick={() => handleOpenAddQuestion(activeCategoryTab !== 'all' ? activeCategoryTab : undefined)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-sky-600 text-white hover:bg-sky-700 text-xs font-bold shadow-sm transition-colors self-start sm:self-auto"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-ink text-white hover:opacity-90 text-xs font-bold shadow-sm transition-colors self-start sm:self-auto"
           >
             <Plus className="w-4 h-4" />
             <span>Add Question</span>
@@ -639,7 +639,7 @@ function SettingsPageContent() {
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
               activeCategoryTab === 'all'
                 ? 'bg-slate-900 text-white shadow-sm'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                : 'bg-surface-sunk text-ink-muted hover:bg-slate-200'
             }`}
           >
             All Categories ({questions.length})
@@ -655,13 +655,13 @@ function SettingsPageContent() {
                 onClick={() => setActiveCategoryTab(cat.id)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
                   isSelected
-                    ? 'bg-sky-600 text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    ? 'bg-ink text-white shadow-sm'
+                    : 'bg-surface-sunk text-ink-muted hover:bg-slate-200'
                 }`}
               >
                 <span>{cat.title}</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                  isSelected ? 'bg-sky-800 text-white' : 'bg-slate-200 text-slate-600'
+                  isSelected ? 'bg-sky-800 text-white' : 'bg-slate-200 text-ink-muted'
                 }`}>
                   {count}
                 </span>
@@ -678,22 +678,22 @@ function SettingsPageContent() {
             return (
               <div
                 key={q.id}
-                className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-slate-300 shadow-sm transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                className="p-4 rounded-2xl border border-line bg-surface hover:border-slate-300 shadow-sm transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
               >
                 <div className="flex items-start gap-3 min-w-0">
-                  <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-600 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="w-6 h-6 rounded-lg bg-surface-sunk text-ink-muted font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
                     {idx + 1}
                   </span>
                   <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-900 leading-snug">{q.text}</p>
+                    <p className="text-xs font-bold text-ink leading-snug">{q.text}</p>
                     {q.helperText && (
-                      <p className="text-[11px] text-slate-400 mt-0.5 italic flex items-center gap-1">
-                        <HelpCircle className="w-3 h-3 text-slate-400 shrink-0" />
+                      <p className="text-[11px] text-ink-faint mt-0.5 italic flex items-center gap-1">
+                        <HelpCircle className="w-3 h-3 text-ink-faint shrink-0" />
                         <span>{q.helperText}</span>
                       </p>
                     )}
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      <span className="text-[10px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-100">
+                      <span className="text-[10px] font-bold text-sky-700 bg-surface-sunk px-2 py-0.5 rounded border border-sky-100">
                         {categoryObj?.title || q.category}
                       </span>
                       <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
@@ -705,7 +705,7 @@ function SettingsPageContent() {
                         </span>
                       )}
                       {q.equipmentName && (
-                        <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] font-medium text-ink-muted bg-surface-sunk px-1.5 py-0.5 rounded">
                           Linked: {q.equipmentName}
                         </span>
                       )}
@@ -717,7 +717,7 @@ function SettingsPageContent() {
                   <button
                     onClick={() => handleMoveQuestion(idx, 'up')}
                     disabled={idx === 0}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20"
+                    className="p-1.5 rounded-lg text-ink-faint hover:text-ink hover:bg-surface-sunk disabled:opacity-20"
                     title="Move Up"
                   >
                     <ArrowUp className="w-3.5 h-3.5" />
@@ -725,14 +725,14 @@ function SettingsPageContent() {
                   <button
                     onClick={() => handleMoveQuestion(idx, 'down')}
                     disabled={idx === filteredQuestions.length - 1}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20"
+                    className="p-1.5 rounded-lg text-ink-faint hover:text-ink hover:bg-surface-sunk disabled:opacity-20"
                     title="Move Down"
                   >
                     <ArrowDown className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => handleOpenEditQuestion(q)}
-                    className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100"
+                    className="p-1.5 rounded-lg text-ink-muted hover:text-slate-800 hover:bg-surface-sunk"
                     title="Edit Question"
                   >
                     <Edit2 className="w-3.5 h-3.5" />
@@ -750,7 +750,7 @@ function SettingsPageContent() {
           })}
 
           {filteredQuestions.length === 0 && (
-            <div className="p-8 bg-slate-50 rounded-2xl border border-slate-200 text-center text-xs text-slate-400">
+            <div className="p-8 bg-surface-sunk rounded-2xl border border-line text-center text-xs text-ink-faint">
               No questions found in this category. Click "Add Question" above to create one.
             </div>
           )}
@@ -869,12 +869,12 @@ function SettingsPageContent() {
           </section>
 
       {/* ACCOUNT SECURITY — change own access passcode, synced to Firestore */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div className="bg-surface rounded-[var(--radius-xl)] border border-line shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
-          <KeyRound className="w-4 h-4 text-sky-600 shrink-0" />
+          <KeyRound className="w-4 h-4 text-ink shrink-0" />
           <div>
-            <h2 className="text-sm font-extrabold text-slate-900">Your Access Passcode</h2>
-            <p className="text-[11px] text-slate-500">
+            <h2 className="text-sm font-extrabold text-ink">Your Access Passcode</h2>
+            <p className="text-[11px] text-ink-muted">
               Changes are written to Cloud Firestore, so the new code works on every device.
             </p>
           </div>
@@ -893,7 +893,7 @@ function SettingsPageContent() {
 
           <form onSubmit={handleChangePasscode} className="space-y-4 max-w-sm">
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+              <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
                 Current Passcode
               </label>
               <input
@@ -904,13 +904,13 @@ function SettingsPageContent() {
                 maxLength={6}
                 value={passcodeForm.current}
                 onChange={(e) => setPasscodeForm({ ...passcodeForm, current: e.target.value.replace(/\D/g, '') })}
-                className="w-full px-3 py-2 text-xs font-bold tracking-[0.3em] rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                className="w-full px-3 py-2 text-xs font-bold tracking-[0.3em] rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none"
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
                   New Passcode
                 </label>
                 <input
@@ -922,12 +922,12 @@ function SettingsPageContent() {
                   placeholder="4-6 digits"
                   value={passcodeForm.next}
                   onChange={(e) => setPasscodeForm({ ...passcodeForm, next: e.target.value.replace(/\D/g, '') })}
-                  className="w-full px-3 py-2 text-xs font-bold tracking-[0.3em] rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  className="w-full px-3 py-2 text-xs font-bold tracking-[0.3em] rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
                   Confirm New
                 </label>
                 <input
@@ -938,7 +938,7 @@ function SettingsPageContent() {
                   maxLength={6}
                   value={passcodeForm.confirm}
                   onChange={(e) => setPasscodeForm({ ...passcodeForm, confirm: e.target.value.replace(/\D/g, '') })}
-                  className="w-full px-3 py-2 text-xs font-bold tracking-[0.3em] rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  className="w-full px-3 py-2 text-xs font-bold tracking-[0.3em] rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none"
                 />
               </div>
             </div>
@@ -1014,19 +1014,19 @@ function SettingsPageContent() {
       {/* CATEGORY MODAL */}
       {isCategoryModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-surface rounded-[var(--radius-xl)] p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
-              <h3 className="text-base font-bold text-slate-900">
+              <h3 className="text-base font-bold text-ink">
                 {editingCategory ? 'Edit Inspection Category' : 'Add Inspection Category'}
               </h3>
-              <button onClick={() => setIsCategoryModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
+              <button onClick={() => setIsCategoryModalOpen(false)} className="text-ink-faint hover:text-ink-muted p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSaveCategory} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
                   Category Title
                 </label>
                 <input
@@ -1035,12 +1035,12 @@ function SettingsPageContent() {
                   placeholder="e.g. Supplies & Chemicals"
                   value={categoryForm.title}
                   onChange={(e) => setCategoryForm({ ...categoryForm, title: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
                   Subtitle / Driver Guidance
                 </label>
                 <input
@@ -1048,7 +1048,7 @@ function SettingsPageContent() {
                   placeholder="e.g. Towels, soap, coatings, PPE"
                   value={categoryForm.subtitle}
                   onChange={(e) => setCategoryForm({ ...categoryForm, subtitle: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none"
                 />
               </div>
 
@@ -1056,13 +1056,13 @@ function SettingsPageContent() {
                 <button
                   type="button"
                   onClick={() => setIsCategoryModalOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50"
+                  className="flex-1 py-2.5 rounded-xl border border-line text-ink-muted font-bold text-xs hover:bg-surface-sunk"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-md shadow-sky-600/20"
+                  className="flex-1 py-2.5 rounded-xl bg-ink hover:opacity-90 text-white font-bold text-xs shadow-md shadow-sky-600/20"
                 >
                   Save Category
                 </button>
@@ -1075,19 +1075,19 @@ function SettingsPageContent() {
       {/* QUESTION MODAL */}
       {isQuestionModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-surface rounded-[var(--radius-xl)] p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
-              <h3 className="text-base font-bold text-slate-900">
+              <h3 className="text-base font-bold text-ink">
                 {editingQuestion ? 'Edit Inspection Question' : 'Add Inspection Question'}
               </h3>
-              <button onClick={() => setIsQuestionModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
+              <button onClick={() => setIsQuestionModalOpen(false)} className="text-ink-faint hover:text-ink-muted p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSaveQuestion} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
                   Question Text
                 </label>
                 <textarea
@@ -1096,19 +1096,19 @@ function SettingsPageContent() {
                   placeholder="e.g. Microfiber Towel Supply: At least 30 clean towels stocked"
                   value={questionForm.text}
                   onChange={(e) => setQuestionForm({ ...questionForm, text: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
                     Inspection Category
                   </label>
                   <select
                     value={questionForm.category}
                     onChange={(e) => setQuestionForm({ ...questionForm, category: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-sky-500 focus:outline-none font-semibold"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-line bg-surface focus:ring-2 focus:ring-sky-500 focus:outline-none font-semibold"
                   >
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -1119,13 +1119,13 @@ function SettingsPageContent() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
                     Response / Answer Type
                   </label>
                   <select
                     value={questionForm.type}
                     onChange={(e) => setQuestionForm({ ...questionForm, type: e.target.value as QuestionType })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-sky-500 focus:outline-none font-semibold"
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-line bg-surface focus:ring-2 focus:ring-sky-500 focus:outline-none font-semibold"
                   >
                     <option value="pass_fail">Pass / Fail</option>
                     <option value="yes_no">Yes / No</option>
@@ -1136,7 +1136,7 @@ function SettingsPageContent() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
                   Helper / Inspection Guidance Note (Optional)
                 </label>
                 <input
@@ -1144,12 +1144,12 @@ function SettingsPageContent() {
                   placeholder="e.g. Check oil level, drain valve closed, listen for leaks."
                   value={questionForm.helperText}
                   onChange={(e) => setQuestionForm({ ...questionForm, helperText: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
                   Associated Equipment Name (Optional)
                 </label>
                 <input
@@ -1157,12 +1157,12 @@ function SettingsPageContent() {
                   placeholder="e.g. Pressure Washer, Air Compressor"
                   value={questionForm.equipmentName}
                   onChange={(e) => setQuestionForm({ ...questionForm, equipmentName: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
                   Issue Reason Presets (Optional)
                 </label>
                 <input
@@ -1170,9 +1170,9 @@ function SettingsPageContent() {
                   placeholder="e.g. Low pressure, Leak, Missing item"
                   value={questionForm.reasonPresets}
                   onChange={(e) => setQuestionForm({ ...questionForm, reasonPresets: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">Comma-separated buttons shown to inspectors when they flag this question.</p>
+                <p className="text-[10px] text-ink-faint mt-1">Comma-separated buttons shown to inspectors when they flag this question.</p>
               </div>
 
               <div className="flex items-center gap-2 pt-1">
@@ -1181,9 +1181,9 @@ function SettingsPageContent() {
                   id="requiredCheck"
                   checked={questionForm.required}
                   onChange={(e) => setQuestionForm({ ...questionForm, required: e.target.checked })}
-                  className="w-4 h-4 text-sky-600 rounded border-slate-300 focus:ring-sky-500"
+                  className="w-4 h-4 text-ink rounded border-slate-300 focus:ring-sky-500"
                 />
-                <label htmlFor="requiredCheck" className="text-xs font-bold text-slate-700 cursor-pointer">
+                <label htmlFor="requiredCheck" className="text-xs font-bold text-ink cursor-pointer">
                   Mandatory question (required before inspection submission)
                 </label>
               </div>
@@ -1192,13 +1192,13 @@ function SettingsPageContent() {
                 <button
                   type="button"
                   onClick={() => setIsQuestionModalOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50"
+                  className="flex-1 py-2.5 rounded-xl border border-line text-ink-muted font-bold text-xs hover:bg-surface-sunk"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-md shadow-sky-600/20"
+                  className="flex-1 py-2.5 rounded-xl bg-ink hover:opacity-90 text-white font-bold text-xs shadow-md shadow-sky-600/20"
                 >
                   Save Question
                 </button>

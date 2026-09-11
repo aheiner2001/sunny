@@ -205,16 +205,16 @@ export function AiImportModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl border border-slate-100 my-4 animate-in fade-in zoom-in-95 duration-150">
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white rounded-t-3xl">
+      <div className="bg-surface rounded-[var(--radius-xl)] w-full max-w-2xl shadow-2xl border border-slate-100 my-4 animate-in fade-in zoom-in-95 duration-150">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-surface rounded-t-3xl">
           <div className="flex items-center gap-2 min-w-0">
-            <Sparkles className="w-5 h-5 text-sky-600 shrink-0" />
+            <Sparkles className="w-5 h-5 text-ink shrink-0" />
             <div className="min-w-0">
-              <h3 className="text-base font-bold text-slate-900">Generate / Import with AI</h3>
-              <p className="text-[11px] text-slate-500">Build the prompt, paste the JSON back, review, then apply.</p>
+              <h3 className="text-base font-bold text-ink">Generate / Import with AI</h3>
+              <p className="text-[11px] text-ink-muted">Build the prompt, paste the JSON back, review, then apply.</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1 shrink-0" aria-label="Close">
+          <button onClick={onClose} className="text-ink-faint hover:text-ink-muted p-1 shrink-0" aria-label="Close">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -224,8 +224,8 @@ export function AiImportModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
           <section>
             <div className="flex items-center justify-between gap-3 mb-2">
               <div>
-                <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">1 · Prompt for your AI</h4>
-                <p className="text-[11px] text-slate-500">
+                <h4 className="text-xs font-extrabold text-ink uppercase tracking-wider">1 · Prompt for your AI</h4>
+                <p className="text-[11px] text-ink-muted">
                   Paste this into ChatGPT, Claude, or Gemini with your notes or a photo of a paper checklist.
                 </p>
               </div>
@@ -242,13 +242,13 @@ export function AiImportModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
               value={AI_IMPORT_PROMPT}
               onFocus={e => e.currentTarget.select()}
               rows={8}
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-mono text-[10px] leading-relaxed text-slate-700 resize-y"
+              className="w-full px-3 py-2 rounded-xl border border-line bg-surface-sunk font-mono text-[10px] leading-relaxed text-ink resize-y"
             />
           </section>
 
           {/* SECTION B — paste and import */}
           <section className="pt-2 border-t border-slate-100">
-            <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider mb-2">2 · Paste the JSON</h4>
+            <h4 className="text-xs font-extrabold text-ink uppercase tracking-wider mb-2">2 · Paste the JSON</h4>
             <textarea
               value={json}
               onChange={e => {
@@ -259,16 +259,16 @@ export function AiImportModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
               rows={7}
               spellCheck={false}
               placeholder='{ "categories": [...], "questions": [...], "equipment": [...] }'
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 font-mono text-[11px] leading-relaxed resize-y focus:ring-2 focus:ring-sky-500 focus:outline-none"
+              className="w-full px-3 py-2 rounded-xl border border-line font-mono text-[11px] leading-relaxed resize-y focus:ring-2 focus:ring-sky-500 focus:outline-none"
             />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
               <div>
-                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Apply to</label>
+                <label className="block text-[11px] font-bold text-ink-muted uppercase tracking-wider mb-1">Apply to</label>
                 <select
                   value={scope}
                   onChange={e => setScope(e.target.value as ImportScope)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-line bg-surface focus:ring-2 focus:ring-sky-500 focus:outline-none"
                 >
                   {(Object.keys(SCOPE_LABELS) as ImportScope[]).map(key => (
                     <option key={key} value={key}>{SCOPE_LABELS[key]}</option>
@@ -277,7 +277,7 @@ export function AiImportModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">Mode</label>
+                <label className="block text-[11px] font-bold text-ink-muted uppercase tracking-wider mb-1">Mode</label>
                 <div className="flex gap-2">
                   {(['append', 'replace'] as ImportMode[]).map(option => (
                     <button
@@ -288,8 +288,8 @@ export function AiImportModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
                         mode === option
                           ? option === 'replace'
                             ? 'bg-rose-50 border-rose-300 text-rose-700'
-                            : 'bg-sky-50 border-sky-300 text-sky-700'
-                          : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                            : 'bg-surface-sunk border-sky-300 text-sky-700'
+                          : 'bg-surface border-line text-ink-muted hover:bg-surface-sunk'
                       }`}
                     >
                       {option === 'append' ? 'Append' : 'Replace'}
@@ -299,7 +299,7 @@ export function AiImportModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
               </div>
             </div>
 
-            <p className="text-[11px] text-slate-500 mt-2">
+            <p className="text-[11px] text-ink-muted mt-2">
               {mode === 'append'
                 ? 'Existing records are kept. Questions and equipment with a clashing id are given a new one; a category id that already exists is skipped.'
                 : 'The current lists in scope are discarded and replaced by the payload. Replacing equipment also clears every per-vehicle assignment.'}
@@ -362,7 +362,7 @@ export function AiImportModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             )}
 
             {summary && (
-              <div className="mt-3 rounded-xl bg-sky-50 border border-sky-200 p-3">
+              <div className="mt-3 rounded-xl bg-surface-sunk border border-sky-200 p-3">
                 <p className="text-[11px] font-bold text-sky-900 flex items-start gap-1.5">
                   <Check className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   {summary}
@@ -372,24 +372,24 @@ export function AiImportModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
           </section>
         </div>
 
-        <div className="px-6 py-4 border-t border-slate-100 flex flex-wrap gap-2 sticky bottom-0 bg-white rounded-b-3xl">
+        <div className="px-6 py-4 border-t border-slate-100 flex flex-wrap gap-2 sticky bottom-0 bg-surface rounded-b-3xl">
           <button
             onClick={reset}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50"
+            className="px-4 py-2.5 rounded-xl border border-line text-ink-muted font-bold text-xs hover:bg-surface-sunk"
           >
             Clear
           </button>
           <button
             onClick={validate}
             disabled={!json.trim()}
-            className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-50 disabled:opacity-50"
+            className="px-4 py-2.5 rounded-xl border border-slate-300 text-ink font-bold text-xs hover:bg-surface-sunk disabled:opacity-50"
           >
             Validate
           </button>
           <div className="flex-1" />
           <button
             onClick={onClose}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50"
+            className="px-4 py-2.5 rounded-xl border border-line text-ink-muted font-bold text-xs hover:bg-surface-sunk"
           >
             Close
           </button>
@@ -397,7 +397,7 @@ export function AiImportModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             onClick={apply}
             disabled={applying || !json.trim()}
             className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-white font-bold text-xs shadow-md transition-colors disabled:opacity-50 ${
-              mode === 'replace' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-sky-600 hover:bg-sky-700'
+              mode === 'replace' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-ink hover:opacity-90'
             }`}
           >
             <Upload className="w-3.5 h-3.5" />

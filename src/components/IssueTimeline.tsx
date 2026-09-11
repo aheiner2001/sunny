@@ -100,7 +100,7 @@ export function IssueTimeline({
   const priorityStyles = {
     critical: 'bg-rose-100 text-rose-800 border-rose-300',
     moderate: 'bg-amber-100 text-amber-800 border-amber-300',
-    low: 'bg-slate-100 text-slate-800 border-slate-300',
+    low: 'bg-surface-sunk text-slate-800 border-slate-300',
   };
 
   return (
@@ -141,7 +141,7 @@ export function IssueTimeline({
                   ) : issue.priority === 'moderate' ? (
                     <AlertTriangle className="w-3 h-3 text-amber-600" />
                   ) : (
-                    <Info className="w-3 h-3 text-slate-600" />
+                    <Info className="w-3 h-3 text-ink-muted" />
                   )}
                   <span>{issue.priority === 'critical' ? 'Critical (Grounded)' : issue.priority}</span>
                 </span>
@@ -340,7 +340,7 @@ export function IssueTimeline({
                   {[
                     { id: 'critical', label: 'Critical (Grounded)', color: 'text-rose-700 bg-rose-50 border-rose-300' },
                     { id: 'moderate', label: 'Moderate (Needs Fix)', color: 'text-amber-700 bg-amber-50 border-amber-300' },
-                    { id: 'low', label: 'Low (Cosmetic)', color: 'text-slate-700 bg-slate-50 border-slate-300' },
+                    { id: 'low', label: 'Low (Cosmetic)', color: 'text-ink bg-surface-sunk border-slate-300' },
                   ].map((p) => (
                     <button
                       key={p.id}

@@ -57,18 +57,18 @@ export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+      <div className="bg-surface rounded-[var(--radius-xl)] p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-surface-sunk text-ink flex items-center justify-center">
               <Camera className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900">Customize Profile</h3>
-              <p className="text-[11px] text-slate-400">Update your profile photo and display name</p>
+              <h3 className="text-base font-bold text-ink">Customize Profile</h3>
+              <p className="text-[11px] text-ink-faint">Update your profile photo and display name</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 p-1">
+          <button onClick={onClose} className="text-ink-faint hover:text-ink-muted p-1">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -82,7 +82,7 @@ export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
                   src={avatarUrl}
                   alt="Profile Preview"
                   className={`w-24 h-24 object-cover ring-4 ring-sky-500/20 shadow-md transition-transform group-hover:scale-105 ${
-                    avatarStyle === 'circle' ? 'rounded-full' : avatarStyle === 'square' ? 'rounded-none' : 'rounded-3xl'
+                    avatarStyle === 'circle' ? 'rounded-full' : avatarStyle === 'square' ? 'rounded-none' : 'rounded-[var(--radius-xl)]'
                   }`}
                 />
               ) : (
@@ -90,18 +90,18 @@ export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
                   src={getResolvedAvatarUrl(user)}
                   alt="Default avatar preview"
                   className={`w-24 h-24 object-cover ring-4 ring-sky-500/20 shadow-md ${
-                    avatarStyle === 'circle' ? 'rounded-full' : avatarStyle === 'square' ? 'rounded-none' : 'rounded-3xl'
+                    avatarStyle === 'circle' ? 'rounded-full' : avatarStyle === 'square' ? 'rounded-none' : 'rounded-[var(--radius-xl)]'
                   }`}
                 />
               )}
             </div>
-            <p className="text-[11px] font-medium text-slate-400">
+            <p className="text-[11px] font-medium text-ink-faint">
               Select a preset icon, or choose none.
             </p>
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+            <label className="block text-[11px] font-bold text-ink uppercase tracking-wider mb-1">
               Default Icons
             </label>
             <div className="grid grid-cols-5 gap-2">
@@ -113,8 +113,8 @@ export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
                 }}
                 className={`px-2 py-2 rounded-xl border text-[11px] font-bold ${
                   avatarChoice === 'none'
-                    ? 'border-sky-500 bg-sky-50 text-sky-700'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    ? 'border-sky-500 bg-surface-sunk text-sky-700'
+                    : 'border-line text-ink-muted hover:bg-surface-sunk'
                 }`}
               >
                 None
@@ -130,8 +130,8 @@ export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
                   title={preset.label}
                   className={`p-1 rounded-xl border ${
                     avatarChoice === preset.id
-                      ? 'border-sky-500 bg-sky-50'
-                      : 'border-slate-200 hover:bg-slate-50'
+                      ? 'border-sky-500 bg-surface-sunk'
+                      : 'border-line hover:bg-surface-sunk'
                   }`}
                 >
                   <img src={preset.url} alt={preset.label} className="w-8 h-8 rounded-lg object-cover mx-auto" />
@@ -141,7 +141,7 @@ export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
           </div>
 
           <div>
-            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+            <label className="block text-[11px] font-bold text-ink uppercase tracking-wider mb-1">
               Photo Style
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -156,8 +156,8 @@ export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
                   onClick={() => setAvatarStyle(value)}
                   className={`px-3 py-2 rounded-xl border text-xs font-bold ${
                     avatarStyle === value
-                      ? 'border-sky-500 bg-sky-50 text-sky-700'
-                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                      ? 'border-sky-500 bg-surface-sunk text-sky-700'
+                      : 'border-line text-ink-muted hover:bg-surface-sunk'
                   }`}
                 >
                   {label}
@@ -168,7 +168,7 @@ export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
 
           {/* Name Input */}
           <div>
-            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+            <label className="block text-[11px] font-bold text-ink uppercase tracking-wider mb-1">
               Display Name
             </label>
             <input
@@ -176,7 +176,7 @@ export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:outline-none font-semibold"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none font-semibold"
             />
           </div>
 
@@ -185,14 +185,14 @@ export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50"
+              className="flex-1 py-2.5 rounded-xl border border-line text-ink-muted font-bold text-xs hover:bg-surface-sunk"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSaving}
-              className="flex-1 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-md shadow-sky-600/20 disabled:opacity-50 flex items-center justify-center gap-1.5"
+              className="flex-1 py-2.5 rounded-xl bg-ink hover:opacity-90 text-white font-bold text-xs shadow-md shadow-sky-600/20 disabled:opacity-50 flex items-center justify-center gap-1.5"
             >
               {successMessage ? (
                 <>

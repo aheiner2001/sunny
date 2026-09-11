@@ -12,7 +12,7 @@ export function PageHeader({
   return (
     <div className="page-head">
       <div>
-        <h1 className="page-title">{title}</h1>
+        <h2 className="page-title">{title}</h2>
         {subtitle ? <p className="page-sub">{subtitle}</p> : null}
       </div>
       {actions ? <div className="cluster">{actions}</div> : null}

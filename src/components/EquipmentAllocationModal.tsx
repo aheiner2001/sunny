@@ -15,6 +15,18 @@ type Props = {
 };
 
 export function EquipmentAllocationModal({ equipment, vehicles, open, onClose }: Props) {
+  useEffect(() => {
+    if (!equipment) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [equipment, onClose]);
+
   const [live, setLive] = useState<Equipment | null>(null);
   const [fromId, setFromId] = useState(SHOP);
   const [toId, setToId] = useState('');

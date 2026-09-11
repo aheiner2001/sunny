@@ -195,10 +195,17 @@ function EquipmentPageContent() {
     if (!batchTargetVehicleId || selectedEquipmentIds.length === 0) return;
     try {
       setLoading(true);
-      const transfers = selectedEquipmentIds.map(id => ({
-        equipmentId: id,
-        quantity: 1
-      }));
+      const transfers = selectedEquipmentIds.map(id => {
+        const item = equipment.find(e => e.id === id);
+        const available =
+          typeof item?.availableQuantity === 'number'
+            ? item.availableQuantity
+            : typeof item?.totalQuantity === 'number'
+              ? item.totalQuantity
+              : 1;
+        const qty = Math.max(1, Number(batchQuantities[id] ?? available) || 1);
+        return { equipmentId: id, quantity: qty };
+      });
       await dbService.batchTransferEquipment(transfers, batchTargetVehicleId);
       setSelectedEquipmentIds([]);
       setBatchTransferModalOpen(false);
@@ -522,18 +529,18 @@ function EquipmentPageContent() {
             </div>
           </div>
           <div className="cluster gap-1 flex-wrap justify-end shrink-0">
-            <button type="button" onClick={() => setAllocationTarget(eq)} className="btn btn-secondary btn-sm" title="Assign / transfer">
+            <button type="button" onClick={() => setAllocationTarget(eq)} className="btn btn-secondary btn-sm" title="Assign / transfer" aria-label="Assign / transfer">
               <Truck className="h-3.5 w-3.5" aria-hidden />
             </button>
             {eq.lifespanEnabled && !eq.retiredAt && totalQty(eq) <= 1 && (
               <>
-                <button type="button" onClick={() => setLifespanAction({ item: eq, mode: 'extend' })} className="btn btn-ghost btn-sm" title="Extend">
+                <button type="button" onClick={() => setLifespanAction({ item: eq, mode: 'extend' })} className="btn btn-ghost btn-sm" title="Extend" aria-label="Extend lifespan">
                   <Sparkles className="h-3.5 w-3.5" aria-hidden />
                 </button>
-                <button type="button" onClick={() => setLifespanAction({ item: eq, mode: 'replace' })} className="btn btn-ghost btn-sm" title="Mark replaced">
+                <button type="button" onClick={() => setLifespanAction({ item: eq, mode: 'replace' })} className="btn btn-ghost btn-sm" title="Mark replaced" aria-label="Mark replaced">
                   <RotateCcw className="h-3.5 w-3.5" aria-hidden />
                 </button>
-                <button type="button" onClick={() => setLifespanAction({ item: eq, mode: 'retire' })} className="btn btn-ghost btn-sm text-[var(--critical)]" title="Retire">
+                <button type="button" onClick={() => setLifespanAction({ item: eq, mode: 'retire' })} className="btn btn-ghost btn-sm text-[var(--critical)]" title="Retire" aria-label="Retire">
                   <Archive className="h-3.5 w-3.5" aria-hidden />
                 </button>
               </>
@@ -542,18 +549,18 @@ function EquipmentPageContent() {
               type="button"
               onClick={() => setExpandedQr(x => ({ ...x, [eq.id]: !x[eq.id] }))}
               className="btn btn-ghost btn-sm"
-              title="QR code"
+              title="QR code" aria-label="Show QR code"
             >
               <QrCode className="h-3.5 w-3.5" aria-hidden />
             </button>
-            <button type="button" onClick={() => openEdit(eq)} className="btn btn-ghost btn-sm" title="Edit">
+            <button type="button" onClick={() => openEdit(eq)} className="btn btn-ghost btn-sm" title="Edit" aria-label="Edit">
               <Edit2 className="h-3.5 w-3.5" aria-hidden />
             </button>
             <button
               type="button"
               onClick={() => { setSelected(eq); setModal('delete'); }}
               className="btn btn-ghost btn-sm text-[var(--critical)]"
-              title="Delete"
+              title="Delete" aria-label="Delete"
             >
               <Trash2 className="h-3.5 w-3.5" aria-hidden />
             </button>
@@ -644,7 +651,7 @@ function EquipmentPageContent() {
                   type="button"
                   onClick={() => setLifespanAction({ item: eq, mode: 'extend' })}
                   className="btn btn-secondary btn-sm"
-                  title="Add cars or months to lifespan"
+                  title="Add cars or months to lifespan" aria-label="Extend lifespan"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   Extend
@@ -653,7 +660,7 @@ function EquipmentPageContent() {
                   type="button"
                   onClick={() => setLifespanAction({ item: eq, mode: 'replace' })}
                   className="btn btn-secondary btn-sm"
-                  title="Mark replaced and reset wear"
+                  title="Mark replaced and reset wear" aria-label="Mark replaced and reset wear"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   Replaced
@@ -662,7 +669,7 @@ function EquipmentPageContent() {
                   type="button"
                   onClick={() => setLifespanAction({ item: eq, mode: 'retire' })}
                   className="btn btn-ghost btn-sm text-[var(--critical)]"
-                  title="Retire tool"
+                  title="Retire tool" aria-label="Retire tool"
                 >
                   <Archive className="w-3.5 h-3.5" />
                   Retire
@@ -680,19 +687,19 @@ function EquipmentPageContent() {
                 type="button"
                 onClick={() => setRestockTarget(eq)}
                 className="btn btn-ghost btn-sm"
-                title="Add stock (new delivery)"
+                title="Add stock (new delivery)" aria-label="Add stock"
               >
                 <PackagePlus className="h-3.5 w-3.5" aria-hidden />
               </button>
             )}
-            <button type="button" onClick={() => openEdit(eq)} className="btn btn-ghost btn-sm" title="Edit / reassign">
+            <button type="button" onClick={() => openEdit(eq)} className="btn btn-ghost btn-sm" title="Edit / reassign" aria-label="Edit / reassign">
               <Edit2 className="h-3.5 w-3.5" aria-hidden />
             </button>
             <button
               type="button"
               onClick={() => { setSelected(eq); setModal('delete'); }}
               className="btn btn-ghost btn-sm text-[var(--critical)]"
-              title="Delete"
+              title="Delete" aria-label="Delete"
             >
               <Trash2 className="h-3.5 w-3.5" aria-hidden />
             </button>
@@ -1339,7 +1346,7 @@ function EquipmentPageContent() {
             <div className="card-head border-b border-line pb-3">
               <h2 className="card-title cluster gap-2">
                 <ArrowRightLeft className="w-5 h-5 text-primary" />
-                Batch Transfer ({selectedEquipmentIds.length} items)
+                <span id="batch-transfer-title">Batch Transfer ({selectedEquipmentIds.length} items)</span>
               </h2>
             </div>
             <form onSubmit={handleBatchTransferSubmit} className="stack gap-4 mt-4">
@@ -1363,10 +1370,34 @@ function EquipmentPageContent() {
                 {selectedEquipmentIds.map(id => {
                   const eq = equipment.find(e => e.id === id);
                   if (!eq) return null;
+                  const available =
+                    typeof eq.availableQuantity === 'number'
+                      ? eq.availableQuantity
+                      : typeof eq.totalQuantity === 'number'
+                        ? eq.totalQuantity
+                        : 1;
+                  const qty = batchQuantities[id] ?? Math.max(1, available);
                   return (
-                    <div key={id} className="spread items-center py-1 border-b border-line last:border-0">
-                      <span className="font-semibold truncate">{eq.name}</span>
-                      <span className="hint text-[10px]">{eq.assetTag || 'No tag'}</span>
+                    <div key={id} className="spread items-center gap-2 py-1 border-b border-line last:border-0">
+                      <div className="min-w-0 flex-1">
+                        <span className="font-semibold truncate block">{eq.name}</span>
+                        <span className="hint text-[10px]">{eq.assetTag || 'No tag'} · available {available}</span>
+                      </div>
+                      <label className="sr-only" htmlFor={`batch-qty-${id}`}>Quantity for {eq.name}</label>
+                      <input
+                        id={`batch-qty-${id}`}
+                        type="number"
+                        min={1}
+                        max={Math.max(1, available)}
+                        value={qty}
+                        onChange={(e) =>
+                          setBatchQuantities(prev => ({
+                            ...prev,
+                            [id]: Math.max(1, Number(e.target.value) || 1),
+                          }))
+                        }
+                        className="input w-16 text-xs"
+                      />
                     </div>
                   );
                 })}

@@ -36,6 +36,19 @@ export function QRScannerModal({
   }, [isOpen]);
 
   useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        void stopScanner();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, onClose]);
+
+  useEffect(() => {
     if (!isOpen) {
       void stopScanner();
       return;
@@ -111,7 +124,7 @@ export function QRScannerModal({
 
     const vehicle = dbService.getVehicleByQR(token) || dbService.getVehicle(token);
     if (!vehicle) {
-      alert(`Vehicle with code "${scannedText}" not found in fleet.`);
+      setCameraError(`Vehicle with code "${scannedText}" not found in fleet.`);
       return;
     }
 
@@ -144,14 +157,19 @@ export function QRScannerModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="card max-w-md w-full overflow-hidden flex flex-col max-h-[90vh]">
+      <div
+        className="card max-w-md w-full overflow-hidden flex flex-col max-h-[90vh]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="qr-scanner-title"
+      >
         <div className="card-head bg-ink text-ink-inverse">
           <div className="cluster">
             <span className="icon-tile bg-hivis text-ink" aria-hidden>
               <Camera className="h-4 w-4" />
             </span>
             <div>
-              <h2 className="card-title text-ink-inverse">Scan Vehicle QR</h2>
+              <h2 id="qr-scanner-title" className="card-title text-ink-inverse">Scan Vehicle QR</h2>
               <p className="text-2xs text-ink-faint">Point at van sticker to start</p>
             </div>
           </div>
@@ -211,7 +229,9 @@ export function QRScannerModal({
           </div>
 
           <form onSubmit={handleManualSubmit} className="cluster pt-2 border-t border-line">
+            <label className="sr-only" htmlFor="qr-manual-input">Vehicle ID or QR code</label>
             <input
+              id="qr-manual-input"
               type="text"
               placeholder="Or enter vehicle ID (e.g. van-1)"
               value={manualInput}

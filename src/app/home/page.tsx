@@ -48,6 +48,7 @@ export default function HomePage() {
 
   return (
     <div className="page max-w-full overflow-x-hidden">
+      <h1 className="sr-only">Home</h1>
       <div className="card card-pad">
         <Link href="/scan" className="btn btn-primary btn-block cluster justify-center gap-2">
           <QrCode className="w-5 h-5" />

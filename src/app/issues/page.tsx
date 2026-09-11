@@ -403,7 +403,7 @@ function IssuesPageContent() {
                   type="button"
                   onClick={() => setSelectedIssueIds([])}
                   className="text-xs text-rose-600 hover:text-rose-700 underline"
-                >
+                 aria-label="Clear selection">
                   Clear ({selectedIssueIds.length})
                 </button>
               )}
