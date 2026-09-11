@@ -172,18 +172,18 @@ export function QRCodeDisplay({ vehicle }: { vehicle: Vehicle }) {
   };
 
   return (
-    <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-sm flex flex-col items-center text-center">
+    <div className="bg-surface rounded-[var(--radius-xl)] p-6 sm:p-8 border border-line shadow-sm flex flex-col items-center text-center">
       <div className="flex items-center gap-2 mb-4">
-        <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold">
+        <div className="w-8 h-8 rounded-xl bg-surface-sunk text-ink flex items-center justify-center font-bold">
           <QrCode className="w-4 h-4" />
         </div>
-        <h3 className="text-base font-bold text-slate-900">Vehicle QR Sticker Badge</h3>
+        <h3 className="text-base font-bold text-ink">Vehicle QR Sticker Badge</h3>
       </div>
 
       {/* Scannable SVG element */}
       <div 
         ref={qrRef} 
-        className="p-4 bg-white rounded-3xl border-2 border-slate-200 shadow-inner flex items-center justify-center mb-4 transition-transform hover:scale-105"
+        className="p-4 bg-surface rounded-[var(--radius-xl)] border-2 border-line shadow-inner flex items-center justify-center mb-4 transition-transform hover:scale-105"
       >
         <QRCodeSVG
           value={scanUrl}
@@ -194,19 +194,19 @@ export function QRCodeDisplay({ vehicle }: { vehicle: Vehicle }) {
       </div>
 
       <div className="mb-4">
-        <div className="text-lg font-black text-slate-900">{vehicle.vehicleNumber}</div>
-        <div className="text-xs font-mono font-bold text-sky-700 bg-sky-50 px-3 py-1 rounded-md border border-sky-200/60 inline-block mt-1">
+        <div className="text-lg font-black text-ink">{vehicle.vehicleNumber}</div>
+        <div className="text-xs font-mono font-bold text-sky-700 bg-surface-sunk px-3 py-1 rounded-md border border-sky-200/60 inline-block mt-1">
           {vehicle.licensePlate}
         </div>
-        <p className="text-[11px] text-slate-400 mt-2 max-w-xs break-all">
-          Scans to: <span className="font-semibold text-slate-600">{scanUrl}</span>
+        <p className="text-[11px] text-ink-faint mt-2 max-w-xs break-all">
+          Scans to: <span className="font-semibold text-ink-muted">{scanUrl}</span>
         </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-xs">
         <button
           onClick={handlePrint}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 text-white hover:bg-sky-700 text-xs font-bold shadow-md shadow-sky-600/20 transition-all"
+          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-ink text-white hover:opacity-90 text-xs font-bold shadow-md shadow-sky-600/20 transition-all"
         >
           <Printer className="w-4 h-4" />
           <span>Print Sticker</span>

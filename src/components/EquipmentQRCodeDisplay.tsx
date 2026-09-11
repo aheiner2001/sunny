@@ -13,7 +13,7 @@ export function EquipmentQRCodeDisplay({ equipment }: { equipment: Equipment }) 
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://aheiner2001.github.io';
   const token = equipment.qrCodeToken || equipment.qrCode;
   if (!token) {
-    return <span className="text-[11px] text-slate-400">No QR code assigned</span>;
+    return <span className="text-[11px] text-ink-faint">No QR code assigned</span>;
   }
   const scanUrl = `${origin}${basePath}/equipment/scan?id=${encodeURIComponent(token)}`;
 
@@ -93,16 +93,16 @@ export function EquipmentQRCodeDisplay({ equipment }: { equipment: Equipment }) 
 
   return (
     <div className="flex items-center gap-3 flex-wrap">
-      <div ref={qrRef} className="p-1.5 bg-white rounded-lg border border-slate-200"><QRCodeSVG value={scanUrl} size={48} /></div>
+      <div ref={qrRef} className="p-1.5 bg-surface rounded-lg border border-line"><QRCodeSVG value={scanUrl} size={48} /></div>
       <div className="flex flex-col gap-1">
-        <Link href={`/equipment/scan?id=${encodeURIComponent(token)}`} className="text-[11px] font-bold text-sky-600 hover:underline flex items-center gap-1">
+        <Link href={`/equipment/scan?id=${encodeURIComponent(token)}`} className="text-[11px] font-bold text-ink hover:underline flex items-center gap-1">
           <QrCode className="w-3.5 h-3.5" /> Open scan flow
         </Link>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={handleDownloadPNG} className="text-[11px] font-bold text-slate-700 hover:text-slate-900 inline-flex items-center gap-1">
+          <button type="button" onClick={handleDownloadPNG} className="text-[11px] font-bold text-ink hover:text-ink inline-flex items-center gap-1">
             <Download className="w-3.5 h-3.5" /> Save PNG
           </button>
-          <button type="button" onClick={handlePrint} className="text-[11px] font-bold text-slate-700 hover:text-slate-900 inline-flex items-center gap-1">
+          <button type="button" onClick={handlePrint} className="text-[11px] font-bold text-ink hover:text-ink inline-flex items-center gap-1">
             <Printer className="w-3.5 h-3.5" /> Print
           </button>
         </div>

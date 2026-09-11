@@ -177,7 +177,7 @@ export default function DashboardPage() {
     <div className="page max-w-full overflow-x-hidden stack gap-6">
       {/* 1.2 Urgent Vehicle Safety Banner */}
       {urgentSafetyVehicles.length > 0 && (
-        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400 flex items-center justify-between flex-wrap gap-3">
+        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400 flex items-center justify-between flex-wrap gap-3" role="status" aria-live="polite">
           <div className="flex items-center gap-3">
             <ShieldAlert className="w-6 h-6 text-red-600 dark:text-red-400 shrink-0" />
             <div>

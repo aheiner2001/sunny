@@ -203,7 +203,7 @@ export default function InspectionsPage() {
           return (
             <div key={insp.id} className="card overflow-hidden">
               <div
-                onClick={() => setExpandedId(isExpanded ? null : insp.id)}
+                onClick={() => setExpandedId(isExpanded ? null : insp.id)} aria-expanded={isExpanded}
                 className="card-pad flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:bg-[var(--surface-alt)] transition-colors select-none"
               >
                 <div className="cluster items-center">

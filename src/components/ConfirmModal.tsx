@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 export function ConfirmModal({
   open,
@@ -21,6 +21,22 @@ export function ConfirmModal({
   onCancel: () => void;
   variant?: 'danger' | 'default';
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    confirmRef.current?.focus();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCancel();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open, onCancel]);
+
   if (!open) return null;
 
   const confirmClass = variant === 'danger' ? 'btn btn-danger' : 'btn btn-primary';
@@ -31,6 +47,7 @@ export function ConfirmModal({
       onClick={onCancel}
     >
       <div
+        ref={dialogRef}
         className="card card-pad max-w-md w-full"
         role="dialog"
         aria-modal="true"
@@ -45,7 +62,7 @@ export function ConfirmModal({
           <button type="button" className="btn btn-secondary" onClick={onCancel}>
             {cancelLabel}
           </button>
-          <button type="button" className={confirmClass} onClick={onConfirm}>
+          <button ref={confirmRef} type="button" className={confirmClass} onClick={onConfirm}>
             {confirmLabel}
           </button>
         </div>

@@ -244,7 +244,9 @@ export default function EquipmentScanClient() {
               void resolve(manualCode.trim());
             }}
           >
+            <label className="sr-only" htmlFor="equipment-manual-code">Equipment code</label>
             <input
+              id="equipment-manual-code"
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
               placeholder="Equipment QR token or ID"

@@ -30,12 +30,12 @@ export function ManagerOnly({
   if (allowed) return <>{children}</>;
 
   return (
-    <div className="max-w-md mx-auto mt-12 bg-white rounded-3xl p-8 border border-slate-200/80 shadow-sm text-center">
-      <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
-        <Lock className="w-6 h-6" />
+    <div className="card card-pad max-w-md mx-auto mt-12 text-center">
+      <div className="icon-tile mx-auto mb-3 text-ink-muted">
+        <Lock className="w-6 h-6" aria-hidden />
       </div>
-      <h1 className="text-lg font-extrabold text-slate-900">{title}</h1>
-      <p className="text-xs text-slate-500 mt-1">{message}</p>
+      <h1 className="text-lg font-extrabold text-ink">{title}</h1>
+      <p className="text-xs text-ink-muted mt-1">{message}</p>
     </div>
   );
 }

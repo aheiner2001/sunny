@@ -439,8 +439,8 @@ export default function VehicleDetailClient() {
       </div>
 
       <div className="border-b border-line overflow-x-auto">
-        <div className="cluster gap-4 min-w-max px-1">
-          {[
+        <div className="cluster gap-4 min-w-max px-1" role="tablist" aria-label="Vehicle sections">
+                  {[
             { id: 'timeline' as const, label: 'Timeline', icon: History },
             { id: 'equipment' as const, label: `Equipment (${equipment.length})`, icon: Wrench },
             { id: 'issues' as const, label: `Issues (${issues.length})`, icon: AlertTriangle },
@@ -451,8 +451,24 @@ export default function VehicleDetailClient() {
             return (
               <button
                 key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  id={`vehicle-tab-${tab.id}`}
+                  aria-controls={`vehicle-panel-${tab.id}`}
+                  onClick={() => setActiveTab(tab.id)}
+                  onKeyDown={(e) => {
+                    const order = ['timeline', 'equipment', 'issues', 'qr'] as const;
+                    const idx = order.indexOf(tab.id as typeof order[number]);
+                    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                      e.preventDefault();
+                      const next = e.key === 'ArrowRight'
+                        ? order[(idx + 1) % order.length]
+                        : order[(idx - 1 + order.length) % order.length];
+                      setActiveTab(next);
+                      document.getElementById(`vehicle-tab-${next}`)?.focus();
+                    }
+                  }}
                 className={`cluster min-h-12 border-b-2 pb-3 text-sm font-bold transition-all -mb-px whitespace-nowrap ${
                   isActive
                     ? 'border-ink text-ink'
@@ -468,6 +484,8 @@ export default function VehicleDetailClient() {
       </div>
 
       {activeTab === 'timeline' && (
+        
+        <div role="tabpanel" id="vehicle-panel-timeline" aria-labelledby="vehicle-tab-timeline">
         <div className="card card-pad stack">
           <div className="spread flex-col sm:flex-row gap-3 border-b border-line pb-3">
             <div className="min-w-0">
@@ -559,9 +577,12 @@ export default function VehicleDetailClient() {
             )}
           </div>
         </div>
-      )}
+      
+        </div>)}
 
       {activeTab === 'equipment' && (
+        
+        <div role="tabpanel" id="vehicle-panel-equipment" aria-labelledby="vehicle-tab-equipment">
         <div className="card overflow-hidden">
           <div className="card-pad spread flex-col sm:flex-row gap-3 border-b border-line">
             <div className="min-w-0">
@@ -657,9 +678,12 @@ export default function VehicleDetailClient() {
             </div>
           )}
         </div>
-      )}
+      
+        </div>)}
 
       {activeTab === 'issues' && (
+        
+        <div role="tabpanel" id="vehicle-panel-issues" aria-labelledby="vehicle-tab-issues">
         <div className="stack">
           {issues.map((issue) => (
             <IssueTimeline key={issue.id} issue={issue} onStatusUpdated={loadData} />
@@ -676,13 +700,17 @@ export default function VehicleDetailClient() {
             </div>
           )}
         </div>
-      )}
+      
+        </div>)}
 
       {activeTab === 'qr' && (
+        
+        <div role="tabpanel" id="vehicle-panel-qr" aria-labelledby="vehicle-tab-qr">
         <div className="max-w-md mx-auto">
           <QRCodeDisplay vehicle={vehicle} />
         </div>
-      )}
+      
+        </div>)}
 
       {assignModalOpen && (
         <div

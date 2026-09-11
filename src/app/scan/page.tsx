@@ -20,6 +20,8 @@ import { PasscodePrompt } from '@/components/PasscodeGate';
 export default function ScanPage() {
   const router = useRouter();
   const { role, isSessionValid } = useAuth();
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [notFoundMsg, setNotFoundMsg] = useState<string | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState('');
@@ -95,7 +97,7 @@ export default function ScanPage() {
 
     const vehicle = dbService.getVehicleByQR(token) || dbService.getVehicle(token);
     if (!vehicle) {
-      alert(`Vehicle with QR token "${rawCode}" was not found.`);
+      setScanError(`Vehicle with QR token "${rawCode}" was not found.`);
       return;
     }
 
@@ -104,6 +106,7 @@ export default function ScanPage() {
       return;
     }
 
+    setScanError(null);
     openVehicle(vehicle);
   };
 
@@ -115,6 +118,7 @@ export default function ScanPage() {
 
   return (
     <div className="page max-w-xl mx-auto">
+      {scanError ? <div className="card card-pad text-sm text-[var(--critical)]" role="alert">{scanError}</div> : null}
       <div className="spread">
         <Link href="/dashboard" className="btn btn-secondary btn-sm">
           <ArrowLeft className="h-4 w-4" aria-hidden />

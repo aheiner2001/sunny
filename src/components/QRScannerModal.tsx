@@ -111,7 +111,7 @@ export function QRScannerModal({
 
     const vehicle = dbService.getVehicleByQR(token) || dbService.getVehicle(token);
     if (!vehicle) {
-      alert(`Vehicle with code "${scannedText}" not found in fleet.`);
+      setCameraError(`Vehicle with code "${scannedText}" not found in fleet.`);
       return;
     }
 
@@ -151,7 +151,7 @@ export function QRScannerModal({
               <Camera className="h-4 w-4" />
             </span>
             <div>
-              <h2 className="card-title text-ink-inverse">Scan Vehicle QR</h2>
+              <h2 id="qr-scanner-title" className="card-title text-ink-inverse">Scan Vehicle QR</h2>
               <p className="text-2xs text-ink-faint">Point at van sticker to start</p>
             </div>
           </div>
