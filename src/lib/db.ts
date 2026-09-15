@@ -25,10 +25,12 @@ import {
   InspectionStatus,
   LifespanMode,
   LifespanStatus,
-  VehicleDayLog
+  VehicleDayLog,
+  MissedReturn
 } from '@/types';
 import { classifyIssueType } from './issueClassification';
 import { checkInFields, checkOutFields, occupancyAfterInspection, shouldAutoReturnVehicle, localDateString } from './occupancy';
+import { DEFAULT_RETURN_QUESTIONS, hasReturnForShift, normalizeReturnQuestions, shiftDateStringForVehicle } from './returnFlow';
 import { 
   computeLifespanStatus,
   calculateLifespanDueDate,
@@ -84,6 +86,8 @@ const STORAGE_KEYS = {
   SESSION: 'sunny_session',
   VEHICLE_DAY_LOGS: 'sunny_vehicle_day_logs',
   OFFLINE_INSPECTIONS: 'sunny_offline_inspections',
+  MISSED_RETURNS: 'sunny_missed_returns',
+  OVERNIGHT_RECONCILED: 'sunny_overnight_reconciled',
 };
 
 const DEFAULT_CHECKLIST_ID = 'standard-detailing-checklist';
@@ -451,6 +455,7 @@ class DataStore {
       name: 'Standard Detailing Checklist',
       categories: INITIAL_CATEGORIES,
       questions: INITIAL_CHECKLIST_QUESTIONS,
+      returnQuestions: DEFAULT_RETURN_QUESTIONS,
       updatedAt: new Date().toISOString()
     };
     localStorage.setItem(STORAGE_KEYS.CHECKLIST_CONFIG, JSON.stringify(initialConfig));
@@ -820,11 +825,66 @@ class DataStore {
   /** End yesterday's shifts the first time the app is opened today. */
   private reconcileOvernightCheckins(): void {
     const today = localDateString(new Date());
-    if (this.overnightReconciledFor === today) return;
+    if (localStorage.getItem(STORAGE_KEYS.OVERNIGHT_RECONCILED) === today) return;
+    localStorage.setItem(STORAGE_KEYS.OVERNIGHT_RECONCILED, today);
     this.overnightReconciledFor = today;
     const list = this.readVehicleList();
     const stale = list.filter(v => shouldAutoReturnVehicle(v));
+    if (typeof process !== 'undefined' && process.env.DEBUG_MISS === '1') {
+      console.log('DEBUG_MISS list', list.map(v => ({ id: v.id, user: v.currentUserId, start: v.currentUserStartAt })));
+      console.log('DEBUG_MISS stale', stale.length);
+    }
     if (stale.length === 0) return;
+
+    const inspRaw = localStorage.getItem(STORAGE_KEYS.INSPECTIONS);
+    const inspections = inspRaw ? JSON.parse(inspRaw) as Inspection[] : [];
+    const existingMisses = this.readMissedReturns();
+    const existingIds = new Set(existingMisses.map(m => m.id));
+    const newMisses: MissedReturn[] = [];
+    for (const v of stale) {
+      if (!v.currentUserId) continue;
+      const shiftDay = shiftDateStringForVehicle(v);
+      if (
+        hasReturnForShift({
+          vehicleId: v.id,
+          userId: v.currentUserId,
+          shiftDateString: shiftDay,
+          inspections,
+        })
+      ) {
+        continue;
+      }
+      const id = `miss-${v.id}-${shiftDay}-${v.currentUserId}`;
+      if (existingIds.has(id)) continue;
+      newMisses.push({
+        id,
+        userId: v.currentUserId,
+        userName: v.currentUserName || 'Driver',
+        vehicleId: v.id,
+        vehicleNumber: v.vehicleNumber,
+        dateString: shiftDay,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        completedAt: null,
+        completedReturnInspectionId: null,
+      });
+    }
+    if (typeof process !== 'undefined' && process.env.DEBUG_MISS === '1') {
+      console.log('DEBUG_MISS newMisses', newMisses);
+      console.log('DEBUG_MISS hasReturn checks done, inspections', inspections.length);
+    }
+    if (newMisses.length > 0) {
+      const merged = [...newMisses, ...existingMisses];
+      localStorage.setItem(STORAGE_KEYS.MISSED_RETURNS, JSON.stringify(merged));
+      if (db) {
+        newMisses.forEach((miss) => {
+          setDoc(doc(db, 'missedReturns', miss.id), sanitizeForFirestore(miss), { merge: true }).catch((e) =>
+            console.warn('Firestore missed-return write error:', e)
+          );
+        });
+      }
+    }
+
     const returnedIds = new Set(stale.map(v => v.id));
     const next = list.map(v => (returnedIds.has(v.id) ? checkInFields(v) : v));
     localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(next));
@@ -835,6 +895,45 @@ class DataStore {
           console.warn('Firestore overnight check-in write error:', e)
         );
       });
+    }
+    window.dispatchEvent(new Event('sunny_db_update'));
+  }
+
+  private readMissedReturns(): MissedReturn[] {
+    const data = localStorage.getItem(STORAGE_KEYS.MISSED_RETURNS);
+    return data ? (JSON.parse(data) as MissedReturn[]) : [];
+  }
+
+  public getMissedReturns(): MissedReturn[] {
+    if (!this.isClient()) return [];
+    this.init();
+    this.reconcileOvernightCheckins();
+    return this.readMissedReturns();
+  }
+
+  public getPendingMissedReturnForUser(userId: string): MissedReturn | undefined {
+    return this.getMissedReturns().find(m => m.userId === userId && m.status === 'pending');
+  }
+
+  public async completeMissedReturn(id: string, returnInspectionId: string): Promise<void> {
+    if (!this.isClient()) return;
+    const list = this.readMissedReturns();
+    const next = list.map(m =>
+      m.id === id
+        ? {
+            ...m,
+            status: 'done' as const,
+            completedAt: new Date().toISOString(),
+            completedReturnInspectionId: returnInspectionId,
+          }
+        : m
+    );
+    localStorage.setItem(STORAGE_KEYS.MISSED_RETURNS, JSON.stringify(next));
+    const updated = next.find(m => m.id === id);
+    if (db && updated) {
+      setDoc(doc(db, 'missedReturns', id), sanitizeForFirestore(updated), { merge: true }).catch((e) =>
+        console.warn('Firestore missed-return complete error:', e)
+      );
     }
     window.dispatchEvent(new Event('sunny_db_update'));
   }
@@ -2284,6 +2383,7 @@ class DataStore {
         name: 'Standard Detailing Checklist',
         categories: INITIAL_CATEGORIES,
         questions: INITIAL_CHECKLIST_QUESTIONS,
+        returnQuestions: DEFAULT_RETURN_QUESTIONS,
         collectOdometer: true,
         collectFuelLevel: true,
       };
@@ -2296,6 +2396,7 @@ class DataStore {
         ...parsed,
         collectOdometer: parsed.collectOdometer !== false,
         collectFuelLevel: parsed.collectFuelLevel !== false,
+        returnQuestions: normalizeReturnQuestions(parsed.returnQuestions),
       };
     }
     const config: ChecklistConfig = {
@@ -2303,6 +2404,7 @@ class DataStore {
       name: 'Standard Detailing Checklist',
       categories: this.getChecklistCategories(),
       questions: this.getChecklistQuestions(),
+      returnQuestions: DEFAULT_RETURN_QUESTIONS,
       updatedAt: new Date().toISOString(),
       collectOdometer: true,
       collectFuelLevel: true,
@@ -2346,7 +2448,15 @@ class DataStore {
     });
   }
 
-  public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Promise<void> {
+    public async saveReturnQuestions(questions: ChecklistQuestion[]): Promise<void> {
+    const config = this.getChecklistConfig();
+    await this.saveChecklistConfig({
+      ...config,
+      returnQuestions: questions,
+    });
+  }
+
+public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Promise<void> {
     const config = this.getChecklistConfig();
     await this.saveChecklistConfig({
       ...config,
@@ -2894,6 +3004,76 @@ class DataStore {
 
   public async approveInspectionDelete(inspectionId: string): Promise<void> {
     await this.deleteInspection(inspectionId);
+  }
+
+  public submitReturnInspection(data: {
+    vehicleId: string;
+    userId: string;
+    userName: string;
+    userEmail: string;
+    responses: InspectionResponse[];
+    generalNotes?: string | null;
+    photoUrls?: string[] | null;
+    missedReturnId?: string | null;
+  }): { inspection: Inspection } {
+    if (!this.isClient()) throw new Error('Client only');
+    this.init();
+    const vehicle = this.getVehicle(data.vehicleId);
+    if (!vehicle) throw new Error('Vehicle not found');
+
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const dateStr = localDateString(now);
+    const inspectionId = `return-${Date.now()}`;
+
+    const cleanResponses: InspectionResponse[] = (data.responses || []).map(r => ({
+      questionId: r.questionId || '',
+      questionText: r.questionText || '',
+      category: r.category || 'general',
+      value: r.value !== undefined ? r.value : '',
+      isFlagged: Boolean(r.isFlagged),
+      notes: r.notes || (null as any),
+      equipmentId: r.equipmentId || (null as any),
+      equipmentName: r.equipmentName || (null as any),
+      photoUrl: r.photoUrl || (null as any),
+    }));
+
+    const newInspection: Inspection = {
+      id: inspectionId,
+      vehicleId: vehicle.id,
+      vehicleNumber: vehicle.vehicleNumber,
+      userId: data.userId || 'anon',
+      userName: data.userName || 'Driver',
+      userEmail: data.userEmail || '',
+      status: 'passed',
+      kind: 'return',
+      startedAt: nowIso,
+      submittedAt: nowIso,
+      dateString: dateStr,
+      responses: cleanResponses,
+      issueIds: [],
+      generalNotes: data.generalNotes || (null as any),
+      photoUrls: data.photoUrls || (null as any),
+    };
+
+    const allInspections = [newInspection, ...this.getInspections()];
+    localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(allInspections));
+
+    const cleared = checkInFields(vehicle);
+    this.updateVehicle(cleared);
+
+    if (data.missedReturnId) {
+      void this.completeMissedReturn(data.missedReturnId, inspectionId);
+    }
+
+    if (db) {
+      setDoc(doc(db, 'inspections', inspectionId), sanitizeForFirestore(newInspection)).catch((e) =>
+        console.warn('Firestore return inspection write error:', e)
+      );
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return { inspection: newInspection };
   }
 
   // ==========================================
