@@ -1146,6 +1146,33 @@ class DataStore {
     return this.updateVehicle(checkInFields(vehicle));
   }
 
+  /** Manager occupancy reset. Clears every driver; does not create missed-return nags. */
+  public async returnAllInUseVehicles(): Promise<{ count: number }> {
+    if (!this.isClient()) return { count: 0 };
+    this.init();
+    const list = this.readVehicleList();
+    let count = 0;
+    const clearedIds = new Set<string>();
+    const next = list.map((v) => {
+      if (!v.currentUserId) return v;
+      count += 1;
+      clearedIds.add(v.id);
+      return checkInFields(v);
+    });
+    if (count === 0) return { count: 0 };
+    localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(next));
+    window.dispatchEvent(new Event('sunny_db_update'));
+    if (db) {
+      next.forEach((v) => {
+        if (!clearedIds.has(v.id)) return;
+        setDoc(doc(db, 'vehicles', v.id), sanitizeForFirestore(v), { merge: true }).catch((e) =>
+          console.warn('Firestore return-all write error:', e)
+        );
+      });
+    }
+    return { count };
+  }
+
   public async checkOutVehicle(vehicleId: string, user: { id: string; name: string }): Promise<Vehicle> {
     const vehicle = this.getVehicle(vehicleId);
     if (!vehicle) throw new Error('Vehicle not found');
