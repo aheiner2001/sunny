@@ -830,10 +830,6 @@ class DataStore {
     this.overnightReconciledFor = today;
     const list = this.readVehicleList();
     const stale = list.filter(v => shouldAutoReturnVehicle(v));
-    if (typeof process !== 'undefined' && process.env.DEBUG_MISS === '1') {
-      console.log('DEBUG_MISS list', list.map(v => ({ id: v.id, user: v.currentUserId, start: v.currentUserStartAt })));
-      console.log('DEBUG_MISS stale', stale.length);
-    }
     if (stale.length === 0) return;
 
     const inspRaw = localStorage.getItem(STORAGE_KEYS.INSPECTIONS);
@@ -868,10 +864,6 @@ class DataStore {
         completedAt: null,
         completedReturnInspectionId: null,
       });
-    }
-    if (typeof process !== 'undefined' && process.env.DEBUG_MISS === '1') {
-      console.log('DEBUG_MISS newMisses', newMisses);
-      console.log('DEBUG_MISS hasReturn checks done, inspections', inspections.length);
     }
     if (newMisses.length > 0) {
       const merged = [...newMisses, ...existingMisses];
