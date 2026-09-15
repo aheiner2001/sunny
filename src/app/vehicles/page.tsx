@@ -20,7 +20,6 @@ import { VehicleStatusBadge, InspectionStatusBadge } from '@/components/StatusBa
 import { ManagerOnly } from '@/components/ManagerOnly';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
-import { ShopExitQRCode } from '@/components/ShopExitQRCode';
 
 export default function VehiclesPage() {
   return (
@@ -248,10 +247,21 @@ function VehiclesPageContent() {
         title="Fleet Vehicles"
         subtitle="Manage fleet vehicles, create new vans, print QR badges, and track maintenance history."
         actions={
-          <button type="button" onClick={handleOpenAdd} className="btn btn-primary">
-            <Plus className="h-4 w-4" aria-hidden />
-            Add Vehicle
-          </button>
+          <div className="cluster gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleReturnAll}
+              disabled={inUseCount === 0 || returningAll}
+              className="btn btn-secondary"
+            >
+              <Undo2 className="h-4 w-4" aria-hidden />
+              {returningAll ? 'Returning...' : 'Return all vehicles'}
+            </button>
+            <button type="button" onClick={handleOpenAdd} className="btn btn-primary">
+              <Plus className="h-4 w-4" aria-hidden />
+              Add Vehicle
+            </button>
+          </div>
         }
       />
 
