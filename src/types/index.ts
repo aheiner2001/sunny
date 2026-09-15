@@ -32,6 +32,7 @@ export interface AuthSession {
 
 export type VehicleStatus = 'active' | 'in_use' | 'maintenance' | 'inactive';
 export type InspectionStatus = 'passed' | 'issues_found' | 'in_progress' | 'submitted' | 'rejected' | 'approved';
+export type InspectionKind = 'pretrip' | 'return';
 
 export interface Vehicle {
   id: string;
@@ -168,6 +169,8 @@ export interface ChecklistConfig {
   /** Built-in inspect fields. Default true when omitted. */
   collectOdometer?: boolean;
   collectFuelLevel?: boolean;
+  /** Short shop-exit / post-trip questions. */
+  returnQuestions?: ChecklistQuestion[];
 }
 
 export type QuestionType = 
@@ -242,6 +245,8 @@ export interface Inspection {
   deleteRequestedById?: string | null;
   deleteRequestedByName?: string | null;
   deleteRequestNote?: string | null;
+  /** Morning checklist vs shop-exit return. Omitted / pretrip = morning. */
+  kind?: InspectionKind;
 }
 
 export type TaskStatus = 'open' | 'completed';
@@ -327,4 +332,19 @@ export interface Issue {
   type?: IssueType | null;
   reportedQuantity?: number | null;
   requiredQuantity?: number | null;
+}
+
+export type MissedReturnStatus = 'pending' | 'done';
+
+export interface MissedReturn {
+  id: string;
+  userId: string;
+  userName: string;
+  vehicleId: string;
+  vehicleNumber: string;
+  dateString: string;
+  status: MissedReturnStatus;
+  createdAt: string;
+  completedAt?: string | null;
+  completedReturnInspectionId?: string | null;
 }
