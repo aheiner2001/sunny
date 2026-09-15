@@ -35,6 +35,8 @@ import { ChecklistQuestion, ChecklistCategoryConfig, QuestionType, ChecklistConf
 import { useAuth } from '@/context/AuthContext';
 import { ManagerOnly } from '@/components/ManagerOnly';
 import { AiImportModal } from '@/components/AiImportModal';
+import { ReturnChecklistEditor } from '@/components/ReturnChecklistEditor';
+import { ShopExitQRCode } from '@/components/ShopExitQRCode';
 
 type SettingsTab = 'checklist' | 'equipment' | 'tasks' | 'appearance' | 'danger';
 
@@ -806,6 +808,9 @@ function SettingsPageContent() {
           )}
         </div>
       </div>
+
+          <ReturnChecklistEditor />
+          <ShopExitQRCode />
         </div>
       )}
 

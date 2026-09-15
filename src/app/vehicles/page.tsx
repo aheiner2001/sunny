@@ -12,6 +12,7 @@ import {
   Edit2,
   Trash2,
   MoreHorizontal,
+  Undo2,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Vehicle, VehicleStatus, EquipmentOption } from '@/types';
@@ -39,6 +40,7 @@ function VehiclesPageContent() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
+  const [returningAll, setReturningAll] = useState(false);
   const [deleteEquipmentMode, setDeleteEquipmentMode] = useState<'return_to_shop' | 'delete_associated'>('return_to_shop');
 
   const [equipmentOptions, setEquipmentOptions] = useState<EquipmentOption[]>([]);
@@ -220,16 +222,46 @@ function VehiclesPageContent() {
     setIsDeleteModalOpen(false);
   };
 
+  const inUseCount = vehicles.filter(v => Boolean(v.currentUserId)).length;
+
+  const handleReturnAll = async () => {
+    if (inUseCount === 0 || returningAll) return;
+    const label = inUseCount === 1 ? '1 in-use van' : `${inUseCount} in-use vans`;
+    const ok = confirm(`Return all ${label} and clear every driver? This does not create missed-return reminders.`);
+    if (!ok) return;
+    try {
+      setReturningAll(true);
+      await dbService.returnAllInUseVehicles();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not return vehicles';
+      alert(message);
+    } finally {
+      setReturningAll(false);
+    }
+  };
+
+
   return (
     <div className="page">
       <PageHeader
         title="Fleet Vehicles"
         subtitle="Manage fleet vehicles, create new vans, print QR badges, and track maintenance history."
         actions={
-          <button type="button" onClick={handleOpenAdd} className="btn btn-primary">
-            <Plus className="h-4 w-4" aria-hidden />
-            Add Vehicle
-          </button>
+          <div className="cluster gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleReturnAll}
+              disabled={inUseCount === 0 || returningAll}
+              className="btn btn-secondary"
+            >
+              <Undo2 className="h-4 w-4" aria-hidden />
+              {returningAll ? 'Returning...' : 'Return all vehicles'}
+            </button>
+            <button type="button" onClick={handleOpenAdd} className="btn btn-primary">
+              <Plus className="h-4 w-4" aria-hidden />
+              Add Vehicle
+            </button>
+          </div>
         }
       />
 

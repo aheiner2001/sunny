@@ -2,7 +2,9 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Delete, Lock, ShieldCheck, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { dbService } from '@/lib/db';
 import { asset } from '@/lib/basePath';
 
 const MAX_LENGTH = 8;
@@ -142,6 +144,22 @@ function PasscodePad({
 
 export function PasscodeGate({ children }: { children: React.ReactNode }) {
   const { hydrated, isAuthenticated } = useAuth();
+  const router = useRouter();
+
+  const routeAfterLogin = () => {
+    const session = dbService.getSession();
+    if (!session) return;
+    const pending = dbService.getPendingMissedReturnForUser(session.userId);
+    if (!pending) return;
+    if (session.role === 'manager') return;
+    try {
+      if (sessionStorage.getItem(`sunny_return_defer_${session.userId}`) === '1') return;
+    } catch {
+      /* ignore */
+    }
+    router.replace(`/return?missed=${pending.id}`);
+  };
+
 
   if (!hydrated) {
     return (
@@ -168,7 +186,7 @@ export function PasscodeGate({ children }: { children: React.ReactNode }) {
           </p>
         </div>
 
-        <PasscodePad onSuccess={() => undefined} submitLabel="Sign In" />
+        <PasscodePad onSuccess={routeAfterLogin} submitLabel="Sign In" />
       </div>
     </div>
   );

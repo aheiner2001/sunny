@@ -32,6 +32,7 @@ export default function InspectionsPage() {
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [kindFilter, setKindFilter] = useState<'all' | 'pretrip' | 'return'>('all');
   const [vehicleFilter, setVehicleFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'status' | 'vehicle' | 'driver'>('date_desc');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -118,9 +119,11 @@ export default function InspectionsPage() {
       insp.dateString.includes(searchTerm);
 
     const matchesStatus = statusFilter === 'all' || insp.status === statusFilter;
+    const kind = insp.kind === 'return' ? 'return' : 'pretrip';
+    const matchesKind = kindFilter === 'all' || kind === kindFilter;
     const matchesVehicle = vehicleFilter === 'all' || insp.vehicleId === vehicleFilter;
 
-    return matchesSearch && matchesStatus && matchesVehicle;
+    return matchesSearch && matchesStatus && matchesKind && matchesVehicle;
   });
 
   const sortedInspections = [...filteredInspections].sort((a, b) => {
@@ -208,6 +211,20 @@ export default function InspectionsPage() {
 
           <div className="cluster w-full md:w-auto md:justify-end">
             {([
+              ['all', 'All kinds'],
+              ['pretrip', 'Pre-trip'],
+              ['return', 'Return'],
+            ] as const).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setKindFilter(k)}
+                className={`btn btn-sm ${kindFilter === k ? 'bg-surface-sunk text-ink font-semibold border border-line' : 'btn-secondary'}`}
+              >
+                {label}
+              </button>
+            ))}
+            {([
               ['all', 'All'],
               ['passed', 'Passed'],
               ['issues_found', 'Issues found'],
@@ -285,6 +302,9 @@ export default function InspectionsPage() {
                     <div className="cluster">
                       <span className="font-bold text-sm">{insp.vehicleNumber}</span>
                       <InspectionStatusBadge status={insp.status} />
+                      {insp.kind === 'return' && (
+                        <span className="badge" data-status="info">Return</span>
+                      )}
                       {insp.deleteRequestedAt && (
                         <span className="badge" data-status="flagged">Delete requested</span>
                       )}
