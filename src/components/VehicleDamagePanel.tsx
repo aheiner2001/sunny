@@ -70,7 +70,7 @@ export function VehicleDamagePanel({ vehicleId }: Props) {
         <div className="spread items-center">
           <h2 className="card-title">
             History
-            {selectedSide !== 'all' ? ` Â· ${SIDE_LABEL[selectedSide]}` : ''}
+            {selectedSide !== 'all' ? ` · ${SIDE_LABEL[selectedSide]}` : ''}
           </h2>
           {selectedSide !== 'all' && (
             <button type="button" className="link-action text-xs" onClick={() => setSelectedSide('all')}>
@@ -100,7 +100,7 @@ export function VehicleDamagePanel({ vehicleId }: Props) {
                       hour: 'numeric',
                       minute: '2-digit',
                     })}{' '}
-                    Â· {e.userName}
+                    · {e.userName}
                   </p>
                   {e.note && <p className="text-xs text-ink-muted mt-1">{e.note}</p>}
                 </div>
@@ -170,7 +170,7 @@ function SideTile({
       )}
       <div className="px-1.5 py-0.5 text-[10px] font-bold text-ink truncate">
         {SIDE_LABEL[side]}
-        {event ? ' Â· logged' : ''}
+        {event ? ' · logged' : ''}
       </div>
     </button>
   );
