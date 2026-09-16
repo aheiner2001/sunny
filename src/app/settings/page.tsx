@@ -494,6 +494,7 @@ function SettingsPageContent() {
       case 'text': return 'Text Note';
       case 'photo': return 'Photo';
       case 'equipment_status': return 'Equipment Status';
+      case 'checkbox': return 'Checkbox';
       default: return type;
     }
   };
@@ -1288,6 +1289,7 @@ function SettingsPageContent() {
                     <option value="text">Text Note</option>
                     <option value="photo">Photo</option>
                     <option value="equipment_status">Equipment Status (Working/Flag)</option>
+                    <option value="checkbox">Checkbox (mark done)</option>
                   </select>
                 </div>
               </div>
