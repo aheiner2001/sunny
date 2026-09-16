@@ -256,6 +256,7 @@ export default function VehicleDetailClient() {
   const selectedInventoryAvailable = selectedInventory ? (selectedInventory.availableQuantity ?? 0) : 0;
 
   const openIssuesCount = issues.filter(i => i.status !== 'fixed').length;
+  const openNeeds = issues.filter(i => i.status !== 'fixed');
   const lastInspectionLabel = vehicle.lastInspectionAt
     ? new Date(vehicle.lastInspectionAt).toLocaleDateString([], { month: 'short', day: 'numeric' })
     : null;
@@ -437,6 +438,36 @@ export default function VehicleDetailClient() {
             </span>
           </div>
         </button>
+      </div>
+
+      <div className="card card-pad stack">
+        <div className="spread items-center">
+          <h2 className="card-title">Open needs</h2>
+          {openNeeds.length > 0 && (
+            <button type="button" className="link-action text-xs" onClick={() => setActiveTab('issues')}>
+              View all
+            </button>
+          )}
+        </div>
+        {openNeeds.length === 0 ? (
+          <p className="hint">No open equipment or repair flags on this van.</p>
+        ) : (
+          <div className="stack gap-2">
+            {openNeeds.slice(0, 8).map((iss) => (
+              <button
+                key={iss.id}
+                type="button"
+                onClick={() => setActiveTab('issues')}
+                className="spread items-center gap-3 text-sm py-1.5 border-b border-line last:border-b-0 text-left w-full hover:bg-surface-alt rounded-lg px-1 -mx-1"
+              >
+                <span className="font-bold text-ink truncate min-w-0">
+                  {iss.equipmentName || iss.title}
+                </span>
+                <IssueStatusBadge status={iss.status} />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="border-b border-line overflow-x-auto">
