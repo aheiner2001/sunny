@@ -33,6 +33,7 @@ export function activeChecklistQuestions(
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   return questions.filter((q) => {
     if (q.isSeasonal) {
+      if (q.forcePaused) return false;
       if (q.forceActive) return true;
       if (!q.seasonStart || !q.seasonEnd) return false;
       return isDateInSeason(q.seasonStart, q.seasonEnd, today);

@@ -14,6 +14,29 @@ type Props = {
   onClose: () => void;
 };
 
+function assignedQty(eq: Equipment) {
+  return (eq.assignments || []).reduce((sum, assignment) => sum + assignment.quantity, 0);
+}
+
+function shopQtyOf(eq: Equipment) {
+  return Math.max(0, eq.availableQuantity ?? ((eq.totalQuantity ?? 1) - assignedQty(eq)));
+}
+
+function locationsOf(eq: Equipment) {
+  const rows: Array<{ id: string; label: string; quantity: number }> = [
+    { id: SHOP, label: 'In shop / unassigned', quantity: shopQtyOf(eq) },
+  ];
+  for (const a of eq.assignments || []) {
+    rows.push({ id: a.vehicleId, label: a.vehicleNumber, quantity: a.quantity });
+  }
+  return rows;
+}
+
+function firstStockedId(eq: Equipment): string {
+  const stocked = locationsOf(eq).filter((l) => l.quantity > 0);
+  return stocked[0]?.id ?? SHOP;
+}
+
 export function EquipmentAllocationModal({ equipment, vehicles, open, onClose }: Props) {
   useEffect(() => {
     if (!equipment) return;
@@ -42,31 +65,30 @@ export function EquipmentAllocationModal({ equipment, vehicles, open, onClose }:
   useEffect(() => {
     if (!open || !equipment) return;
     refresh(equipment.id);
-    setFromId(SHOP);
+    const next = dbService.getEquipmentItem(equipment.id);
+    const startFrom = next ? firstStockedId(next) : SHOP;
+    setFromId(startFrom);
     setToId('');
     setQty('1');
     setError('');
   }, [open, equipment?.id]);
 
-  const assignedQty = (eq: Equipment) =>
-    (eq.assignments || []).reduce((sum, assignment) => sum + assignment.quantity, 0);
-
-  const shopQty = live
-    ? Math.max(0, live.availableQuantity ?? ((live.totalQuantity ?? 1) - assignedQty(live)))
-    : 0;
-
-  const locations = useMemo(() => {
-    if (!live) return [];
-    const rows: Array<{ id: string; label: string; quantity: number }> = [
-      { id: SHOP, label: 'In shop / unassigned', quantity: shopQty },
-    ];
-    for (const a of live.assignments || []) {
-      rows.push({ id: a.vehicleId, label: a.vehicleNumber, quantity: a.quantity });
+  // Keep From on a stocked location if inventory changes after a transfer
+  useEffect(() => {
+    if (!live) return;
+    const max = locationsOf(live).find((l) => l.id === fromId)?.quantity ?? 0;
+    if (max <= 0) {
+      setFromId(firstStockedId(live));
     }
-    return rows;
-  }, [live, shopQty]);
+  }, [live, fromId]);
+
+  const shopQty = live ? shopQtyOf(live) : 0;
+
+  const locations = useMemo(() => (live ? locationsOf(live) : []), [live]);
 
   const maxFrom = locations.find((l) => l.id === fromId)?.quantity ?? 0;
+  const canTransfer =
+    Boolean(toId) && toId !== fromId && maxFrom > 0 && Number.isInteger(Number(qty)) && Number(qty) > 0;
 
   const transfer = async () => {
     if (!live) return;
@@ -235,11 +257,11 @@ export function EquipmentAllocationModal({ equipment, vehicles, open, onClose }:
             </label>
           </div>
           <label className="field">
-            <span className="label">Quantity</span>
+            <span className="label">Quantity (max {maxFrom || 0})</span>
             <input
               type="number"
               min={1}
-              max={maxFrom || 1}
+              max={Math.max(1, maxFrom)}
               value={qty}
               onChange={(e) => setQty(e.target.value)}
               className="input w-28"
@@ -252,7 +274,7 @@ export function EquipmentAllocationModal({ equipment, vehicles, open, onClose }:
           ) : null}
           <button
             type="button"
-            disabled={busy || !toId || maxFrom === 0}
+            disabled={busy || !canTransfer}
             onClick={() => void transfer()}
             className="btn btn-primary"
           >
