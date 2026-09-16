@@ -74,6 +74,7 @@ export default function ReturnClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [returnedVehicle, setReturnedVehicle] = useState<string | null>(null);
+  const [jobsCompleted, setJobsCompleted] = useState('0');
 
   const load = () => {
     const fleet = dbService.getVehicles();
@@ -109,6 +110,14 @@ export default function ReturnClient() {
   const inUse = useMemo(() => vehiclesInUse(vehicles), [vehicles]);
   const vehicle =
     resolved || vehicles.find((v) => v.id === pickedId) || null;
+
+  useEffect(() => {
+    if (!vehicle?.id) {
+      setJobsCompleted('0');
+      return;
+    }
+    setJobsCompleted(String(dbService.getTodayJobsCount(vehicle.id)));
+  }, [vehicle?.id]);
 
   const isCatchUp = Boolean(missed && missed.status === 'pending');
 
@@ -166,6 +175,11 @@ export default function ReturnClient() {
         userEmail: user.email || '',
         responses: payload,
         missedReturnId: missed?.id || null,
+      });
+      const jobs = Math.max(0, Math.floor(Number(jobsCompleted) || 0));
+      await dbService.setVehicleJobsToday(vehicle.id, jobs, {
+        id: user.id,
+        name: user.name,
       });
       setReturnedVehicle(vehicle.vehicleNumber);
     } catch (err: unknown) {
@@ -421,6 +435,21 @@ export default function ReturnClient() {
             </div>
           );
         })}
+
+        <div className="space-y-1">
+          <label className="block text-xs font-bold uppercase tracking-wider text-ink">
+            Jobs completed today
+          </label>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={jobsCompleted}
+            onChange={(e) => setJobsCompleted(e.target.value)}
+            className="w-full px-3 py-2 text-sm rounded-xl border border-line bg-surface focus:outline-none focus:ring-2 focus:ring-ink/20"
+          />
+          <p className="text-[11px] text-ink-faint">Updates equipment wear for tools on this van.</p>
+        </div>
 
         {error && (
           <p className="text-xs font-semibold text-[var(--critical)]">{error}</p>
