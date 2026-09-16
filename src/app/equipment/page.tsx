@@ -451,7 +451,18 @@ function EquipmentPageContent() {
         alert(`${assignedTotal} units are already assigned to vehicles. Total cannot be lower than that.`);
         return;
       }
-      assignments = existing;
+      // Single-unit tools: vehicle dropdown is source of truth (empty = in shop).
+      // Multi-qty stock: keep existing multi-assignments; use Allocation modal to move units.
+      const isSingleUnit = form.lifespanEnabled || totalQuantity === 1 || assignedTotal <= 1;
+      if (isSingleUnit) {
+        if (vehicle) {
+          assignments = [{ vehicleId: vehicle.id, vehicleNumber: vehicle.vehicleNumber, quantity: 1 }];
+        } else {
+          assignments = [];
+        }
+      } else {
+        assignments = existing;
+      }
     }
 
     try {
@@ -1110,16 +1121,17 @@ function EquipmentPageContent() {
           onClick={() => setModal(null)}
         >
           <div
-            className="card card-pad max-w-md w-full max-h-[90vh] overflow-y-auto"
+            className="card max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden"
             role="dialog"
             aria-modal="true"
             aria-labelledby="equipment-form-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="equipment-form-title" className="card-title mb-4">
+            <h2 id="equipment-form-title" className="card-title px-5 pt-5 pb-3 border-b border-line shrink-0">
               {modal === 'add' ? 'Add Global Inventory Item' : 'Edit Equipment'}
             </h2>
-            <form onSubmit={save} className="stack gap-3">
+            <form onSubmit={save} className="flex flex-col min-h-0 flex-1">
+              <div className="stack gap-3 px-5 py-4 overflow-y-auto flex-1 min-h-0">
               <div className="field">
                 <label className="label" htmlFor="equipment-name">Equipment name</label>
                 <input
@@ -1399,11 +1411,12 @@ function EquipmentPageContent() {
                   className="input font-mono"
                 />
               </div>
-              <div className="cluster justify-end mt-2">
-                <button type="button" onClick={() => setModal(null)} className="btn btn-secondary btn-sm">
+              </div>
+              <div className="cluster justify-end gap-2 px-5 py-3 border-t border-line bg-surface shrink-0">
+                <button type="button" onClick={() => setModal(null)} className="btn btn-secondary">
                   Cancel
                 </button>
-                <button type="submit" disabled={loading} className="btn btn-primary btn-sm">
+                <button type="submit" disabled={loading} className="btn btn-primary">
                   {loading ? 'Saving...' : 'Save'}
                 </button>
               </div>
