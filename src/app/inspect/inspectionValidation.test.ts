@@ -1,0 +1,47 @@
+import { describe, expect, it } from 'vitest';
+import { canSubmitInspection } from './inspectionValidation';
+
+const questions = [
+  { id: 'required-one', required: true },
+  { id: 'optional-one', required: false },
+  { id: 'required-two', required: true },
+];
+
+describe('canSubmitInspection', () => {
+  it('stays disabled until every required question has an answer', () => {
+    expect(canSubmitInspection(questions, {})).toBe(false);
+    expect(canSubmitInspection(questions, {
+      'required-one': { value: 'pass', isFlagged: false },
+    })).toBe(false);
+    expect(canSubmitInspection(questions, {
+      'required-one': { value: 'pass', isFlagged: false },
+      'required-two': { value: 'yes', isFlagged: false },
+    })).toBe(true);
+  });
+
+  it('requires a photoUrl for required photo questions', () => {
+    const photoQuestions = [{ id: 'tire-photo', required: true, type: 'photo' }];
+    expect(canSubmitInspection(photoQuestions, {})).toBe(false);
+    expect(canSubmitInspection(photoQuestions, {
+      'tire-photo': { value: 'captured', isFlagged: false },
+    })).toBe(false);
+    expect(canSubmitInspection(photoQuestions, {
+      'tire-photo': { value: 'captured', isFlagged: false, photoUrl: 'data:image/jpeg;base64,abc' },
+    })).toBe(true);
+  });
+
+  it('requires checkbox questions to be checked', () => {
+    expect(
+      canSubmitInspection(
+        [{ id: 'c1', required: true, type: 'checkbox' }],
+        { c1: { value: '' } }
+      )
+    ).toBe(false);
+    expect(
+      canSubmitInspection(
+        [{ id: 'c1', required: true, type: 'checkbox' }],
+        { c1: { value: 'checked' } }
+      )
+    ).toBe(true);
+  });
+});

@@ -492,6 +492,33 @@ export default function DashboardPage() {
         </Link>
       </div>
 
+      <div className="card card-pad stack">
+        <div className="spread items-center">
+          <h2 className="card-title">Van needs</h2>
+          <Link href="/issues" className="link-action text-xs">
+            View all <ArrowRight className="w-3 h-3" />
+          </Link>
+        </div>
+        {openIssues.length === 0 ? (
+          <p className="hint">No open equipment or repair flags.</p>
+        ) : (
+          <div className="stack gap-2">
+            {openIssues.slice(0, 8).map((iss) => (
+              <Link
+                key={iss.id}
+                href="/issues"
+                className="spread items-center gap-3 text-sm py-1.5 border-b border-line last:border-b-0 hover:bg-surface-alt rounded-lg px-1 -mx-1"
+              >
+                <span className="font-bold text-ink shrink-0">{iss.vehicleNumber}</span>
+                <span className="text-ink-muted truncate min-w-0">
+                  {iss.equipmentName || iss.title}
+                </span>
+                <IssueStatusBadge status={iss.status} />
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Main 3-column content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--gutter)]">

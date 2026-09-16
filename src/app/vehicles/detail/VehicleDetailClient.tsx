@@ -17,6 +17,7 @@ import {
   Plus,
   Gauge,
   Fuel,
+  Camera,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { dbService } from '@/lib/db';
@@ -27,6 +28,7 @@ import { IssueTimeline } from '@/components/IssueTimeline';
 import { RecentInspectors } from '@/components/RecentInspectors';
 import { QuantityModal } from '@/components/QuantityModal';
 import { EmptyState } from '@/components/EmptyState';
+import { VehicleDamagePanel } from '@/components/VehicleDamagePanel';
 
 export default function VehicleDetailClient() {
   const searchParams = useSearchParams();
@@ -38,7 +40,7 @@ export default function VehicleDetailClient() {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
-  const [activeTab, setActiveTab] = useState<'timeline' | 'equipment' | 'qr' | 'issues'>('timeline');
+  const [activeTab, setActiveTab] = useState<'timeline' | 'equipment' | 'qr' | 'issues' | 'damage'>('timeline');
   const [showAllTimeline, setShowAllTimeline] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [assignMode, setAssignMode] = useState<'existing' | 'new'>('existing');
@@ -256,6 +258,7 @@ export default function VehicleDetailClient() {
   const selectedInventoryAvailable = selectedInventory ? (selectedInventory.availableQuantity ?? 0) : 0;
 
   const openIssuesCount = issues.filter(i => i.status !== 'fixed').length;
+  const openNeeds = issues.filter(i => i.status !== 'fixed');
   const lastInspectionLabel = vehicle.lastInspectionAt
     ? new Date(vehicle.lastInspectionAt).toLocaleDateString([], { month: 'short', day: 'numeric' })
     : null;
@@ -439,12 +442,43 @@ export default function VehicleDetailClient() {
         </button>
       </div>
 
+      <div className="card card-pad stack">
+        <div className="spread items-center">
+          <h2 className="card-title">Open needs</h2>
+          {openNeeds.length > 0 && (
+            <button type="button" className="link-action text-xs" onClick={() => setActiveTab('issues')}>
+              View all
+            </button>
+          )}
+        </div>
+        {openNeeds.length === 0 ? (
+          <p className="hint">No open equipment or repair flags on this van.</p>
+        ) : (
+          <div className="stack gap-2">
+            {openNeeds.slice(0, 8).map((iss) => (
+              <button
+                key={iss.id}
+                type="button"
+                onClick={() => setActiveTab('issues')}
+                className="spread items-center gap-3 text-sm py-1.5 border-b border-line last:border-b-0 text-left w-full hover:bg-surface-alt rounded-lg px-1 -mx-1"
+              >
+                <span className="font-bold text-ink truncate min-w-0">
+                  {iss.equipmentName || iss.title}
+                </span>
+                <IssueStatusBadge status={iss.status} />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       <div className="border-b border-line overflow-x-auto">
         <div className="cluster gap-4 min-w-max px-1" role="tablist" aria-label="Vehicle sections">
                   {[
             { id: 'timeline' as const, label: 'Timeline', icon: History },
             { id: 'equipment' as const, label: `Equipment (${equipment.length})`, icon: Wrench },
             { id: 'issues' as const, label: `Issues (${issues.length})`, icon: AlertTriangle },
+            { id: 'damage' as const, label: 'Damage', icon: Camera },
             { id: 'qr' as const, label: 'QR', icon: QrCode },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -710,6 +744,12 @@ export default function VehicleDetailClient() {
         </div>
       
         </div>)}
+
+      {activeTab === 'damage' && (
+        <div role="tabpanel" id="vehicle-panel-damage" aria-labelledby="vehicle-tab-damage">
+          <VehicleDamagePanel vehicleId={vehicle.id} />
+        </div>
+      )}
 
       {activeTab === 'qr' && (
         

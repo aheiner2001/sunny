@@ -12,6 +12,7 @@ import {
   vehiclesInUse,
 } from '@/lib/returnFlow';
 import { canSubmitInspection } from '../inspect/inspectionValidation';
+import { VehicleDamageCapture } from '@/components/VehicleDamageCapture';
 import type {
   ChecklistQuestion,
   InspectionResponse,
@@ -74,6 +75,7 @@ export default function ReturnClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [returnedVehicle, setReturnedVehicle] = useState<string | null>(null);
+  const [jobsCompleted, setJobsCompleted] = useState('0');
 
   const load = () => {
     const fleet = dbService.getVehicles();
@@ -109,6 +111,14 @@ export default function ReturnClient() {
   const inUse = useMemo(() => vehiclesInUse(vehicles), [vehicles]);
   const vehicle =
     resolved || vehicles.find((v) => v.id === pickedId) || null;
+
+  useEffect(() => {
+    if (!vehicle?.id) {
+      setJobsCompleted('0');
+      return;
+    }
+    setJobsCompleted(String(dbService.getTodayJobsCount(vehicle.id)));
+  }, [vehicle?.id]);
 
   const isCatchUp = Boolean(missed && missed.status === 'pending');
 
@@ -166,6 +176,11 @@ export default function ReturnClient() {
         userEmail: user.email || '',
         responses: payload,
         missedReturnId: missed?.id || null,
+      });
+      const jobs = Math.max(0, Math.floor(Number(jobsCompleted) || 0));
+      await dbService.setVehicleJobsToday(vehicle.id, jobs, {
+        id: user.id,
+        name: user.name,
       });
       setReturnedVehicle(vehicle.vehicleNumber);
     } catch (err: unknown) {
@@ -354,6 +369,20 @@ export default function ReturnClient() {
                       </button>
                     </>
                   )}
+
+                  {q.type === 'checkbox' && (
+                    <label className="inline-flex items-center gap-2 text-sm font-bold text-ink cursor-pointer px-2 py-1.5 rounded-xl border border-line bg-surface hover:bg-surface-alt">
+                      <input
+                        type="checkbox"
+                        checked={resp?.value === 'checked'}
+                        onChange={(e) =>
+                          setResponse(q, e.target.checked ? 'checked' : '', false)
+                        }
+                        className="w-4 h-4 rounded border-slate-300 text-ink focus:ring-ink/20"
+                      />
+                      <span>Done</span>
+                    </label>
+                  )}
                 </div>
               </div>
               {q.helperText && <p className="text-[11px] text-ink-faint mt-1">{q.helperText}</p>}
@@ -407,6 +436,25 @@ export default function ReturnClient() {
             </div>
           );
         })}
+
+        <div className="space-y-1">
+          <label className="block text-xs font-bold uppercase tracking-wider text-ink">
+            Jobs completed today
+          </label>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={jobsCompleted}
+            onChange={(e) => setJobsCompleted(e.target.value)}
+            className="w-full px-3 py-2 text-sm rounded-xl border border-line bg-surface focus:outline-none focus:ring-2 focus:ring-ink/20"
+          />
+          <p className="text-[11px] text-ink-faint">Updates equipment wear for tools on this van.</p>
+        </div>
+
+        {user && vehicle && (
+          <VehicleDamageCapture vehicleId={vehicle.id} user={user} />
+        )}
 
         {error && (
           <p className="text-xs font-semibold text-[var(--critical)]">{error}</p>

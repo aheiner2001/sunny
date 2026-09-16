@@ -7,6 +7,7 @@ import { normalizeReturnQuestions } from '@/lib/returnFlow';
 import type { ChecklistQuestion, QuestionType } from '@/types';
 
 const TYPE_LABEL: Record<string, string> = {
+  checkbox: 'Checkbox',
   pass_fail: 'Pass / Fail',
   yes_no: 'Yes / No',
   text: 'Text Note',
@@ -202,6 +203,7 @@ export function ReturnChecklistEditor() {
                   <option value="pass_fail">Pass / Fail</option>
                   <option value="text">Text Note</option>
                   <option value="photo">Photo</option>
+                  <option value="checkbox">Checkbox (mark done)</option>
                 </select>
               </div>
               <div>

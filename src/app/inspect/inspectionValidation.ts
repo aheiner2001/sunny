@@ -22,6 +22,9 @@ export function canSubmitInspection(
       if (question.type === 'photo') {
         return Boolean(response?.photoUrl);
       }
+      if (question.type === 'checkbox') {
+        return response?.value === 'checked';
+      }
       const value = response?.value;
       return value !== undefined && value !== null && value !== '';
     });

@@ -1123,6 +1123,21 @@ export default function InspectClient() {
                               </>
                             )}
 
+
+                            {q.type === 'checkbox' && (
+                              <label className="inline-flex items-center gap-2 text-sm font-bold text-ink cursor-pointer px-2 py-1.5 rounded-xl border border-line bg-surface hover:bg-surface-alt">
+                                <input
+                                  type="checkbox"
+                                  checked={resp?.value === 'checked'}
+                                  onChange={(e) =>
+                                    handleSetResponse(q, e.target.checked ? 'checked' : '', false)
+                                  }
+                                  className="w-4 h-4 rounded border-slate-300 text-ink focus:ring-ink/20"
+                                />
+                                <span>Done</span>
+                              </label>
+                            )}
+
                             {q.type === 'text' && (
                               <div className="flex items-center gap-2">
                                 <button

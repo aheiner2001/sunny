@@ -348,3 +348,18 @@ export interface MissedReturn {
   completedAt?: string | null;
   completedReturnInspectionId?: string | null;
 }
+
+export type VehicleSide = 'front' | 'rear' | 'left' | 'right';
+
+export interface VehicleDamageEvent {
+  id: string;
+  vehicleId: string;
+  side: VehicleSide | null;
+  noNewDamage: boolean;
+  note?: string;
+  photoDataUrls: string[];
+  inspectionId?: string | null;
+  userId: string;
+  userName: string;
+  createdAt: string;
+}
