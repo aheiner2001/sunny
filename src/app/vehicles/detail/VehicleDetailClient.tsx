@@ -17,6 +17,7 @@ import {
   Plus,
   Gauge,
   Fuel,
+  Camera,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { dbService } from '@/lib/db';
@@ -27,6 +28,7 @@ import { IssueTimeline } from '@/components/IssueTimeline';
 import { RecentInspectors } from '@/components/RecentInspectors';
 import { QuantityModal } from '@/components/QuantityModal';
 import { EmptyState } from '@/components/EmptyState';
+import { VehicleDamagePanel } from '@/components/VehicleDamagePanel';
 
 export default function VehicleDetailClient() {
   const searchParams = useSearchParams();
@@ -38,7 +40,7 @@ export default function VehicleDetailClient() {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
-  const [activeTab, setActiveTab] = useState<'timeline' | 'equipment' | 'qr' | 'issues'>('timeline');
+  const [activeTab, setActiveTab] = useState<'timeline' | 'equipment' | 'qr' | 'issues' | 'damage'>('timeline');
   const [showAllTimeline, setShowAllTimeline] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [assignMode, setAssignMode] = useState<'existing' | 'new'>('existing');
@@ -476,6 +478,7 @@ export default function VehicleDetailClient() {
             { id: 'timeline' as const, label: 'Timeline', icon: History },
             { id: 'equipment' as const, label: `Equipment (${equipment.length})`, icon: Wrench },
             { id: 'issues' as const, label: `Issues (${issues.length})`, icon: AlertTriangle },
+            { id: 'damage' as const, label: 'Damage', icon: Camera },
             { id: 'qr' as const, label: 'QR', icon: QrCode },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -741,6 +744,12 @@ export default function VehicleDetailClient() {
         </div>
       
         </div>)}
+
+      {activeTab === 'damage' && (
+        <div role="tabpanel" id="vehicle-panel-damage" aria-labelledby="vehicle-tab-damage">
+          <VehicleDamagePanel vehicleId={vehicle.id} />
+        </div>
+      )}
 
       {activeTab === 'qr' && (
         

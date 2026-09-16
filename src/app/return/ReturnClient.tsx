@@ -12,6 +12,7 @@ import {
   vehiclesInUse,
 } from '@/lib/returnFlow';
 import { canSubmitInspection } from '../inspect/inspectionValidation';
+import { VehicleDamageCapture } from '@/components/VehicleDamageCapture';
 import type {
   ChecklistQuestion,
   InspectionResponse,
@@ -450,6 +451,10 @@ export default function ReturnClient() {
           />
           <p className="text-[11px] text-ink-faint">Updates equipment wear for tools on this van.</p>
         </div>
+
+        {user && vehicle && (
+          <VehicleDamageCapture vehicleId={vehicle.id} user={user} />
+        )}
 
         {error && (
           <p className="text-xs font-semibold text-[var(--critical)]">{error}</p>
