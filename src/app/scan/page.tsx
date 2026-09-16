@@ -167,7 +167,7 @@ export default function ScanPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {vehicles.slice(0, 6).map((v) => (
+            {vehicles.map((v) => (
               <button
                 key={v.id}
                 type="button"

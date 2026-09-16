@@ -26,8 +26,7 @@ import {
   Square,
   ArrowRightLeft,
   MoreHorizontal,
-  Tag,
-  TrendingDown
+  Tag
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Equipment, EquipmentCategory, EquipmentKind, EquipmentStatus, LifespanMode, Vehicle } from '@/types';
@@ -871,69 +870,40 @@ function EquipmentPageContent() {
         </div>
       )}
 
-      <div className="grid-auto" style={{ '--min': '14rem' } as React.CSSProperties}>
-        <div className="card card-pad">
-          <div className="stat">
-            <span className="stat-label">Total Owned</span>
-            <span className="stat-value">{globalSummary.totalOwned}</span>
-          </div>
-        </div>
-        <div className="card card-pad">
-          <div className="stat" data-status="info">
-            <span className="stat-label">Unassigned (In Shop)</span>
-            <span className="stat-value">{globalSummary.unassigned}</span>
-          </div>
-        </div>
-        <div className="card card-pad">
-          <div className="stat" data-status="ok">
-            <span className="stat-label">Assigned</span>
-            <span className="stat-value">{globalSummary.assigned}</span>
-          </div>
-        </div>
+      <div className="cluster flex-wrap gap-x-3 gap-y-1 text-sm">
+        <span className="text-ink-muted">
+          <span className="font-semibold text-ink">{globalSummary.totalOwned}</span> owned
+        </span>
+        <span className="text-ink-muted">
+          <span className="font-semibold text-ink">{globalSummary.unassigned}</span> in shop
+        </span>
+        <span className="text-ink-muted">
+          <span className="font-semibold text-ink">{globalSummary.assigned}</span> assigned
+        </span>
         {lowStockCount > 0 && (
           <button
             type="button"
-            className={`card card-pad text-left w-full ${statusFilter === 'low_stock' ? 'border-[var(--critical)] bg-[var(--hivis-wash)]' : ''}`}
-            data-status="critical"
             onClick={() => setStatusFilter(statusFilter === 'low_stock' ? 'all' : 'low_stock')}
+            className={`font-semibold ${statusFilter === 'low_stock' ? 'text-[var(--critical)] underline' : 'text-[var(--critical)]'}`}
           >
-            <div className="stat" data-status="critical">
-              <span className="stat-label">Low Par Stock Alert</span>
-              <span className="stat-value cluster">
-                <TrendingDown className="w-5 h-5 text-red-500" />
-                {lowStockCount} Supplies
-              </span>
-            </div>
-            <p className="hint mt-2 text-xs">
-              {statusFilter === 'low_stock' ? 'Filter active — click to reset' : 'Click to show below-par items'}
-            </p>
+            {lowStockCount} low stock
           </button>
         )}
         {dueForReviewCount > 0 && (
           <button
             type="button"
-            className={`card card-pad text-left w-full ${lifespanFilter === 'due' ? 'border-[var(--amber)] bg-[var(--hivis-wash)]' : ''}`}
-            data-status="flagged"
             onClick={() => applyLifespanFilter(lifespanFilter === 'due' ? 'all' : 'due')}
+            className={`font-semibold ${lifespanFilter === 'due' ? 'text-[var(--amber-text)] underline' : 'text-[var(--amber-text)]'}`}
             aria-pressed={lifespanFilter === 'due'}
           >
-            <div className="stat" data-status="flagged">
-              <span className="stat-label">Due for Review</span>
-              <span className="stat-value cluster">
-                <AlertTriangle className="w-5 h-5 text-[var(--amber-text)]" />
-                {dueForReviewCount} Tools
-              </span>
-            </div>
-            <p className="hint mt-2 text-xs">
-              {lifespanFilter === 'due' ? 'Filter on — click to clear' : 'Click to show only these tools'}
-            </p>
+            {dueForReviewCount} due for review
           </button>
         )}
       </div>
 
-      <div className="card card-pad stack gap-3">
-        <div className="spread flex-col md:flex-row gap-3 items-stretch md:items-center">
-          <div className="field w-full md:max-w-xs">
+      <div className="card card-pad">
+        <div className="spread flex-col sm:flex-row gap-3">
+          <div className="field w-full sm:max-w-xs">
             <label className="label sr-only" htmlFor="equipment-search">
               Search equipment
             </label>
@@ -949,21 +919,21 @@ function EquipmentPageContent() {
               />
             </div>
           </div>
-          <div className="cluster flex-wrap gap-2 md:justify-end">
-            {(["all", "working", "flagged"] as const).map((status) => (
+          <div className="cluster w-full sm:w-auto sm:justify-end flex-wrap gap-2">
+            {(['all', 'working', 'flagged'] as const).map((status) => (
               <button
                 key={status}
                 type="button"
                 onClick={() => setStatusFilter(status)}
-                className={`btn btn-sm capitalize ${statusFilter === status ? "btn-primary" : "btn-secondary"}`}
+                className={`btn btn-sm capitalize ${statusFilter === status ? 'bg-surface-sunk text-ink font-semibold border border-line' : 'btn-secondary'}`}
               >
-                {status === "all" ? "All" : status}
+                {status === 'all' ? 'All' : status}
               </button>
             ))}
             <button
               type="button"
               onClick={() => setFiltersOpen((v) => !v)}
-              className={`btn btn-sm ${filtersOpen || categoryFilter !== "all" || lifespanFilter !== "all" || !(statusFilter === "all" || statusFilter === "working" || statusFilter === "flagged") ? "btn-primary" : "btn-secondary"}`}
+              className={`btn btn-sm ${filtersOpen || categoryFilter !== 'all' || lifespanFilter !== 'all' || !(statusFilter === 'all' || statusFilter === 'working' || statusFilter === 'flagged') ? 'bg-surface-sunk text-ink font-semibold border border-line' : 'btn-secondary'}`}
               aria-expanded={filtersOpen}
             >
               Filters
@@ -982,7 +952,7 @@ function EquipmentPageContent() {
           </div>
         </div>
         {filtersOpen && (
-          <div className="pt-2 border-t border-line cluster flex-wrap gap-2">
+          <div className="mt-3 pt-3 border-t border-line cluster flex-wrap gap-2">
             <label className="cluster text-sm font-semibold text-ink-muted">
               View
               <select
@@ -1022,7 +992,7 @@ function EquipmentPageContent() {
                 key={status}
                 type="button"
                 onClick={() => setStatusFilter(status)}
-                className={`btn btn-sm capitalize ${statusFilter === status ? "btn-primary" : "btn-secondary"}`}
+                className={`btn btn-sm capitalize ${statusFilter === status ? 'bg-surface-sunk text-ink font-semibold border border-line' : 'btn-secondary'}`}
               >
                 {status === "low_stock" ? "Low Stock Par" : status.replace("_", " ")}
               </button>
@@ -1030,7 +1000,6 @@ function EquipmentPageContent() {
           </div>
         )}
       </div>
-
       {sortMode === 'family' && (
         <div className="stack">
           {groupEquipmentByFamily(filtered).map(family => {

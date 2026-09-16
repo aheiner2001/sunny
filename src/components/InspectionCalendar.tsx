@@ -259,7 +259,11 @@ export function InspectionCalendar({
             </button>
             <button
               type="button"
-              onClick={() => onMonthChange(new Date())}
+              onClick={() => {
+                const now = new Date();
+                onMonthChange(new Date(now.getFullYear(), now.getMonth(), 1));
+                onDayClick?.(dateKey(now));
+              }}
               className="px-2 py-1 text-xs font-bold text-ink hover:bg-surface-sunk border-x border-line"
             >
               Today
