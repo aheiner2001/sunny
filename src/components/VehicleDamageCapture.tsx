@@ -1,9 +1,8 @@
 'use client';
-
 import React, { useState } from 'react';
 import { Camera, Check, X } from 'lucide-react';
 import { dbService } from '@/lib/db';
-import { MAX_DAMAGE_PHOTOS, VEHICLE_SIDES } from '@/lib/vehicleDamage';
+import { MAX_DAMAGE_PHOTOS, SIDE_LABEL, VEHICLE_SIDES } from '@/lib/vehicleDamage';
 import type { User, VehicleDamageEvent, VehicleSide } from '@/types';
 
 function processImageFile(file: File, callback: (dataUrl: string) => void) {
@@ -39,13 +38,6 @@ function processImageFile(file: File, callback: (dataUrl: string) => void) {
   reader.readAsDataURL(file);
 }
 
-const SIDE_LABEL: Record<VehicleSide, string> = {
-  front: 'Front',
-  rear: 'Rear',
-  left: 'Left',
-  right: 'Right',
-};
-
 type Props = {
   vehicleId: string;
   user: Pick<User, 'id' | 'name'>;
@@ -63,6 +55,10 @@ export function VehicleDamageCapture({ vehicleId, user, onRecorded }: Props) {
 
   const addFiles = (files: FileList | null) => {
     if (!files?.length) return;
+    if (!side && !noNewDamage) {
+      setError('Pick Front, Rear, Left, Right, or Cab before adding photos.');
+      return;
+    }
     const remaining = MAX_DAMAGE_PHOTOS - photos.length;
     Array.from(files)
       .slice(0, remaining)
@@ -91,7 +87,6 @@ export function VehicleDamageCapture({ vehicleId, user, onRecorded }: Props) {
       setSaved(true);
       setNote('');
       setPhotos([]);
-      setSide('');
       onRecorded?.(event);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not save damage entry.');
@@ -100,10 +95,12 @@ export function VehicleDamageCapture({ vehicleId, user, onRecorded }: Props) {
     }
   };
 
+  const sideName = side ? SIDE_LABEL[side] : null;
+
   return (
     <div className="space-y-3 rounded-xl border border-line bg-surface-alt/40 p-3">
       <div className="spread items-center">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-ink">Exterior damage</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-ink">Exterior / cab damage</h3>
         {saved && (
           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700">
             <Check className="w-3.5 h-3.5" /> Saved
@@ -129,16 +126,18 @@ export function VehicleDamageCapture({ vehicleId, user, onRecorded }: Props) {
         <>
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-muted mb-1">
-              Side
+              Which side are these photos for?
             </label>
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-5 gap-1.5">
               {VEHICLE_SIDES.map((s) => (
                 <button
                   key={s}
                   type="button"
                   onClick={() => {
                     setSide(s);
+                    setPhotos([]);
                     setSaved(false);
+                    setError(null);
                   }}
                   className={`py-2 rounded-xl text-xs font-bold border transition-all ${
                     side === s
@@ -150,6 +149,11 @@ export function VehicleDamageCapture({ vehicleId, user, onRecorded }: Props) {
                 </button>
               ))}
             </div>
+            {sideName && (
+              <p className="mt-2 text-xs font-semibold text-ink">
+                Adding photos for <span className="underline decoration-2 underline-offset-2">{sideName}</span>
+              </p>
+            )}
           </div>
 
           <div>
@@ -163,16 +167,24 @@ export function VehicleDamageCapture({ vehicleId, user, onRecorded }: Props) {
                 setNote(e.target.value);
                 setSaved(false);
               }}
-              placeholder="Scratches near handle…"
+              placeholder="Scratches near handleâ€¦"
               className="w-full px-3 py-1.5 text-xs rounded-xl border border-line bg-surface focus:outline-none focus:ring-2 focus:ring-ink/20"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-line bg-surface text-xs font-bold text-ink hover:bg-surface-alt">
+            <label
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold ${
+                side
+                  ? 'cursor-pointer border-line bg-surface text-ink hover:bg-surface-alt'
+                  : 'cursor-not-allowed border-line bg-surface-sunk text-ink-faint'
+              }`}
+            >
               <Camera className="w-3.5 h-3.5" />
               <span>
-                Add photos ({photos.length}/{MAX_DAMAGE_PHOTOS})
+                {sideName
+                  ? `Add ${sideName} photos (${photos.length}/${MAX_DAMAGE_PHOTOS})`
+                  : 'Pick a side first'}
               </span>
               <input
                 type="file"
@@ -180,7 +192,7 @@ export function VehicleDamageCapture({ vehicleId, user, onRecorded }: Props) {
                 capture="environment"
                 multiple
                 className="sr-only"
-                disabled={photos.length >= MAX_DAMAGE_PHOTOS}
+                disabled={!side || photos.length >= MAX_DAMAGE_PHOTOS}
                 onChange={(e) => {
                   addFiles(e.target.files);
                   setSaved(false);
@@ -188,15 +200,18 @@ export function VehicleDamageCapture({ vehicleId, user, onRecorded }: Props) {
                 }}
               />
             </label>
-            {photos.length > 0 && (
+            {photos.length > 0 && sideName && (
               <div className="flex flex-wrap gap-2">
                 {photos.map((url, idx) => (
                   <div key={idx} className="relative">
                     <img
                       src={url}
-                      alt={`Damage ${idx + 1}`}
+                      alt={`${sideName} damage ${idx + 1}`}
                       className="w-16 h-16 object-cover rounded-lg border border-line"
                     />
+                    <span className="absolute bottom-0 left-0 right-0 bg-ink/70 text-white text-[9px] font-bold text-center py-0.5 rounded-b-lg">
+                      {sideName}
+                    </span>
                     <button
                       type="button"
                       onClick={() => {
@@ -224,7 +239,13 @@ export function VehicleDamageCapture({ vehicleId, user, onRecorded }: Props) {
         onClick={() => void handleRecord()}
         className="btn btn-secondary btn-sm w-full disabled:opacity-50"
       >
-        {busy ? 'Saving…' : noNewDamage ? 'Record no new damage' : 'Save damage entry'}
+        {busy
+          ? 'Savingâ€¦'
+          : noNewDamage
+            ? 'Record no new damage'
+            : sideName
+              ? `Save ${sideName} damage`
+              : 'Save damage entry'}
       </button>
     </div>
   );

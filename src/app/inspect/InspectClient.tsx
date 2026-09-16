@@ -27,6 +27,7 @@ import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { Vehicle, ChecklistQuestion, ChecklistCategoryConfig, InspectionResponse, FleetTask, Inspection } from '@/types';
 import { canSubmitInspection } from './inspectionValidation';
+import { activeChecklistQuestions } from '@/lib/checklistQuestions';
 import { occupancyKind, formatCheckoutStarted, vehicleInspectedOnLocalDay } from '@/lib/occupancy';
 import { RecentInspectors } from '@/components/RecentInspectors';
 import { RejectedInspectionBanner } from '@/components/RejectedInspectionBanner';
@@ -94,7 +95,7 @@ export default function InspectClient() {
 
       const checklist = dbService.getChecklistConfig();
       setCategories(checklist.categories || []);
-      setQuestions(checklist.questions || []);
+      setQuestions(activeChecklistQuestions(checklist.questions || []));
       setCollectOdometer(checklist.collectOdometer !== false);
       setCollectFuelLevel(checklist.collectFuelLevel !== false);
       const vehicleTasks = dbService.getTasks().filter(task => !task.vehicleId || task.vehicleId === v?.id);
@@ -1042,40 +1043,21 @@ export default function InspectClient() {
                           </div>
 
                           <div className="flex items-center gap-1.5 shrink-0">
-                            {q.type === 'equipment_status' && (
+                            {(q.type === 'equipment_status' || q.type === 'pass_fail' || q.type === 'yes_no') && (
                               <>
                                 <button
                                   type="button"
-                                  onClick={() => handleSetResponse(q, 'working', false)}
-                                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                                    resp?.value === 'working' && !isFlagged
-                                      ? 'bg-emerald-600 text-white shadow-sm'
-                                      : 'bg-surface border border-line text-ink-muted hover:bg-surface-alt'
-                                  }`}
-                                >
-                                  ✓ Working
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSetResponse(q, 'flagged', true)}
-                                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                                    isFlagged
-                                      ? 'bg-amber-500 text-white shadow-sm'
-                                      : 'bg-surface border border-line text-amber-700 hover:bg-amber-50'
-                                  }`}
-                                >
-                                  ⚠️ Flag Issue
-                                </button>
-                              </>
-                            )}
-
-                            {q.type === 'pass_fail' && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSetResponse(q, 'pass', false)}
+                                  onClick={() => {
+                                    const value =
+                                      q.type === 'equipment_status'
+                                        ? 'working'
+                                        : q.type === 'yes_no'
+                                          ? 'yes'
+                                          : 'pass';
+                                    handleSetResponse(q, value, false);
+                                  }}
                                   className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                                    resp?.value === 'pass' && !isFlagged
+                                    !isFlagged && resp?.value && (resp.value === 'working' || resp.value === 'pass' || resp.value === 'yes')
                                       ? 'bg-emerald-600 text-white shadow-sm'
                                       : 'bg-surface border border-line text-ink-muted hover:bg-surface-alt'
                                   }`}
@@ -1084,45 +1066,25 @@ export default function InspectClient() {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => handleSetResponse(q, 'fail', true)}
+                                  onClick={() => {
+                                    const value =
+                                      q.type === 'equipment_status'
+                                        ? 'flagged'
+                                        : q.type === 'yes_no'
+                                          ? 'no'
+                                          : 'fail';
+                                    handleSetResponse(q, value, true);
+                                  }}
                                   className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
                                     isFlagged
-                                      ? 'bg-rose-600 text-white shadow-sm'
-                                      : 'bg-surface border border-line text-rose-700 hover:bg-rose-50'
+                                      ? 'bg-amber-500 text-white shadow-sm'
+                                      : 'bg-surface border border-line text-amber-700 hover:bg-amber-50'
                                   }`}
                                 >
-                                  Fail / Flag
+                                  Flag
                                 </button>
                               </>
                             )}
-
-                            {q.type === 'yes_no' && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSetResponse(q, 'yes', false)}
-                                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                                    resp?.value === 'yes' && !isFlagged
-                                      ? 'bg-emerald-600 text-white shadow-sm'
-                                      : 'bg-surface border border-line text-ink-muted hover:bg-surface-alt'
-                                  }`}
-                                >
-                                  Yes
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSetResponse(q, 'no', true)}
-                                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                                    isFlagged
-                                      ? 'bg-rose-600 text-white shadow-sm'
-                                      : 'bg-surface border border-line text-rose-700 hover:bg-rose-50'
-                                  }`}
-                                >
-                                  No (Flag)
-                                </button>
-                              </>
-                            )}
-
 
                             {q.type === 'checkbox' && (
                               <label className="inline-flex items-center gap-2 text-sm font-bold text-ink cursor-pointer px-2 py-1.5 rounded-xl border border-line bg-surface hover:bg-surface-alt">

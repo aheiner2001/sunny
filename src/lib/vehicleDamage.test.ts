@@ -32,12 +32,14 @@ describe('vehicleDamage helpers', () => {
         photoDataUrls: [],
       }),
       event({ id: '5', side: 'rear', vehicleId: 'van-2', createdAt: '2026-01-05T10:00:00.000Z' }),
+      event({ id: '6', side: 'cab', createdAt: '2026-01-06T10:00:00.000Z', note: 'dash scratch' }),
     ];
 
     const latest = latestStatusBySide(events, 'van-1');
     expect(latest.left?.id).toBe('2');
     expect(latest.left?.note).toBe('new');
     expect(latest.front?.id).toBe('3');
+    expect(latest.cab?.id).toBe('6');
     expect(latest.rear).toBeNull();
     expect(latest.right).toBeNull();
   });

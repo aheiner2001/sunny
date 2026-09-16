@@ -114,6 +114,8 @@ function EquipmentPageContent() {
   // 3.4 Printable QR Sheet Modal
   const [printQrSheetOpen, setPrintQrSheetOpen] = useState(false);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
   const actionMenuBtnRef = useRef<HTMLButtonElement | null>(null);
 
@@ -806,22 +808,30 @@ function EquipmentPageContent() {
               <Plus className="h-4 w-4" aria-hidden />
               Add Equipment
             </button>
-            <button
-              type="button"
-              onClick={() => setPrintQrSheetOpen(true)}
-              className="btn btn-ghost cluster gap-1.5"
-            >
-              <Printer className="h-4 w-4" aria-hidden />
-              Print QR
-            </button>
-            <Link href="/equipment/scan" className="btn btn-ghost cluster gap-1.5">
-              <QrCode className="h-4 w-4" aria-hidden />
-              Scan
-            </Link>
-            <Link href="/issues" className="btn btn-ghost cluster gap-1.5">
-              <AlertTriangle className="h-4 w-4" aria-hidden />
-              Issues
-            </Link>
+            <div className="relative">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm px-2.5"
+                aria-label="More actions"
+                aria-expanded={headerMenuOpen}
+                onClick={() => setHeaderMenuOpen((v) => !v)}
+              >
+                <MoreHorizontal className="h-4 w-4" aria-hidden />
+              </button>
+              {headerMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 z-30 min-w-[11rem] rounded-[var(--radius)] border border-line bg-surface shadow-lg p-1 stack-tight">
+                  <button type="button" className="btn btn-ghost btn-sm w-full justify-start gap-2" onClick={() => { setPrintQrSheetOpen(true); setHeaderMenuOpen(false); }}>
+                    <Printer className="h-3.5 w-3.5" /> Print QR
+                  </button>
+                  <Link href="/equipment/scan" className="btn btn-ghost btn-sm w-full justify-start gap-2" onClick={() => setHeaderMenuOpen(false)}>
+                    <QrCode className="h-3.5 w-3.5" /> Scan
+                  </Link>
+                  <Link href="/issues" className="btn btn-ghost btn-sm w-full justify-start gap-2" onClick={() => setHeaderMenuOpen(false)}>
+                    <AlertTriangle className="h-3.5 w-3.5" /> Issues
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
         }
       />
@@ -921,8 +931,8 @@ function EquipmentPageContent() {
         )}
       </div>
 
-      <div className="card card-pad">
-        <div className="spread flex-col md:flex-row gap-3">
+      <div className="card card-pad stack gap-3">
+        <div className="spread flex-col md:flex-row gap-3 items-stretch md:items-center">
           <div className="field w-full md:max-w-xs">
             <label className="label sr-only" htmlFor="equipment-search">
               Search equipment
@@ -939,27 +949,45 @@ function EquipmentPageContent() {
               />
             </div>
           </div>
-          <div className="cluster w-full md:w-auto md:justify-end flex-wrap gap-2">
+          <div className="cluster flex-wrap gap-2 md:justify-end">
+            {(["all", "working", "flagged"] as const).map((status) => (
+              <button
+                key={status}
+                type="button"
+                onClick={() => setStatusFilter(status)}
+                className={`btn btn-sm capitalize ${statusFilter === status ? "btn-primary" : "btn-secondary"}`}
+              >
+                {status === "all" ? "All" : status}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((v) => !v)}
+              className={`btn btn-sm ${filtersOpen || categoryFilter !== "all" || lifespanFilter !== "all" || !(statusFilter === "all" || statusFilter === "working" || statusFilter === "flagged") ? "btn-primary" : "btn-secondary"}`}
+              aria-expanded={filtersOpen}
+            >
+              Filters
+            </button>
             <button
               type="button"
               onClick={toggleSelectAllFiltered}
-              className="btn btn-secondary btn-sm cluster gap-1 text-xs"
+              className="btn btn-ghost btn-sm cluster gap-1 text-xs"
             >
               {selectedEquipmentIds.length === filtered.length && filtered.length > 0 ? (
-                <>
-                  <CheckSquare className="w-3.5 h-3.5" /> Deselect All
-                </>
+                <><CheckSquare className="w-3.5 h-3.5" /> Deselect</>
               ) : (
-                <>
-                  <Square className="w-3.5 h-3.5" /> Select All ({filtered.length})
-                </>
+                <><Square className="w-3.5 h-3.5" /> Select</>
               )}
             </button>
+          </div>
+        </div>
+        {filtersOpen && (
+          <div className="pt-2 border-t border-line cluster flex-wrap gap-2">
             <label className="cluster text-sm font-semibold text-ink-muted">
               View
               <select
                 value={sortMode}
-                onChange={e => setSortMode(e.target.value as 'family' | 'equipment' | 'vehicle')}
+                onChange={e => setSortMode(e.target.value as "family" | "equipment" | "vehicle")}
                 className="select btn-sm w-auto"
               >
                 <option value="family">By tool type</option>
@@ -969,7 +997,7 @@ function EquipmentPageContent() {
             </label>
             <select
               value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value as 'all' | EquipmentCategory)}
+              onChange={(e) => setCategoryFilter(e.target.value as "all" | EquipmentCategory)}
               className="select btn-sm w-auto"
               aria-label="Filter by category"
             >
@@ -989,18 +1017,18 @@ function EquipmentPageContent() {
               <option value="low">Getting low</option>
               <option value="tracked">Lifespan tracked</option>
             </select>
-            {ALL_STATUSES.map((status) => (
+            {ALL_STATUSES.filter((s) => s !== "all" && s !== "working" && s !== "flagged").map((status) => (
               <button
                 key={status}
                 type="button"
                 onClick={() => setStatusFilter(status)}
-                className={`btn btn-sm capitalize ${statusFilter === status ? 'btn-primary' : 'btn-secondary'}`}
+                className={`btn btn-sm capitalize ${statusFilter === status ? "btn-primary" : "btn-secondary"}`}
               >
-                {status === 'low_stock' ? 'Low Stock Par' : status.replace('_', ' ')}
+                {status === "low_stock" ? "Low Stock Par" : status.replace("_", " ")}
               </button>
             ))}
           </div>
-        </div>
+        )}
       </div>
 
       {sortMode === 'family' && (

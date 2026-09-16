@@ -194,6 +194,9 @@ export interface ChecklistQuestion {
   options?: string[];
   reasonPresets?: string[];
   helperText?: string;
+  /** Manager-added blitz question; hidden from inspect after expiresAt (YYYY-MM-DD). */
+  isTemporary?: boolean;
+  expiresAt?: string | null;
 }
 
 export interface InspectionResponse {
@@ -349,7 +352,7 @@ export interface MissedReturn {
   completedReturnInspectionId?: string | null;
 }
 
-export type VehicleSide = 'front' | 'rear' | 'left' | 'right';
+export type VehicleSide = 'front' | 'rear' | 'left' | 'right' | 'cab';
 
 export interface VehicleDamageEvent {
   id: string;

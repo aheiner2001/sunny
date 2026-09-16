@@ -533,29 +533,37 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          {/* Filter Chips */}
-          <div className="px-5 pb-3 cluster gap-1.5 border-b border-line">
-            <button
-              type="button"
-              onClick={() => setActivityFilter('all')}
-              className={`btn btn-xs rounded-full px-2.5 ${activityFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+          {/* Activity filter - segmented control */}
+          <div className="px-5 pb-3 border-b border-line">
+            <div
+              className="inline-flex w-full sm:w-auto rounded-xl border border-line bg-surface-sunk p-1 gap-1"
+              role="tablist"
+              aria-label="Activity type"
             >
-              All ({todayInspections.length + todayIssues.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActivityFilter('inspections')}
-              className={`btn btn-xs rounded-full px-2.5 ${activityFilter === 'inspections' ? 'btn-primary' : 'btn-secondary'}`}
-            >
-              Inspections ({todayInspections.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActivityFilter('issues')}
-              className={`btn btn-xs rounded-full px-2.5 ${activityFilter === 'issues' ? 'btn-primary' : 'btn-secondary'}`}
-            >
-              Issues ({todayIssues.length})
-            </button>
+              {(
+                [
+                  { id: 'all' as const, label: 'All', count: todayInspections.length + todayIssues.length },
+                  { id: 'inspections' as const, label: 'Inspections', count: todayInspections.length },
+                  { id: 'issues' as const, label: 'Issues', count: todayIssues.length },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={activityFilter === tab.id}
+                  onClick={() => setActivityFilter(tab.id)}
+                  className={`flex-1 sm:flex-none min-w-[6.5rem] px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                    activityFilter === tab.id
+                      ? 'bg-surface text-ink shadow-sm'
+                      : 'text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  {tab.label}
+                  <span className="ml-1.5 font-semibold text-ink-faint">({tab.count})</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div>
