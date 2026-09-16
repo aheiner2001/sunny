@@ -26,12 +26,15 @@ import {
   LifespanMode,
   LifespanStatus,
   VehicleDayLog,
-  MissedReturn
+  MissedReturn,
+  VehicleDamageEvent,
+  VehicleSide
 } from '@/types';
 import { classifyIssueType } from './issueClassification';
 import { checkInFields, checkOutFields, occupancyAfterInspection, shouldAutoReturnVehicle, localDateString } from './occupancy';
 import { DEFAULT_RETURN_QUESTIONS, hasReturnForShift, normalizeReturnQuestions, shiftDateStringForVehicle } from './returnFlow';
 import { repairDuplicateCategoryIds } from './checklistCategories';
+import { assertDamagePayload } from './vehicleDamage';
 import { 
   computeLifespanStatus,
   calculateLifespanDueDate,
@@ -89,6 +92,7 @@ const STORAGE_KEYS = {
   OFFLINE_INSPECTIONS: 'sunny_offline_inspections',
   MISSED_RETURNS: 'sunny_missed_returns',
   OVERNIGHT_RECONCILED: 'sunny_overnight_reconciled',
+  VEHICLE_DAMAGE: 'sunny_vehicle_damage',
 };
 
 const DEFAULT_CHECKLIST_ID = 'standard-detailing-checklist';
@@ -464,6 +468,7 @@ class DataStore {
     localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(INITIAL_INSPECTIONS));
     localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(INITIAL_ISSUES));
     localStorage.setItem(STORAGE_KEYS.VEHICLE_DAY_LOGS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.VEHICLE_DAMAGE, JSON.stringify([]));
     const nowIso = new Date().toISOString();
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT_OPTIONS, JSON.stringify(
       INITIAL_EQUIPMENT.map((eq, index) => ({
@@ -3398,6 +3403,72 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
 
     window.dispatchEvent(new Event('sunny_db_update'));
   }
+  private readVehicleDamageEvents(): VehicleDamageEvent[] {
+    if (!this.isClient()) return [];
+    const data = localStorage.getItem(STORAGE_KEYS.VEHICLE_DAMAGE);
+    return data ? (JSON.parse(data) as VehicleDamageEvent[]) : [];
+  }
+
+  public getVehicleDamageEvents(vehicleId?: string): VehicleDamageEvent[] {
+    if (!this.isClient()) return [];
+    this.init();
+    const all = this.readVehicleDamageEvents();
+    const filtered = vehicleId ? all.filter((e) => e.vehicleId === vehicleId) : all;
+    return filtered.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  public async addVehicleDamageEvent(input: {
+    vehicleId: string;
+    side: VehicleSide | null;
+    noNewDamage: boolean;
+    note?: string;
+    photoDataUrls: string[];
+    inspectionId?: string | null;
+    userId: string;
+    userName: string;
+  }): Promise<VehicleDamageEvent> {
+    if (!this.isClient()) throw new Error('Client only');
+    this.init();
+
+    const vehicle = this.getVehicle(input.vehicleId);
+    if (!vehicle) throw new Error('Vehicle not found');
+
+    const photoDataUrls = (input.photoDataUrls || []).slice(0, 8);
+    assertDamagePayload({
+      noNewDamage: input.noNewDamage,
+      side: input.noNewDamage ? null : input.side,
+      photoDataUrls: input.noNewDamage ? [] : photoDataUrls,
+    });
+
+    const event: VehicleDamageEvent = {
+      id: `dmg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      vehicleId: input.vehicleId,
+      side: input.noNewDamage ? null : input.side,
+      noNewDamage: Boolean(input.noNewDamage),
+      note: input.note?.trim() || undefined,
+      photoDataUrls: input.noNewDamage ? [] : photoDataUrls,
+      inspectionId: input.inspectionId ?? null,
+      userId: input.userId,
+      userName: input.userName,
+      createdAt: new Date().toISOString(),
+    };
+
+    const next = [event, ...this.readVehicleDamageEvents()];
+    localStorage.setItem(STORAGE_KEYS.VEHICLE_DAMAGE, JSON.stringify(next));
+
+    if (db) {
+      try {
+        await setDoc(doc(db, 'vehicleDamage', event.id), sanitizeForFirestore(event));
+      } catch (e: any) {
+        console.warn('Firestore vehicleDamage write error (saved locally):', e?.message || e);
+      }
+    }
+
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return event;
+  }
+
+
 }
 
 export const dbService = new DataStore();
