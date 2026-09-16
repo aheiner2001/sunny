@@ -1,7 +1,13 @@
 'use client';
 import React, { useEffect, useMemo, useState } from 'react';
 import { dbService } from '@/lib/db';
-import { latestStatusBySide, SIDE_LABEL, VEHICLE_SIDES } from '@/lib/vehicleDamage';
+import {
+  latestStatusBySide,
+  OVERVIEW_IMAGE,
+  SIDE_IMAGE,
+  SIDE_LABEL,
+  VEHICLE_SIDES,
+} from '@/lib/vehicleDamage';
 import type { VehicleDamageEvent, VehicleSide } from '@/types';
 
 type Props = {
@@ -29,41 +35,71 @@ export function VehicleDamagePanel({ vehicleId }: Props) {
     return events.filter((e) => e.side === selectedSide);
   }, [events, selectedSide]);
 
-  const toggle = (s: VehicleSide) =>
-    setSelectedSide((cur) => (cur === s ? 'all' : s));
+  const toggle = (s: VehicleSide) => setSelectedSide((cur) => (cur === s ? 'all' : s));
+
+  const previewSrc = selectedSide === 'all' ? OVERVIEW_IMAGE : SIDE_IMAGE[selectedSide];
+  const previewLabel = selectedSide === 'all' ? 'Overview' : SIDE_LABEL[selectedSide];
+  const previewLogged =
+    selectedSide !== 'all' && latest[selectedSide] ? latest[selectedSide] : null;
 
   return (
     <div className="stack gap-4">
       <div className="card card-pad">
-        <h2 className="card-title mb-3">Damage overview</h2>
-        <div className="mx-auto max-w-sm grid grid-cols-3 gap-2 place-items-center">
-          <div />
-          <SideTile side="front" event={latest.front} active={selectedSide === 'front'} onSelect={() => toggle('front')} />
-          <div />
-          <SideTile side="left" event={latest.left} active={selectedSide === 'left'} onSelect={() => toggle('left')} />
-          <SideTile side="cab" event={latest.cab} active={selectedSide === 'cab'} onSelect={() => toggle('cab')} tall />
-          <SideTile side="right" event={latest.right} active={selectedSide === 'right'} onSelect={() => toggle('right')} />
-          <div />
-          <SideTile side="rear" event={latest.rear} active={selectedSide === 'rear'} onSelect={() => toggle('rear')} />
-          <div />
-        </div>
-        <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-          {VEHICLE_SIDES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => toggle(s)}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${
-                selectedSide === s ? 'bg-ink text-white border-ink' : 'bg-surface border-line text-ink-muted'
-              }`}
-            >
-              {SIDE_LABEL[s]}
+        <div className="spread items-start gap-2 mb-3">
+          <div>
+            <h2 className="card-title">Damage overview</h2>
+            <p className="hint mt-1">Tap a side to preview the van and filter history.</p>
+          </div>
+          {selectedSide !== 'all' && (
+            <button type="button" className="btn btn-ghost btn-sm text-xs" onClick={() => setSelectedSide('all')}>
+              Show overview
             </button>
-          ))}
+          )}
         </div>
-        <p className="hint mt-3 text-center">
-          Tap a side (or Cab) to filter history. Empty sides have no damage logged yet.
-        </p>
+
+        <div className="rounded-2xl border border-line bg-[var(--surface-alt,#f4f4f5)] overflow-hidden">
+          <div className="spread px-3 py-2 border-b border-line">
+            <span className="text-xs font-bold text-ink">{previewLabel}</span>
+            {previewLogged ? (
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded">
+                Damage logged
+              </span>
+            ) : selectedSide !== 'all' ? (
+              <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">No entry yet</span>
+            ) : null}
+          </div>
+          <div className="flex items-center justify-center min-h-[180px] sm:min-h-[220px] p-4 sm:p-6">
+            <img
+              src={previewSrc}
+              alt={`${previewLabel} vehicle diagram`}
+              className="max-h-52 sm:max-h-64 w-auto max-w-full object-contain drop-shadow-sm"
+            />
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+          {VEHICLE_SIDES.map((s) => {
+            const has = Boolean(latest[s]);
+            const active = selectedSide === s;
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => toggle(s)}
+                className={`px-2.5 py-1.5 rounded-full text-[11px] font-bold border transition-colors ${
+                  active
+                    ? 'bg-ink text-white border-ink'
+                    : has
+                      ? 'bg-amber-50 border-amber-300 text-amber-900'
+                      : 'bg-surface border-line text-ink-muted hover:border-ink/40'
+                }`}
+              >
+                {SIDE_LABEL[s]}
+                {has ? ' ·' : ''}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="card card-pad stack">
@@ -87,11 +123,7 @@ export function VehicleDamagePanel({ vehicleId }: Props) {
               <div className="spread items-start gap-2">
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-ink">
-                    {e.noNewDamage
-                      ? 'No new damage'
-                      : e.side
-                        ? SIDE_LABEL[e.side]
-                        : 'Damage'}
+                    {e.noNewDamage ? 'No new damage' : e.side ? SIDE_LABEL[e.side] : 'Damage'}
                   </p>
                   <p className="text-[11px] text-ink-faint">
                     {new Date(e.createdAt).toLocaleString([], {
@@ -131,47 +163,5 @@ export function VehicleDamagePanel({ vehicleId }: Props) {
         )}
       </div>
     </div>
-  );
-}
-
-function SideTile({
-  side,
-  event,
-  active,
-  onSelect,
-  tall,
-}: {
-  side: VehicleSide;
-  event: VehicleDamageEvent | null;
-  active: boolean;
-  onSelect: () => void;
-  tall?: boolean;
-}) {
-  const thumb = event?.photoDataUrls?.[0];
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={`w-20 ${tall ? 'h-24' : 'h-16'} rounded-xl border text-left overflow-hidden transition-all ${
-        active
-          ? 'border-ink ring-2 ring-ink/20'
-          : event
-            ? 'border-amber-400'
-            : 'border-line'
-      } bg-surface`}
-      title={SIDE_LABEL[side]}
-    >
-      {thumb ? (
-        <img src={thumb} alt="" className={`w-full ${tall ? 'h-16' : 'h-10'} object-cover`} />
-      ) : (
-        <div className={`${tall ? 'h-16' : 'h-10'} bg-surface-sunk flex items-center justify-center text-[10px] font-bold text-ink-faint uppercase`}>
-          {tall ? 'Cab' : ''}
-        </div>
-      )}
-      <div className="px-1.5 py-0.5 text-[10px] font-bold text-ink truncate">
-        {SIDE_LABEL[side]}
-        {event ? ' · logged' : ''}
-      </div>
-    </button>
   );
 }

@@ -203,6 +203,8 @@ export interface ChecklistQuestion {
   seasonEnd?: string | null;
   /** Force seasonal question on outside its window (early weather). */
   forceActive?: boolean;
+  /** Hide seasonal question even inside its window (e.g. no snow yet). */
+  forcePaused?: boolean;
 }
 
 export interface InspectionResponse {

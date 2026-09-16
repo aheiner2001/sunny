@@ -118,6 +118,8 @@ function SettingsPageContent() {
     seasonStart: string;
     seasonEnd: string;
     forceActive: boolean;
+    forcePaused: boolean;
+    seasonControl: 'auto' | 'force_on' | 'paused';
   }>({
     text: '',
     category: 'equipment',
@@ -132,7 +134,9 @@ function SettingsPageContent() {
     isSeasonal: false,
     seasonStart: '12-01',
     seasonEnd: '02-28',
-    forceActive: false
+    forceActive: false,
+    forcePaused: false,
+    seasonControl: 'auto'
   });
 
   const loadData = () => {
@@ -424,7 +428,9 @@ function SettingsPageContent() {
       isSeasonal: false,
       seasonStart: '12-01',
       seasonEnd: '02-28',
-      forceActive: false
+      forceActive: false,
+      forcePaused: false,
+      seasonControl: 'auto' as const
     });
     setIsQuestionModalOpen(true);
   };
@@ -446,7 +452,9 @@ function SettingsPageContent() {
       isSeasonal: Boolean(q.isSeasonal),
       seasonStart: q.seasonStart || '12-01',
       seasonEnd: q.seasonEnd || '02-28',
-      forceActive: Boolean(q.forceActive)
+      forceActive: Boolean(q.forceActive),
+      forcePaused: Boolean(q.forcePaused),
+      seasonControl: q.forcePaused ? 'paused' : q.forceActive ? 'force_on' : 'auto'
     });
     setIsQuestionModalOpen(true);
   };
@@ -475,7 +483,8 @@ function SettingsPageContent() {
         isSeasonal: questionForm.visibility === 'seasonal' || undefined,
         seasonStart: questionForm.visibility === 'seasonal' ? questionForm.seasonStart : null,
         seasonEnd: questionForm.visibility === 'seasonal' ? questionForm.seasonEnd : null,
-        forceActive: questionForm.visibility === 'seasonal' ? questionForm.forceActive : undefined
+        forceActive: questionForm.visibility === 'seasonal' ? questionForm.seasonControl === 'force_on' : undefined,
+        forcePaused: questionForm.visibility === 'seasonal' ? questionForm.seasonControl === 'paused' : undefined
       } : q);
     } else {
       const newQ: ChecklistQuestion = {
@@ -493,7 +502,8 @@ function SettingsPageContent() {
         isSeasonal: questionForm.visibility === 'seasonal' || undefined,
         seasonStart: questionForm.visibility === 'seasonal' ? questionForm.seasonStart : null,
         seasonEnd: questionForm.visibility === 'seasonal' ? questionForm.seasonEnd : null,
-        forceActive: questionForm.visibility === 'seasonal' ? questionForm.forceActive : undefined
+        forceActive: questionForm.visibility === 'seasonal' ? questionForm.seasonControl === 'force_on' : undefined,
+        forcePaused: questionForm.visibility === 'seasonal' ? questionForm.seasonControl === 'paused' : undefined
       };
       updatedQs = [...questions, newQ];
     }
@@ -809,7 +819,7 @@ function SettingsPageContent() {
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       {q.isSeasonal && (
                         <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                          {q.forceActive ? 'Seasonal · forced on' : `Seasonal · ${q.seasonStart || '?'}–${q.seasonEnd || '?'}`}
+                          {q.forcePaused ? 'Seasonal · paused' : q.forcePaused ? 'Seasonal · paused' : q.forceActive ? 'Seasonal · forced on' : `Seasonal · ${q.seasonStart || '?'}–${q.seasonEnd || '?'}`}
                         </span>
                       )}
                       {q.isTemporary && !q.isSeasonal && (
@@ -1434,6 +1444,8 @@ function SettingsPageContent() {
                           isTemporary: mode === 'temporary',
                           isSeasonal: mode === 'seasonal',
                           forceActive: mode === 'seasonal' ? questionForm.forceActive : false,
+                          forcePaused: mode === 'seasonal' ? questionForm.forcePaused : false,
+                          seasonControl: mode === 'seasonal' ? questionForm.seasonControl : 'auto',
                         })
                       }
                       className={`btn btn-sm ${questionForm.visibility === mode ? 'bg-surface-sunk text-ink font-semibold border border-line' : 'btn-secondary'}`}
@@ -1487,15 +1499,35 @@ function SettingsPageContent() {
                         />
                       </div>
                     </div>
-                    <label className="cluster gap-2 text-xs font-bold text-ink cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={questionForm.forceActive}
-                        onChange={(e) => setQuestionForm({ ...questionForm, forceActive: e.target.checked })}
-                        className="w-4 h-4 text-ink rounded border-slate-300 focus:ring-sky-500"
-                      />
-                      Force on now (early weather / override)
-                    </label>
+                    <div className="stack gap-1.5">
+                      <p className="text-[11px] font-bold text-ink-muted uppercase tracking-wider">This season</p>
+                      <div className="cluster flex-wrap gap-2">
+                        {([
+                          ['auto', 'On schedule'],
+                          ['force_on', 'Force on'],
+                          ['paused', 'Paused'],
+                        ] as const).map(([mode, label]) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() =>
+                              setQuestionForm({
+                                ...questionForm,
+                                seasonControl: mode,
+                                forceActive: mode === 'force_on',
+                                forcePaused: mode === 'paused',
+                              })
+                            }
+                            className={`btn btn-sm ${questionForm.seasonControl === mode ? 'bg-surface-sunk text-ink font-semibold border border-line' : 'btn-secondary'}`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-ink-muted">
+                        On schedule follows the dates. Force on shows early (snow). Paused hides even during the window (no snow yet).
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>

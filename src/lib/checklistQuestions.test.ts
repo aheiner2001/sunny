@@ -48,6 +48,21 @@ describe('activeChecklistQuestions', () => {
     expect(activeChecklistQuestions(qs, new Date('2026-07-10')).map((q) => q.id)).toEqual([]);
   });
 
+  it('forcePaused hides seasonal inside window', () => {
+    const qs: ChecklistQuestion[] = [
+      {
+        ...base,
+        id: 's',
+        text: 'Drain tanks',
+        isSeasonal: true,
+        seasonStart: '12-01',
+        seasonEnd: '02-28',
+        forcePaused: true,
+      },
+    ];
+    expect(activeChecklistQuestions(qs, new Date('2026-12-15')).map((q) => q.id)).toEqual([]);
+  });
+
   it('forceActive shows seasonal outside window', () => {
     const qs: ChecklistQuestion[] = [
       {

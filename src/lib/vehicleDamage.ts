@@ -10,6 +10,18 @@ export const SIDE_LABEL: Record<VehicleSide, string> = {
   cab: 'Cab',
 };
 
+
+export const SIDE_IMAGE: Record<VehicleSide, string> = {
+  front: '/vehicle-damage/maverick/front.png',
+  rear: '/vehicle-damage/maverick/rear.png',
+  left: '/vehicle-damage/maverick/left.png',
+  right: '/vehicle-damage/maverick/right.png',
+  cab: '/vehicle-damage/maverick/cab.png',
+};
+
+/** Top-down overview when no side is selected. */
+export const OVERVIEW_IMAGE = '/vehicle-damage/maverick/top.png';
+
 export const MAX_DAMAGE_PHOTOS = 8;
 
 export function latestStatusBySide(
