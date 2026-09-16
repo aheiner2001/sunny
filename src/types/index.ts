@@ -197,6 +197,12 @@ export interface ChecklistQuestion {
   /** Manager-added blitz question; hidden from inspect after expiresAt (YYYY-MM-DD). */
   isTemporary?: boolean;
   expiresAt?: string | null;
+  /** Yearly seasonal window (MM-DD). Wraps New Year when start > end (e.g. 12-01 to 02-28). */
+  isSeasonal?: boolean;
+  seasonStart?: string | null;
+  seasonEnd?: string | null;
+  /** Force seasonal question on outside its window (early weather). */
+  forceActive?: boolean;
 }
 
 export interface InspectionResponse {
