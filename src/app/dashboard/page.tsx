@@ -533,10 +533,10 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          {/* Activity filter - segmented control */}
+          {/* Activity filter - equal-width segmented control */}
           <div className="px-5 pb-3 border-b border-line">
             <div
-              className="inline-flex w-full sm:w-auto rounded-xl border border-line bg-surface-sunk p-1 gap-1"
+              className="grid grid-cols-3 w-full rounded-xl border border-line bg-surface-sunk p-1"
               role="tablist"
               aria-label="Activity type"
             >
@@ -546,23 +546,28 @@ export default function DashboardPage() {
                   { id: 'inspections' as const, label: 'Inspections', count: todayInspections.length },
                   { id: 'issues' as const, label: 'Issues', count: todayIssues.length },
                 ] as const
-              ).map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={activityFilter === tab.id}
-                  onClick={() => setActivityFilter(tab.id)}
-                  className={`flex-1 sm:flex-none min-w-[6.5rem] px-3 py-2 rounded-lg text-xs font-bold transition-all ${
-                    activityFilter === tab.id
-                      ? 'bg-surface text-ink shadow-sm'
-                      : 'text-ink-muted hover:text-ink'
-                  }`}
-                >
-                  {tab.label}
-                  <span className="ml-1.5 font-semibold text-ink-faint">({tab.count})</span>
-                </button>
-              ))}
+              ).map((tab) => {
+                const active = activityFilter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setActivityFilter(tab.id)}
+                    className={`flex items-center justify-center gap-1.5 min-h-[2.25rem] px-2 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                      active
+                        ? 'bg-surface text-ink shadow-sm'
+                        : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    <span className="truncate">{tab.label}</span>
+                    <span className={`tabular-nums text-[10px] font-semibold ${active ? 'text-ink-muted' : 'text-ink-faint'}`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
