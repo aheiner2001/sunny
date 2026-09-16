@@ -338,11 +338,15 @@ function VehiclesPageContent() {
                 <div className="card card-pad bg-[var(--surface-alt)] stack-tight text-xs">
                   <div className="spread">
                     <span className="text-ink-faint font-medium">Current Driver:</span>
-                    <span className="font-bold">{vehicle.currentUserName || 'Unassigned'}</span>
+                    <span className={vehicle.currentUserName ? 'font-bold text-ink' : 'text-ink-faint'}>{vehicle.currentUserName || '—'}</span>
                   </div>
                   <div className="spread">
                     <span className="text-ink-faint font-medium">Last Inspection:</span>
-                    <InspectionStatusBadge status={vehicle.lastInspectionStatus} />
+                    {vehicle.lastInspectionStatus ? (
+                      <InspectionStatusBadge status={vehicle.lastInspectionStatus} />
+                    ) : (
+                      <span className="text-ink-faint">—</span>
+                    )}
                   </div>
                   <div className="spread">
                     <span className="text-ink-faint font-medium">Equipment Health:</span>
@@ -352,7 +356,7 @@ function VehiclesPageContent() {
                         {flaggedEqCount} flagged
                       </span>
                     ) : vehicleEquipment.length === 0 ? (
-                      <span className="text-ink-faint">No equipment assigned</span>
+                      <span className="text-ink-faint">—</span>
                     ) : (
                       <span className="text-ink-muted cluster">
                         <CheckCircle2 className="h-3.5 w-3.5 text-[var(--ok)]" aria-hidden />

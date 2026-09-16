@@ -1,6 +1,14 @@
 import type { VehicleDamageEvent, VehicleSide } from '@/types';
 
-export const VEHICLE_SIDES: VehicleSide[] = ['front', 'rear', 'left', 'right'];
+export const VEHICLE_SIDES: VehicleSide[] = ['front', 'rear', 'left', 'right', 'cab'];
+
+export const SIDE_LABEL: Record<VehicleSide, string> = {
+  front: 'Front',
+  rear: 'Rear',
+  left: 'Left',
+  right: 'Right',
+  cab: 'Cab',
+};
 
 export const MAX_DAMAGE_PHOTOS = 8;
 
@@ -13,6 +21,7 @@ export function latestStatusBySide(
     rear: null,
     left: null,
     right: null,
+    cab: null,
   };
   const forVehicle = events
     .filter((e) => e.vehicleId === vehicleId && e.side && !e.noNewDamage)

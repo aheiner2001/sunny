@@ -1,16 +1,8 @@
 'use client';
-
 import React, { useEffect, useMemo, useState } from 'react';
 import { dbService } from '@/lib/db';
-import { latestStatusBySide } from '@/lib/vehicleDamage';
+import { latestStatusBySide, SIDE_LABEL, VEHICLE_SIDES } from '@/lib/vehicleDamage';
 import type { VehicleDamageEvent, VehicleSide } from '@/types';
-
-const SIDE_LABEL: Record<VehicleSide, string> = {
-  front: 'Front',
-  rear: 'Rear',
-  left: 'Left',
-  right: 'Right',
-};
 
 type Props = {
   vehicleId: string;
@@ -37,45 +29,40 @@ export function VehicleDamagePanel({ vehicleId }: Props) {
     return events.filter((e) => e.side === selectedSide);
   }, [events, selectedSide]);
 
+  const toggle = (s: VehicleSide) =>
+    setSelectedSide((cur) => (cur === s ? 'all' : s));
+
   return (
     <div className="stack gap-4">
       <div className="card card-pad">
         <h2 className="card-title mb-3">Damage overview</h2>
-        <div className="mx-auto max-w-xs grid grid-cols-3 gap-2 place-items-center">
+        <div className="mx-auto max-w-sm grid grid-cols-3 gap-2 place-items-center">
           <div />
-          <SideTile
-            side="front"
-            event={latest.front}
-            active={selectedSide === 'front'}
-            onSelect={() => setSelectedSide((s) => (s === 'front' ? 'all' : 'front'))}
-          />
+          <SideTile side="front" event={latest.front} active={selectedSide === 'front'} onSelect={() => toggle('front')} />
           <div />
-          <SideTile
-            side="left"
-            event={latest.left}
-            active={selectedSide === 'left'}
-            onSelect={() => setSelectedSide((s) => (s === 'left' ? 'all' : 'left'))}
-          />
-          <div className="w-16 h-24 rounded-xl border-2 border-dashed border-line bg-surface-sunk flex items-center justify-center text-[10px] font-bold text-ink-faint uppercase tracking-wider">
-            Van
-          </div>
-          <SideTile
-            side="right"
-            event={latest.right}
-            active={selectedSide === 'right'}
-            onSelect={() => setSelectedSide((s) => (s === 'right' ? 'all' : 'right'))}
-          />
+          <SideTile side="left" event={latest.left} active={selectedSide === 'left'} onSelect={() => toggle('left')} />
+          <SideTile side="cab" event={latest.cab} active={selectedSide === 'cab'} onSelect={() => toggle('cab')} tall />
+          <SideTile side="right" event={latest.right} active={selectedSide === 'right'} onSelect={() => toggle('right')} />
           <div />
-          <SideTile
-            side="rear"
-            event={latest.rear}
-            active={selectedSide === 'rear'}
-            onSelect={() => setSelectedSide((s) => (s === 'rear' ? 'all' : 'rear'))}
-          />
+          <SideTile side="rear" event={latest.rear} active={selectedSide === 'rear'} onSelect={() => toggle('rear')} />
           <div />
         </div>
+        <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+          {VEHICLE_SIDES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => toggle(s)}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${
+                selectedSide === s ? 'bg-ink text-white border-ink' : 'bg-surface border-line text-ink-muted'
+              }`}
+            >
+              {SIDE_LABEL[s]}
+            </button>
+          ))}
+        </div>
         <p className="hint mt-3 text-center">
-          Tap a side to filter history. Empty sides have no damage logged yet.
+          Tap a side (or Cab) to filter history. Empty sides have no damage logged yet.
         </p>
       </div>
 
@@ -83,7 +70,7 @@ export function VehicleDamagePanel({ vehicleId }: Props) {
         <div className="spread items-center">
           <h2 className="card-title">
             History
-            {selectedSide !== 'all' ? ` · ${SIDE_LABEL[selectedSide]}` : ''}
+            {selectedSide !== 'all' ? ` Â· ${SIDE_LABEL[selectedSide]}` : ''}
           </h2>
           {selectedSide !== 'all' && (
             <button type="button" className="link-action text-xs" onClick={() => setSelectedSide('all')}>
@@ -113,7 +100,7 @@ export function VehicleDamagePanel({ vehicleId }: Props) {
                       hour: 'numeric',
                       minute: '2-digit',
                     })}{' '}
-                    · {e.userName}
+                    Â· {e.userName}
                   </p>
                   {e.note && <p className="text-xs text-ink-muted mt-1">{e.note}</p>}
                 </div>
@@ -152,18 +139,20 @@ function SideTile({
   event,
   active,
   onSelect,
+  tall,
 }: {
   side: VehicleSide;
   event: VehicleDamageEvent | null;
   active: boolean;
   onSelect: () => void;
+  tall?: boolean;
 }) {
   const thumb = event?.photoDataUrls?.[0];
   return (
     <button
       type="button"
       onClick={onSelect}
-      className={`w-20 h-16 rounded-xl border text-left overflow-hidden transition-all ${
+      className={`w-20 ${tall ? 'h-24' : 'h-16'} rounded-xl border text-left overflow-hidden transition-all ${
         active
           ? 'border-ink ring-2 ring-ink/20'
           : event
@@ -173,15 +162,16 @@ function SideTile({
       title={SIDE_LABEL[side]}
     >
       {thumb ? (
-        <img src={thumb} alt="" className="w-full h-10 object-cover" />
+        <img src={thumb} alt="" className={`w-full ${tall ? 'h-16' : 'h-10'} object-cover`} />
       ) : (
-        <div className="h-10 bg-surface-sunk" />
+        <div className={`${tall ? 'h-16' : 'h-10'} bg-surface-sunk flex items-center justify-center text-[10px] font-bold text-ink-faint uppercase`}>
+          {tall ? 'Cab' : ''}
+        </div>
       )}
       <div className="px-1.5 py-0.5 text-[10px] font-bold text-ink truncate">
         {SIDE_LABEL[side]}
-        {event ? ' · logged' : ''}
+        {event ? ' Â· logged' : ''}
       </div>
     </button>
   );
 }
-

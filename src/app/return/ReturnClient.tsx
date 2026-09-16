@@ -12,6 +12,7 @@ import {
   vehiclesInUse,
 } from '@/lib/returnFlow';
 import { canSubmitInspection } from '../inspect/inspectionValidation';
+import { activeChecklistQuestions } from '@/lib/checklistQuestions';
 import { VehicleDamageCapture } from '@/components/VehicleDamageCapture';
 import type {
   ChecklistQuestion,
@@ -81,7 +82,7 @@ export default function ReturnClient() {
     const fleet = dbService.getVehicles();
     setVehicles(fleet);
     const config = dbService.getChecklistConfig();
-    setQuestions(normalizeReturnQuestions(config.returnQuestions));
+    setQuestions(activeChecklistQuestions(normalizeReturnQuestions(config.returnQuestions)));
     if (missedId) {
       const row = dbService.getMissedReturns().find((m) => m.id === missedId) || null;
       setMissed(row && row.status === 'pending' ? row : row);
@@ -317,13 +318,15 @@ export default function ReturnClient() {
                   {q.required ? <span className="text-[var(--critical)]"> *</span> : null}
                 </p>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {q.type === 'pass_fail' && (
+                  {(q.type === 'pass_fail' || q.type === 'yes_no' || !q.type) && (
                     <>
                       <button
                         type="button"
-                        onClick={() => setResponse(q, 'pass', false)}
+                        onClick={() =>
+                          setResponse(q, q.type === 'pass_fail' ? 'pass' : 'yes', false)
+                        }
                         className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                          resp?.value === 'pass' && !isFlagged
+                          !isFlagged && (resp?.value === 'pass' || resp?.value === 'yes')
                             ? 'bg-emerald-600 text-white shadow-sm'
                             : 'bg-surface border border-line text-ink-muted hover:bg-surface-alt'
                         }`}
@@ -332,40 +335,20 @@ export default function ReturnClient() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setResponse(q, 'fail', true)}
+                        onClick={() =>
+                          setResponse(
+                            q,
+                            q.type === 'pass_fail' ? 'fail' : 'no',
+                            q.type === 'pass_fail'
+                          )
+                        }
                         className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                          isFlagged
-                            ? 'bg-rose-600 text-white shadow-sm'
-                            : 'bg-surface border border-line text-rose-700 hover:bg-rose-50'
+                          isFlagged || resp?.value === 'fail' || resp?.value === 'no'
+                            ? 'bg-amber-500 text-white shadow-sm'
+                            : 'bg-surface border border-line text-amber-700 hover:bg-amber-50'
                         }`}
                       >
-                        Fail
-                      </button>
-                    </>
-                  )}
-                  {(q.type === 'yes_no' || !q.type) && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setResponse(q, 'yes', false)}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                          resp?.value === 'yes'
-                            ? 'bg-emerald-600 text-white shadow-sm'
-                            : 'bg-surface border border-line text-ink-muted hover:bg-surface-alt'
-                        }`}
-                      >
-                        Yes
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setResponse(q, 'no', false)}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                          resp?.value === 'no'
-                            ? 'bg-ink text-white shadow-sm'
-                            : 'bg-surface border border-line text-ink-muted hover:bg-surface-alt'
-                        }`}
-                      >
-                        No
+                        Flag
                       </button>
                     </>
                   )}

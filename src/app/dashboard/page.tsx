@@ -533,29 +533,42 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          {/* Filter Chips */}
-          <div className="px-5 pb-3 cluster gap-1.5 border-b border-line">
-            <button
-              type="button"
-              onClick={() => setActivityFilter('all')}
-              className={`btn btn-xs rounded-full px-2.5 ${activityFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+          {/* Activity filter - equal-width segmented control */}
+          <div className="px-5 pb-3 border-b border-line">
+            <div
+              className="grid grid-cols-3 w-full rounded-xl border border-line bg-surface-sunk p-1"
+              role="tablist"
+              aria-label="Activity type"
             >
-              All ({todayInspections.length + todayIssues.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActivityFilter('inspections')}
-              className={`btn btn-xs rounded-full px-2.5 ${activityFilter === 'inspections' ? 'btn-primary' : 'btn-secondary'}`}
-            >
-              Inspections ({todayInspections.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActivityFilter('issues')}
-              className={`btn btn-xs rounded-full px-2.5 ${activityFilter === 'issues' ? 'btn-primary' : 'btn-secondary'}`}
-            >
-              Issues ({todayIssues.length})
-            </button>
+              {(
+                [
+                  { id: 'all' as const, label: 'All', count: todayInspections.length + todayIssues.length },
+                  { id: 'inspections' as const, label: 'Inspections', count: todayInspections.length },
+                  { id: 'issues' as const, label: 'Issues', count: todayIssues.length },
+                ] as const
+              ).map((tab) => {
+                const active = activityFilter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setActivityFilter(tab.id)}
+                    className={`flex items-center justify-center gap-1.5 min-h-[2.25rem] px-2 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                      active
+                        ? 'bg-surface text-ink shadow-sm'
+                        : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    <span className="truncate">{tab.label}</span>
+                    <span className={`tabular-nums text-[10px] font-semibold ${active ? 'text-ink-muted' : 'text-ink-faint'}`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div>

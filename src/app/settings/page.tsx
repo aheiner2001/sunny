@@ -111,6 +111,8 @@ function SettingsPageContent() {
     helperText: string;
     equipmentName: string;
     reasonPresets: string;
+    isTemporary: boolean;
+    expiresAt: string;
   }>({
     text: '',
     category: 'equipment',
@@ -118,7 +120,9 @@ function SettingsPageContent() {
     required: true,
     helperText: '',
     equipmentName: '',
-    reasonPresets: ''
+    reasonPresets: '',
+    isTemporary: false,
+    expiresAt: ''
   });
 
   const loadData = () => {
@@ -403,7 +407,9 @@ function SettingsPageContent() {
       required: true,
       helperText: '',
       equipmentName: '',
-      reasonPresets: ''
+      reasonPresets: '',
+      isTemporary: false,
+      expiresAt: ''
     });
     setIsQuestionModalOpen(true);
   };
@@ -418,6 +424,9 @@ function SettingsPageContent() {
       helperText: q.helperText || '',
       equipmentName: q.equipmentName || '',
       reasonPresets: (q.reasonPresets || []).join(', ')
+    ,
+      isTemporary: Boolean(q.isTemporary),
+      expiresAt: q.expiresAt || ''
     });
     setIsQuestionModalOpen(true);
   };
@@ -440,7 +449,9 @@ function SettingsPageContent() {
         required: questionForm.required,
         helperText: questionForm.helperText.trim() || undefined,
         equipmentName: questionForm.equipmentName.trim() || undefined,
-        reasonPresets: questionForm.reasonPresets.split(',').map(s => s.trim()).filter(Boolean)
+        reasonPresets: questionForm.reasonPresets.split(',').map(s => s.trim()).filter(Boolean),
+        isTemporary: questionForm.isTemporary || undefined,
+        expiresAt: questionForm.isTemporary && questionForm.expiresAt ? questionForm.expiresAt : null
       } : q);
     } else {
       const newQ: ChecklistQuestion = {
@@ -452,7 +463,9 @@ function SettingsPageContent() {
         order: questions.length + 1,
         helperText: questionForm.helperText.trim() || undefined,
         equipmentName: questionForm.equipmentName.trim() || undefined,
-        reasonPresets: questionForm.reasonPresets.split(',').map(s => s.trim()).filter(Boolean)
+        reasonPresets: questionForm.reasonPresets.split(',').map(s => s.trim()).filter(Boolean),
+        isTemporary: questionForm.isTemporary || undefined,
+        expiresAt: questionForm.isTemporary && questionForm.expiresAt ? questionForm.expiresAt : null
       };
       updatedQs = [...questions, newQ];
     }
@@ -1090,8 +1103,14 @@ function SettingsPageContent() {
 
       {/* DELETE CATEGORY MODAL */}
       {deleteCategoryTarget && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-surface rounded-[var(--radius-xl)] p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setDeleteCategoryTarget(null)}
+        >
+          <div
+            className="bg-surface rounded-[var(--radius-xl)] p-6 sm:p-8 max-w-md w-full max-h-[min(90vh,36rem)] overflow-y-auto shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150 my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
               <h3 className="text-base font-bold text-ink">Delete category</h3>
               <button onClick={() => setDeleteCategoryTarget(null)} className="text-ink-faint hover:text-ink-muted p-1">
@@ -1170,8 +1189,14 @@ function SettingsPageContent() {
 
       {/* CATEGORY MODAL */}
       {isCategoryModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-surface rounded-[var(--radius-xl)] p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setIsCategoryModalOpen(false)}
+        >
+          <div
+            className="bg-surface rounded-[var(--radius-xl)] p-6 sm:p-8 max-w-md w-full max-h-[min(90vh,36rem)] overflow-y-auto shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150 my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
               <h3 className="text-base font-bold text-ink">
                 {editingCategory ? 'Edit Inspection Category' : 'Add Inspection Category'}
@@ -1231,9 +1256,15 @@ function SettingsPageContent() {
 
       {/* QUESTION MODAL */}
       {isQuestionModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-surface rounded-[var(--radius-xl)] p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setIsQuestionModalOpen(false)}
+        >
+          <div
+            className="bg-surface rounded-[var(--radius-xl)] p-6 sm:p-8 max-w-lg w-full max-h-[min(90vh,44rem)] overflow-y-auto shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150 my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4 sticky top-0 bg-surface z-10">
               <h3 className="text-base font-bold text-ink">
                 {editingQuestion ? 'Edit Inspection Question' : 'Add Inspection Question'}
               </h3>
@@ -1345,6 +1376,35 @@ function SettingsPageContent() {
                 <label htmlFor="requiredCheck" className="text-xs font-bold text-ink cursor-pointer">
                   Mandatory question (required before inspection submission)
                 </label>
+              </div>
+
+              <div className="flex items-start gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="temporaryCheck"
+                  checked={questionForm.isTemporary}
+                  onChange={(e) => setQuestionForm({ ...questionForm, isTemporary: e.target.checked })}
+                  className="w-4 h-4 mt-0.5 text-ink rounded border-slate-300 focus:ring-sky-500"
+                />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <label htmlFor="temporaryCheck" className="text-xs font-bold text-ink cursor-pointer">
+                    Temporary question (manager blitz / campaign)
+                  </label>
+                  {questionForm.isTemporary && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-ink-muted uppercase tracking-wider mb-1">
+                        Show on inspect until
+                      </label>
+                      <input
+                        type="date"
+                        required={questionForm.isTemporary}
+                        value={questionForm.expiresAt}
+                        onChange={(e) => setQuestionForm({ ...questionForm, expiresAt: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex gap-2">
