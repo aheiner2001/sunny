@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { 
   Settings as SettingsIcon, 
@@ -520,23 +520,43 @@ function SettingsPageContent() {
     await dbService.saveChecklistQuestions(updatedQs);
   };
 
-  const handleMoveQuestion = async (index: number, direction: 'up' | 'down') => {
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= questions.length) return;
+  const sortedQuestions = useMemo(
+    () => [...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [questions]
+  );
 
-    const updated = [...questions];
-    const temp = updated[index];
-    updated[index] = updated[targetIndex];
-    updated[targetIndex] = temp;
+  const filteredQuestions = useMemo(() => {
+    const list =
+      activeCategoryTab === 'all'
+        ? sortedQuestions
+        : sortedQuestions.filter((q) => q.category === activeCategoryTab);
+    return list;
+  }, [sortedQuestions, activeCategoryTab]);
 
-    const reordered = updated.map((q, idx) => ({ ...q, order: idx + 1 }));
+  /** Reorder within the currently visible list (All or one category), not by filtered index into the full array. */
+  const handleMoveQuestion = async (questionId: string, direction: 'up' | 'down') => {
+    const visible = filteredQuestions;
+    const idx = visible.findIndex((q) => q.id === questionId);
+    if (idx < 0) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= visible.length) return;
+
+    const idA = visible[idx].id;
+    const idB = visible[swapIdx].id;
+    const sorted = [...sortedQuestions];
+    const posA = sorted.findIndex((q) => q.id === idA);
+    const posB = sorted.findIndex((q) => q.id === idB);
+    if (posA < 0 || posB < 0) return;
+
+    const next = [...sorted];
+    const tmp = next[posA];
+    next[posA] = next[posB];
+    next[posB] = tmp;
+
+    const reordered = next.map((q, i) => ({ ...q, order: i + 1 }));
     setQuestions(reordered);
     await dbService.saveChecklistQuestions(reordered);
   };
-
-  const filteredQuestions = activeCategoryTab === 'all'
-    ? questions
-    : questions.filter(q => q.category === activeCategoryTab);
 
   const getTypeName = (type: QuestionType) => {
     switch (type) {
@@ -849,7 +869,7 @@ function SettingsPageContent() {
 
                 <div className="flex items-center justify-end gap-1 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                   <button
-                    onClick={() => handleMoveQuestion(idx, 'up')}
+                    onClick={() => handleMoveQuestion(q.id, 'up')}
                     disabled={idx === 0}
                     className="p-1.5 rounded-lg text-ink-faint hover:text-ink hover:bg-surface-sunk disabled:opacity-20"
                     title="Move Up"
@@ -857,7 +877,7 @@ function SettingsPageContent() {
                     <ArrowUp className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => handleMoveQuestion(idx, 'down')}
+                    onClick={() => handleMoveQuestion(q.id, 'down')}
                     disabled={idx === filteredQuestions.length - 1}
                     className="p-1.5 rounded-lg text-ink-faint hover:text-ink hover:bg-surface-sunk disabled:opacity-20"
                     title="Move Down"
