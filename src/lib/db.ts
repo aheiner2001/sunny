@@ -31,6 +31,7 @@ import {
 import { classifyIssueType } from './issueClassification';
 import { checkInFields, checkOutFields, occupancyAfterInspection, shouldAutoReturnVehicle, localDateString } from './occupancy';
 import { DEFAULT_RETURN_QUESTIONS, hasReturnForShift, normalizeReturnQuestions, shiftDateStringForVehicle } from './returnFlow';
+import { repairDuplicateCategoryIds } from './checklistCategories';
 import { 
   computeLifespanStatus,
   calculateLifespanDueDate,
@@ -2411,12 +2412,28 @@ class DataStore {
     const raw = localStorage.getItem(STORAGE_KEYS.CHECKLIST_CONFIG);
     if (raw) {
       const parsed = JSON.parse(raw) as ChecklistConfig;
-      return {
+      const repaired = repairDuplicateCategoryIds(parsed.categories || []);
+      const config: ChecklistConfig = {
         ...parsed,
+        categories: repaired.categories,
         collectOdometer: parsed.collectOdometer !== false,
         collectFuelLevel: parsed.collectFuelLevel !== false,
         returnQuestions: normalizeReturnQuestions(parsed.returnQuestions),
       };
+      if (repaired.changed) {
+        // Persist repaired ids without re-entering getChecklistConfig.
+        const nowIso = new Date().toISOString();
+        const updatedConfig: ChecklistConfig = {
+          ...config,
+          id: DEFAULT_CHECKLIST_ID,
+          updatedAt: nowIso,
+        };
+        localStorage.setItem(STORAGE_KEYS.CHECKLIST_CONFIG, JSON.stringify(updatedConfig));
+        localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(updatedConfig.categories));
+        localStorage.setItem(STORAGE_KEYS.QUESTIONS, JSON.stringify(updatedConfig.questions));
+        void this.saveChecklistConfig(updatedConfig);
+      }
+      return config;
     }
     const config: ChecklistConfig = {
       id: DEFAULT_CHECKLIST_ID,

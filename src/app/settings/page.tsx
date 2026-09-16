@@ -37,6 +37,7 @@ import { ManagerOnly } from '@/components/ManagerOnly';
 import { AiImportModal } from '@/components/AiImportModal';
 import { ReturnChecklistEditor } from '@/components/ReturnChecklistEditor';
 import { ShopExitQRCode } from '@/components/ShopExitQRCode';
+import { mintCategoryId, planDeleteCategory } from '@/lib/checklistCategories';
 
 type SettingsTab = 'checklist' | 'equipment' | 'tasks' | 'appearance' | 'danger';
 
@@ -84,6 +85,9 @@ function SettingsPageContent() {
   // Category Modal State
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<ChecklistCategoryConfig | null>(null);
+  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<ChecklistCategoryConfig | null>(null);
+  const [deleteMode, setDeleteMode] = useState<'move' | 'delete_questions'>('move');
+  const [moveToCategoryId, setMoveToCategoryId] = useState('');
   const [categoryForm, setCategoryForm] = useState<{
     id: string;
     title: string;
@@ -306,7 +310,7 @@ function SettingsPageContent() {
     }
 
     let updatedCats: ChecklistCategoryConfig[];
-    const catId = editingCategory ? editingCategory.id : (categoryForm.title.toLowerCase().replace(/[^a-z0-9]+/g, '_'));
+    const catId = editingCategory ? editingCategory.id : mintCategoryId();
 
     if (editingCategory) {
       updatedCats = categories.map(c => c.id === editingCategory.id ? {
@@ -331,30 +335,45 @@ function SettingsPageContent() {
     setIsCategoryModalOpen(false);
   };
 
-  const handleDeleteCategory = async (catId: string) => {
-    const qCount = questions.filter(q => q.category === catId).length;
-    if (qCount > 0) {
-      if (!confirm(`This category contains ${qCount} question(s). Deleting the category will also delete its questions. Proceed?`)) {
-        return;
-      }
-    } else {
-      if (!confirm('Are you sure you want to delete this category?')) return;
+  const handleOpenDeleteCategory = (cat: ChecklistCategoryConfig) => {
+    if (categories.length <= 1) {
+      alert('You need at least one category. Add another before deleting this one.');
+      return;
     }
+    const others = categories.filter(c => c.id !== cat.id);
+    setDeleteCategoryTarget(cat);
+    setDeleteMode('move');
+    setMoveToCategoryId(others[0]?.id || '');
+  };
 
-    const updatedCats = categories.filter(c => c.id !== catId);
-    const updatedQs = questions.filter(q => q.category !== catId);
-    setCategories(updatedCats);
-    setQuestions(updatedQs);
+  const handleConfirmDeleteCategory = async () => {
+    if (!deleteCategoryTarget) return;
+    const catId = deleteCategoryTarget.id;
+    const qCount = questions.filter(q => q.category === catId).length;
+    const mode = qCount === 0 ? 'delete_questions' : deleteMode;
 
-    await dbService.saveChecklistConfig({
-      id: 'standard-detailing-checklist',
-      name: 'Standard Detailing Checklist',
-      categories: updatedCats,
-      questions: updatedQs
-    });
-
-    if (activeCategoryTab === catId) {
-      setActiveCategoryTab('all');
+    try {
+      const planned = planDeleteCategory({
+        categories,
+        questions,
+        catId,
+        mode,
+        moveToCategoryId: mode === 'move' ? moveToCategoryId : undefined,
+      });
+      setCategories(planned.categories);
+      setQuestions(planned.questions);
+      const config = dbService.getChecklistConfig();
+      await dbService.saveChecklistConfig({
+        ...config,
+        categories: planned.categories,
+        questions: planned.questions,
+      });
+      if (activeCategoryTab === catId) {
+        setActiveCategoryTab('all');
+      }
+      setDeleteCategoryTarget(null);
+    } catch (err: any) {
+      alert(err?.message || 'Could not delete category.');
     }
   };
 
@@ -618,9 +637,10 @@ function SettingsPageContent() {
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => handleDeleteCategory(cat.id)}
-                    className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50"
-                    title="Delete Category"
+                    onClick={() => handleOpenDeleteCategory(cat)}
+                    disabled={categories.length <= 1}
+                    className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 disabled:opacity-20 disabled:hover:bg-transparent"
+                    title={categories.length <= 1 ? 'Add another category before deleting the last one' : 'Delete Category'}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -1065,6 +1085,87 @@ function SettingsPageContent() {
       )}
 
       <AiImportModal isOpen={isAiImportOpen} onClose={() => setIsAiImportOpen(false)} />
+
+
+      {/* DELETE CATEGORY MODAL */}
+      {deleteCategoryTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface rounded-[var(--radius-xl)] p-6 sm:p-8 max-w-md w-full shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+              <h3 className="text-base font-bold text-ink">Delete category</h3>
+              <button onClick={() => setDeleteCategoryTarget(null)} className="text-ink-faint hover:text-ink-muted p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-ink-muted mb-4">
+              Remove <span className="font-semibold text-ink">{deleteCategoryTarget.title}</span>
+              {questions.filter(q => q.category === deleteCategoryTarget.id).length > 0
+                ? ` (${questions.filter(q => q.category === deleteCategoryTarget.id).length} question${questions.filter(q => q.category === deleteCategoryTarget.id).length === 1 ? '' : 's'})`
+                : ''}.
+            </p>
+
+            {questions.filter(q => q.category === deleteCategoryTarget.id).length > 0 ? (
+              <div className="space-y-3 mb-5">
+                <label className="flex items-start gap-2 text-sm text-ink cursor-pointer">
+                  <input
+                    type="radio"
+                    name="deleteMode"
+                    className="mt-1"
+                    checked={deleteMode === 'move'}
+                    onChange={() => setDeleteMode('move')}
+                  />
+                  <span>
+                    <span className="font-semibold">Move questions</span> to another category
+                  </span>
+                </label>
+                {deleteMode === 'move' && (
+                  <select
+                    value={moveToCategoryId}
+                    onChange={(e) => setMoveToCategoryId(e.target.value)}
+                    className="w-full ml-6 max-w-[calc(100%-1.5rem)] px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  >
+                    {categories.filter(c => c.id !== deleteCategoryTarget.id).map(c => (
+                      <option key={c.id} value={c.id}>{c.title}</option>
+                    ))}
+                  </select>
+                )}
+                <label className="flex items-start gap-2 text-sm text-ink cursor-pointer">
+                  <input
+                    type="radio"
+                    name="deleteMode"
+                    className="mt-1"
+                    checked={deleteMode === 'delete_questions'}
+                    onChange={() => setDeleteMode('delete_questions')}
+                  />
+                  <span>
+                    <span className="font-semibold text-rose-600">Delete questions</span> with this category
+                  </span>
+                </label>
+              </div>
+            ) : (
+              <p className="text-sm text-ink-muted mb-5">This category has no questions.</p>
+            )}
+
+            <div className="pt-3 border-t border-slate-100 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteCategoryTarget(null)}
+                className="flex-1 py-2.5 rounded-xl border border-line text-ink-muted font-bold text-xs hover:bg-surface-sunk"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteCategory}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md"
+              >
+                Delete category
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CATEGORY MODAL */}
       {isCategoryModalOpen && (
