@@ -1345,10 +1345,10 @@ function EquipmentPageContent() {
                 )}
               </div>
 
-              {modal === 'add' ? (
+              {(modal === 'add' || form.lifespanEnabled || Number(form.totalQuantity) === 1) ? (
                 <div className="field">
                   <label className="label" htmlFor="equipment-vehicle">
-                    Starting location
+                    {modal === 'add' ? 'Starting location' : 'Location'}
                   </label>
                   <select
                     id="equipment-vehicle"
@@ -1357,23 +1357,34 @@ function EquipmentPageContent() {
                     className="select"
                   >
                     <option value="">In shop / unassigned</option>
-                    {vehicles.map(v => <option key={v.id} value={v.id}>{v.vehicleNumber} - {v.name}</option>)}
+                    {vehicles.map(v => (
+                      <option key={v.id} value={v.id}>
+                        {v.vehicleNumber} - {v.name}
+                      </option>
+                    ))}
                   </select>
+                  <p className="hint">
+                    {modal === 'add'
+                      ? 'Optional. Leave as shop if it is not on a van yet.'
+                      : 'Shop or which van this unit is on. Save to apply.'}
+                  </p>
                 </div>
               ) : (
-                <div className="card card-pad bg-[var(--surface-alt)]">
-                  <p className="text-xs font-semibold text-ink mb-1">Vehicle assignments</p>
-                  <p className="hint mb-2">{assignmentsLabel(selected!)}</p>
+                <div className="rounded-xl border border-line bg-[var(--surface-alt)] p-3 stack gap-2">
+                  <div>
+                    <p className="text-xs font-semibold text-ink">Where units are</p>
+                    <p className="hint mb-0 mt-1">{assignmentsLabel(selected!)}</p>
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
                       setModal(null);
                       setAllocationTarget(selected);
                     }}
-                    className="btn btn-secondary btn-sm"
+                    className="btn btn-secondary btn-sm self-start"
                   >
                     <Truck className="h-3.5 w-3.5" aria-hidden />
-                    Manage allocation &amp; transfer
+                    Move units between vans / shop
                   </button>
                 </div>
               )}
