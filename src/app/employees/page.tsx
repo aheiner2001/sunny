@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { 
   Users, 
@@ -73,6 +74,7 @@ function EmployeesPageContent() {
   const [codeCopied, setCodeCopied] = useState(false);
   const [detailMenuOpen, setDetailMenuOpen] = useState(false);
   const detailMenuRef = useRef<HTMLDivElement | null>(null);
+  const detailMenuBtnRef = useRef<HTMLButtonElement | null>(null);
 
   // Form states
   const [formData, setFormData] = useState<{
@@ -122,20 +124,44 @@ function EmployeesPageContent() {
     setDetailMenuOpen(false);
   }, [selectedUser?.id]);
 
+  useLayoutEffect(() => {
+    if (!detailMenuOpen || !detailMenuBtnRef.current || !detailMenuRef.current) return;
+    const btn = detailMenuBtnRef.current;
+    const menu = detailMenuRef.current;
+    const rect = btn.getBoundingClientRect();
+    const mh = menu.offsetHeight || 140;
+    const mw = menu.offsetWidth || 192;
+    const gap = 4;
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const openUp = spaceBelow < mh && rect.top > spaceBelow;
+    const top = openUp ? rect.top - gap - mh : rect.bottom + gap;
+    let left = rect.right - mw;
+    left = Math.min(Math.max(8, left), window.innerWidth - mw - 8);
+    menu.style.top = `${Math.max(8, top)}px`;
+    menu.style.left = `${left}px`;
+  }, [detailMenuOpen]);
+
   useEffect(() => {
     if (!detailMenuOpen) return;
     const onPointer = (e: MouseEvent) => {
-      if (detailMenuRef.current?.contains(e.target as Node)) return;
+      const t = e.target as Node;
+      if (detailMenuRef.current?.contains(t)) return;
+      if (detailMenuBtnRef.current?.contains(t)) return;
       setDetailMenuOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setDetailMenuOpen(false);
     };
+    const onRepositionClose = () => setDetailMenuOpen(false);
     document.addEventListener('mousedown', onPointer);
     document.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', onRepositionClose, true);
+    window.addEventListener('resize', onRepositionClose);
     return () => {
       document.removeEventListener('mousedown', onPointer);
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', onRepositionClose, true);
+      window.removeEventListener('resize', onRepositionClose);
     };
   }, [detailMenuOpen]);
 
@@ -522,9 +548,10 @@ function EmployeesPageContent() {
                   </div>
                 </div>
 
-                <div className="relative pt-3 sm:pt-0" ref={detailMenuRef}>
+                <div className="relative pt-3 sm:pt-0 shrink-0">
                   <button
                     type="button"
+                    ref={detailMenuBtnRef}
                     className="btn btn-ghost btn-sm"
                     aria-haspopup="menu"
                     aria-expanded={detailMenuOpen}
@@ -534,10 +561,11 @@ function EmployeesPageContent() {
                     <MoreHorizontal className="h-3.5 w-3.5" aria-hidden />
                     More
                   </button>
-                  {detailMenuOpen && (
+                  {detailMenuOpen && createPortal(
                     <div
+                      ref={detailMenuRef}
                       role="menu"
-                      className="absolute right-0 top-full mt-1 z-20 min-w-[12rem] rounded-[var(--radius)] border border-line bg-surface shadow-lg p-1 stack-tight"
+                      className="fixed z-[80] min-w-[12rem] rounded-[var(--radius)] border border-line bg-surface shadow-lg p-1 stack-tight"
                     >
                       <button
                         type="button"
@@ -566,7 +594,8 @@ function EmployeesPageContent() {
                         <Trash2 className="w-3.5 h-3.5" />
                         Delete
                       </button>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </div>
               </div>
