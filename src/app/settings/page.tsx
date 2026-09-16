@@ -111,8 +111,13 @@ function SettingsPageContent() {
     helperText: string;
     equipmentName: string;
     reasonPresets: string;
+    visibility: 'always' | 'temporary' | 'seasonal';
     isTemporary: boolean;
     expiresAt: string;
+    isSeasonal: boolean;
+    seasonStart: string;
+    seasonEnd: string;
+    forceActive: boolean;
   }>({
     text: '',
     category: 'equipment',
@@ -121,8 +126,13 @@ function SettingsPageContent() {
     helperText: '',
     equipmentName: '',
     reasonPresets: '',
+    visibility: 'always',
     isTemporary: false,
-    expiresAt: ''
+    expiresAt: '',
+    isSeasonal: false,
+    seasonStart: '12-01',
+    seasonEnd: '02-28',
+    forceActive: false
   });
 
   const loadData = () => {
@@ -408,8 +418,13 @@ function SettingsPageContent() {
       helperText: '',
       equipmentName: '',
       reasonPresets: '',
+      visibility: 'always',
       isTemporary: false,
-      expiresAt: ''
+      expiresAt: '',
+      isSeasonal: false,
+      seasonStart: '12-01',
+      seasonEnd: '02-28',
+      forceActive: false
     });
     setIsQuestionModalOpen(true);
   };
@@ -425,8 +440,13 @@ function SettingsPageContent() {
       equipmentName: q.equipmentName || '',
       reasonPresets: (q.reasonPresets || []).join(', ')
     ,
+      visibility: q.isSeasonal ? 'seasonal' : q.isTemporary ? 'temporary' : 'always',
       isTemporary: Boolean(q.isTemporary),
-      expiresAt: q.expiresAt || ''
+      expiresAt: q.expiresAt || '',
+      isSeasonal: Boolean(q.isSeasonal),
+      seasonStart: q.seasonStart || '12-01',
+      seasonEnd: q.seasonEnd || '02-28',
+      forceActive: Boolean(q.forceActive)
     });
     setIsQuestionModalOpen(true);
   };
@@ -450,8 +470,12 @@ function SettingsPageContent() {
         helperText: questionForm.helperText.trim() || undefined,
         equipmentName: questionForm.equipmentName.trim() || undefined,
         reasonPresets: questionForm.reasonPresets.split(',').map(s => s.trim()).filter(Boolean),
-        isTemporary: questionForm.isTemporary || undefined,
-        expiresAt: questionForm.isTemporary && questionForm.expiresAt ? questionForm.expiresAt : null
+        isTemporary: questionForm.visibility === 'temporary' || undefined,
+        expiresAt: questionForm.visibility === 'temporary' && questionForm.expiresAt ? questionForm.expiresAt : null,
+        isSeasonal: questionForm.visibility === 'seasonal' || undefined,
+        seasonStart: questionForm.visibility === 'seasonal' ? questionForm.seasonStart : null,
+        seasonEnd: questionForm.visibility === 'seasonal' ? questionForm.seasonEnd : null,
+        forceActive: questionForm.visibility === 'seasonal' ? questionForm.forceActive : undefined
       } : q);
     } else {
       const newQ: ChecklistQuestion = {
@@ -464,8 +488,12 @@ function SettingsPageContent() {
         helperText: questionForm.helperText.trim() || undefined,
         equipmentName: questionForm.equipmentName.trim() || undefined,
         reasonPresets: questionForm.reasonPresets.split(',').map(s => s.trim()).filter(Boolean),
-        isTemporary: questionForm.isTemporary || undefined,
-        expiresAt: questionForm.isTemporary && questionForm.expiresAt ? questionForm.expiresAt : null
+        isTemporary: questionForm.visibility === 'temporary' || undefined,
+        expiresAt: questionForm.visibility === 'temporary' && questionForm.expiresAt ? questionForm.expiresAt : null,
+        isSeasonal: questionForm.visibility === 'seasonal' || undefined,
+        seasonStart: questionForm.visibility === 'seasonal' ? questionForm.seasonStart : null,
+        seasonEnd: questionForm.visibility === 'seasonal' ? questionForm.seasonEnd : null,
+        forceActive: questionForm.visibility === 'seasonal' ? questionForm.forceActive : undefined
       };
       updatedQs = [...questions, newQ];
     }
@@ -779,6 +807,16 @@ function SettingsPageContent() {
                       </p>
                     )}
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      {q.isSeasonal && (
+                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          {q.forceActive ? 'Seasonal · forced on' : `Seasonal · ${q.seasonStart || '?'}–${q.seasonEnd || '?'}`}
+                        </span>
+                      )}
+                      {q.isTemporary && !q.isSeasonal && (
+                        <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          Temporary · until {q.expiresAt || '?'}
+                        </span>
+                      )}
                       <span className="text-[10px] font-bold text-sky-700 bg-surface-sunk px-2 py-0.5 rounded border border-sky-100">
                         {categoryObj?.title || q.category}
                       </span>
@@ -1378,33 +1416,88 @@ function SettingsPageContent() {
                 </label>
               </div>
 
-              <div className="flex items-start gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="temporaryCheck"
-                  checked={questionForm.isTemporary}
-                  onChange={(e) => setQuestionForm({ ...questionForm, isTemporary: e.target.checked })}
-                  className="w-4 h-4 mt-0.5 text-ink rounded border-slate-300 focus:ring-sky-500"
-                />
-                <div className="min-w-0 flex-1 space-y-2">
-                  <label htmlFor="temporaryCheck" className="text-xs font-bold text-ink cursor-pointer">
-                    Temporary question (manager blitz / campaign)
-                  </label>
-                  {questionForm.isTemporary && (
-                    <div>
-                      <label className="block text-[11px] font-bold text-ink-muted uppercase tracking-wider mb-1">
-                        Show on inspect until
-                      </label>
-                      <input
-                        type="date"
-                        required={questionForm.isTemporary}
-                        value={questionForm.expiresAt}
-                        onChange={(e) => setQuestionForm({ ...questionForm, expiresAt: e.target.value })}
-                        className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                      />
-                    </div>
-                  )}
+              <div className="stack gap-2 pt-1">
+                <p className="text-[11px] font-bold text-ink-muted uppercase tracking-wider">Visibility</p>
+                <div className="cluster flex-wrap gap-2">
+                  {([
+                    ['always', 'Always on'],
+                    ['temporary', 'Temporary blitz'],
+                    ['seasonal', 'Seasonal'],
+                  ] as const).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() =>
+                        setQuestionForm({
+                          ...questionForm,
+                          visibility: mode,
+                          isTemporary: mode === 'temporary',
+                          isSeasonal: mode === 'seasonal',
+                          forceActive: mode === 'seasonal' ? questionForm.forceActive : false,
+                        })
+                      }
+                      className={`btn btn-sm ${questionForm.visibility === mode ? 'bg-surface-sunk text-ink font-semibold border border-line' : 'btn-secondary'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
+                {questionForm.visibility === 'temporary' && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-ink-muted uppercase tracking-wider mb-1">
+                      Show on inspect until
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={questionForm.expiresAt}
+                      onChange={(e) => setQuestionForm({ ...questionForm, expiresAt: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 outline-none"
+                    />
+                  </div>
+                )}
+                {questionForm.visibility === 'seasonal' && (
+                  <div className="stack gap-2">
+                    <p className="text-[11px] text-ink-muted">
+                      Yearly window (MM-DD). Wraps New Year — e.g. 12-01 to 02-28 for winter.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-bold text-ink-muted uppercase tracking-wider mb-1">Start</label>
+                        <input
+                          type="text"
+                          required
+                          pattern="\d{2}-\d{2}"
+                          placeholder="12-01"
+                          value={questionForm.seasonStart}
+                          onChange={(e) => setQuestionForm({ ...questionForm, seasonStart: e.target.value })}
+                          className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-ink-muted uppercase tracking-wider mb-1">End</label>
+                        <input
+                          type="text"
+                          required
+                          pattern="\d{2}-\d{2}"
+                          placeholder="02-28"
+                          value={questionForm.seasonEnd}
+                          onChange={(e) => setQuestionForm({ ...questionForm, seasonEnd: e.target.value })}
+                          className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                    <label className="cluster gap-2 text-xs font-bold text-ink cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={questionForm.forceActive}
+                        onChange={(e) => setQuestionForm({ ...questionForm, forceActive: e.target.checked })}
+                        className="w-4 h-4 text-ink rounded border-slate-300 focus:ring-sky-500"
+                      />
+                      Force on now (early weather / override)
+                    </label>
+                  </div>
+                )}
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex gap-2">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeChecklistQuestions } from './checklistQuestions';
+import { activeChecklistQuestions, isDateInSeason } from './checklistQuestions';
 import type { ChecklistQuestion } from '@/types';
 
 const base = {
@@ -8,6 +8,19 @@ const base = {
   required: true,
   order: 1,
 };
+
+describe('isDateInSeason', () => {
+  it('handles non-wrapping windows', () => {
+    expect(isDateInSeason('06-01', '08-31', new Date('2026-07-15'))).toBe(true);
+    expect(isDateInSeason('06-01', '08-31', new Date('2026-05-15'))).toBe(false);
+  });
+
+  it('handles New Year wrap (Dec–Feb)', () => {
+    expect(isDateInSeason('12-01', '02-28', new Date('2026-12-15'))).toBe(true);
+    expect(isDateInSeason('12-01', '02-28', new Date('2026-01-15'))).toBe(true);
+    expect(isDateInSeason('12-01', '02-28', new Date('2026-06-15'))).toBe(false);
+  });
+});
 
 describe('activeChecklistQuestions', () => {
   it('keeps permanent and unexpired temporary questions', () => {
@@ -18,5 +31,35 @@ describe('activeChecklistQuestions', () => {
     ];
     const active = activeChecklistQuestions(qs, new Date('2026-09-16'));
     expect(active.map((q) => q.id)).toEqual(['1', '2']);
+  });
+
+  it('shows seasonal in window and hides outside', () => {
+    const qs: ChecklistQuestion[] = [
+      {
+        ...base,
+        id: 's',
+        text: 'Drain tanks',
+        isSeasonal: true,
+        seasonStart: '12-01',
+        seasonEnd: '02-28',
+      },
+    ];
+    expect(activeChecklistQuestions(qs, new Date('2026-01-10')).map((q) => q.id)).toEqual(['s']);
+    expect(activeChecklistQuestions(qs, new Date('2026-07-10')).map((q) => q.id)).toEqual([]);
+  });
+
+  it('forceActive shows seasonal outside window', () => {
+    const qs: ChecklistQuestion[] = [
+      {
+        ...base,
+        id: 's',
+        text: 'Drain tanks',
+        isSeasonal: true,
+        seasonStart: '12-01',
+        seasonEnd: '02-28',
+        forceActive: true,
+      },
+    ];
+    expect(activeChecklistQuestions(qs, new Date('2026-07-10')).map((q) => q.id)).toEqual(['s']);
   });
 });

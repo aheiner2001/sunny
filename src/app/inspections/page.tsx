@@ -35,6 +35,10 @@ export default function InspectionsPage() {
   const [kindFilter, setKindFilter] = useState<'all' | 'pretrip' | 'return'>('all');
   const [vehicleFilter, setVehicleFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'date_desc' | 'date_asc' | 'status' | 'vehicle' | 'driver'>('date_desc');
+  type DatePreset = 'all' | 'today' | '7d' | '30d' | 'this_month' | 'last_month' | 'this_year' | 'custom';
+  const [datePreset, setDatePreset] = useState<DatePreset>('all');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [offlineCount, setOfflineCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -111,7 +115,43 @@ export default function InspectionsPage() {
     el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, [expandedId, inspections]);
 
-  const filteredInspections = inspections.filter((insp) => {
+    const todayKey = () => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+  };
+
+  const inDateRange = (dateString: string) => {
+    if (datePreset === 'all') return true;
+    const today = todayKey();
+    if (datePreset === 'today') return dateString === today;
+    if (datePreset === 'custom') {
+      const start = customStart || '0000-01-01';
+      const end = customEnd || today;
+      return dateString >= start && dateString <= end;
+    }
+    const now = new Date();
+    let start = today;
+    if (datePreset === '7d') {
+      const d = new Date(now); d.setDate(d.getDate() - 6);
+      start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    } else if (datePreset === '30d') {
+      const d = new Date(now); d.setDate(d.getDate() - 29);
+      start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    } else if (datePreset === 'this_month') {
+      start = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    } else if (datePreset === 'last_month') {
+      const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const endPrev = new Date(now.getFullYear(), now.getMonth(), 0);
+      const startStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+      const endStr = `${endPrev.getFullYear()}-${String(endPrev.getMonth() + 1).padStart(2, '0')}-${String(endPrev.getDate()).padStart(2, '0')}`;
+      return dateString >= startStr && dateString <= endStr;
+    } else if (datePreset === 'this_year') {
+      start = `${now.getFullYear()}-01-01`;
+    }
+    return dateString >= start && dateString <= today;
+  };
+
+const filteredInspections = inspections.filter((insp) => {
     const matchesSearch =
       insp.vehicleNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       insp.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -122,8 +162,9 @@ export default function InspectionsPage() {
     const kind = insp.kind === 'return' ? 'return' : 'pretrip';
     const matchesKind = kindFilter === 'all' || kind === kindFilter;
     const matchesVehicle = vehicleFilter === 'all' || insp.vehicleId === vehicleFilter;
+      const matchesDate = inDateRange(insp.dateString);
 
-    return matchesSearch && matchesStatus && matchesKind && matchesVehicle;
+    return matchesSearch && matchesStatus && matchesKind && matchesVehicle && matchesDate;
   });
 
   const sortedInspections = [...filteredInspections].sort((a, b) => {
@@ -208,6 +249,40 @@ export default function InspectionsPage() {
               />
             </div>
           </div>
+
+          <div className="cluster w-full flex-wrap gap-2">
+            {([
+              ['all', 'All time'],
+              ['today', 'Today'],
+              ['7d', 'Last 7 days'],
+              ['30d', 'Last 30 days'],
+              ['this_month', 'This month'],
+              ['last_month', 'Last month'],
+              ['this_year', 'This year'],
+              ['custom', 'Custom'],
+            ] as const).map(([p, label]) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setDatePreset(p)}
+                className={`btn btn-sm ${datePreset === p ? 'bg-surface-sunk text-ink font-semibold border border-line' : 'btn-secondary'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {datePreset === 'custom' && (
+            <div className="cluster flex-wrap gap-2 items-end">
+              <div className="field">
+                <label className="label" htmlFor="insp-date-start">From</label>
+                <input id="insp-date-start" type="date" className="input" value={customStart} onChange={(e) => setCustomStart(e.target.value)} />
+              </div>
+              <div className="field">
+                <label className="label" htmlFor="insp-date-end">To</label>
+                <input id="insp-date-end" type="date" className="input" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} />
+              </div>
+            </div>
+          )}
 
           <div className="cluster w-full md:w-auto md:justify-end">
             {([

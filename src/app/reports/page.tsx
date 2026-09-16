@@ -19,6 +19,7 @@ import {
 import { dbService } from '@/lib/db';
 import { Inspection, Issue, Vehicle, Equipment, ReportSettings } from '@/types';
 import { ManagerOnly } from '@/components/ManagerOnly';
+import { ReportsAnalytics } from '@/components/ReportsAnalytics';
 import { PageHeader } from '@/components/PageHeader';
 import { exportInspectionsAsCSV, exportIssuesAsCSV, exportComplianceReportAsHTML, ComplianceReportData } from '@/lib/export';
 
@@ -658,6 +659,8 @@ function ReportsPageContent() {
           ))}
         </div>
       </div>
+
+      <ReportsAnalytics inspections={filteredInspections} issues={filteredIssues} />
 
       {/* Export Section */}
       <div className="card card-pad">
