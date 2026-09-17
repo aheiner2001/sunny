@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   assertDamagePayload,
+  eventsWithRegionForSide,
+  isValidRegion,
   latestStatusBySide,
+  MIN_REGION_SIZE,
+  normalizeRegion,
 } from './vehicleDamage';
-import type { VehicleDamageEvent } from '@/types';
+import type { DamageRegion, VehicleDamageEvent } from '@/types';
+
+const validRegion: DamageRegion = { x: 0.1, y: 0.2, w: 0.3, h: 0.25 };
 
 function event(
   partial: Partial<VehicleDamageEvent> & Pick<VehicleDamageEvent, 'id' | 'side' | 'createdAt'>
@@ -46,7 +52,12 @@ describe('vehicleDamage helpers', () => {
 
   it('rejects damage without side when not noNewDamage', () => {
     expect(() =>
-      assertDamagePayload({ noNewDamage: false, side: null, photoDataUrls: ['x'] })
+      assertDamagePayload({
+        noNewDamage: false,
+        side: null,
+        photoDataUrls: ['x'],
+        region: validRegion,
+      })
     ).toThrow(/side/i);
   });
 
@@ -56,6 +67,7 @@ describe('vehicleDamage helpers', () => {
         noNewDamage: false,
         side: 'front',
         photoDataUrls: Array.from({ length: 9 }, (_, i) => `p${i}`),
+        region: validRegion,
       })
     ).toThrow(/8/);
   });
@@ -64,5 +76,68 @@ describe('vehicleDamage helpers', () => {
     expect(() =>
       assertDamagePayload({ noNewDamage: true, side: null, photoDataUrls: [] })
     ).not.toThrow();
+  });
+});
+
+describe('damage regions', () => {
+  it('normalizeRegion clamps into 0–1 and preserves positive size', () => {
+    expect(normalizeRegion({ x: -0.1, y: 0.9, w: 0.5, h: 0.5 })).toEqual({
+      x: 0,
+      y: 0.5,
+      w: 0.5,
+      h: 0.5,
+    });
+  });
+
+  it('isValidRegion rejects missing, zero, or undersized regions', () => {
+    expect(isValidRegion(undefined)).toBe(false);
+    expect(isValidRegion({ x: 0, y: 0, w: 0, h: 0.5 })).toBe(false);
+    expect(isValidRegion({ x: 0, y: 0, w: MIN_REGION_SIZE / 2, h: MIN_REGION_SIZE })).toBe(false);
+    expect(isValidRegion(validRegion)).toBe(true);
+  });
+
+  it('requires region when reporting damage', () => {
+    expect(() =>
+      assertDamagePayload({
+        noNewDamage: false,
+        side: 'front',
+        photoDataUrls: ['x'],
+        region: null,
+      })
+    ).toThrow(/region|box|mark/i);
+  });
+
+  it('allows noNewDamage without region', () => {
+    expect(() =>
+      assertDamagePayload({
+        noNewDamage: true,
+        side: null,
+        photoDataUrls: [],
+        region: null,
+      })
+    ).not.toThrow();
+  });
+
+  it('eventsWithRegionForSide returns only matching side events that have a region', () => {
+    const events = [
+      event({
+        id: '1',
+        side: 'front',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        region: validRegion,
+      }),
+      event({
+        id: '2',
+        side: 'front',
+        createdAt: '2026-01-02T00:00:00.000Z',
+      }),
+      event({
+        id: '3',
+        side: 'left',
+        createdAt: '2026-01-03T00:00:00.000Z',
+        region: validRegion,
+      }),
+    ];
+    expect(eventsWithRegionForSide(events, 'front').map((e) => e.id)).toEqual(['1']);
   });
 });

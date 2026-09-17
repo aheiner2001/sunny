@@ -378,6 +378,13 @@ export interface MissedReturn {
 
 export type VehicleSide = 'front' | 'rear' | 'left' | 'right' | 'cab';
 
+export type DamageRegion = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
 export interface VehicleDamageEvent {
   id: string;
   vehicleId: string;
@@ -385,6 +392,7 @@ export interface VehicleDamageEvent {
   noNewDamage: boolean;
   note?: string;
   photoDataUrls: string[];
+  region?: DamageRegion;
   inspectionId?: string | null;
   userId: string;
   userName: string;
