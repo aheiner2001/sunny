@@ -1,3 +1,4 @@
+import { asset } from '@/lib/basePath';
 import type { VehicleDamageEvent, VehicleSide } from '@/types';
 
 export const VEHICLE_SIDES: VehicleSide[] = ['front', 'rear', 'left', 'right', 'cab'];
@@ -12,15 +13,15 @@ export const SIDE_LABEL: Record<VehicleSide, string> = {
 
 
 export const SIDE_IMAGE: Record<VehicleSide, string> = {
-  front: '/vehicle-damage/maverick/front.png',
-  rear: '/vehicle-damage/maverick/rear.png',
-  left: '/vehicle-damage/maverick/left.png',
-  right: '/vehicle-damage/maverick/right.png',
-  cab: '/vehicle-damage/maverick/cab.png',
+  front: asset('/vehicle-damage/maverick/front.png'),
+  rear: asset('/vehicle-damage/maverick/rear.png'),
+  left: asset('/vehicle-damage/maverick/left.png'),
+  right: asset('/vehicle-damage/maverick/right.png'),
+  cab: asset('/vehicle-damage/maverick/cab.png'),
 };
 
 /** Top-down overview when no side is selected. */
-export const OVERVIEW_IMAGE = '/vehicle-damage/maverick/top.png';
+export const OVERVIEW_IMAGE = asset('/vehicle-damage/maverick/top.png');
 
 export const MAX_DAMAGE_PHOTOS = 8;
 
