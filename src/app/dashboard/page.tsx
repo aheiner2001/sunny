@@ -20,7 +20,9 @@ import {
   UserCheck,
   CheckSquare,
   Square,
-  Trash2
+  Trash2,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Vehicle, Inspection, Issue, IssueType, Equipment, User } from '@/types';
@@ -34,9 +36,10 @@ import {
   loadDashboardLayout,
   saveDashboardLayout,
   resetDashboardLayout,
-  reorderDashboardLayout,
+  moveDashboardWidget,
   setDashboardWidgetSize,
   sizeToColSpan,
+  DASHBOARD_WIDGET_LABELS,
   type DashboardWidgetLayout,
   type DashboardWidgetId,
   type DashboardWidgetSize,
@@ -84,7 +87,6 @@ export default function DashboardPage() {
 
   const [dashboardLayout, setDashboardLayout] = useState<DashboardWidgetLayout[]>([]);
   const [customizeLayout, setCustomizeLayout] = useState(false);
-  const [dragWidgetId, setDragWidgetId] = useState<DashboardWidgetId | null>(null);
 
   const loadData = () => {
     setVehicles(dbService.getVehicles());
@@ -201,14 +203,13 @@ export default function DashboardPage() {
     setDashboardLayout(saveDashboardLayout(next, user?.id));
   };
 
-  const onWidgetDragStart = (id: DashboardWidgetId) => setDragWidgetId(id);
-  const onWidgetDrop = (toId: DashboardWidgetId) => {
-    if (!dragWidgetId || dragWidgetId === toId) return;
-    persistLayout(reorderDashboardLayout(dashboardLayout, dragWidgetId, toId));
-    setDragWidgetId(null);
-  };
   const onWidgetSize = (id: DashboardWidgetId, size: DashboardWidgetSize) => {
     persistLayout(setDashboardWidgetSize(dashboardLayout, id, size));
+  };
+
+  const layoutOrder = (id: DashboardWidgetId) => {
+    const idx = dashboardLayout.findIndex(w => w.id === id);
+    return idx < 0 ? 99 : idx;
   };
 
   const widgetShell = (id: DashboardWidgetId, children: React.ReactNode) => {
@@ -216,14 +217,32 @@ export default function DashboardPage() {
     return (
       <div
         className={`${sizeToColSpan(entry.size)} ${customizeLayout ? 'outline outline-1 outline-dashed outline-line rounded-2xl' : ''}`}
-        draggable={customizeLayout}
-        onDragStart={() => onWidgetDragStart(id)}
-        onDragOver={e => customizeLayout && e.preventDefault()}
-        onDrop={() => onWidgetDrop(id)}
+        style={{ order: layoutOrder(id) }}
       >
         {customizeLayout && (
-          <div className="flex items-center gap-1 px-2 pt-2">
-            <span className="text-[10px] font-bold uppercase text-ink-faint">Size</span>
+          <div className="flex items-center gap-1 px-2 pt-2 flex-wrap">
+            <span className="text-[10px] font-bold uppercase text-ink-faint mr-1">
+              {DASHBOARD_WIDGET_LABELS[id]}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={layoutOrder(id) <= 0}
+              aria-label={`Move ${DASHBOARD_WIDGET_LABELS[id]} up`}
+              onClick={() => persistLayout(moveDashboardWidget(dashboardLayout, id, -1))}
+            >
+              <ChevronUp className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={layoutOrder(id) >= dashboardLayout.length - 1}
+              aria-label={`Move ${DASHBOARD_WIDGET_LABELS[id]} down`}
+              onClick={() => persistLayout(moveDashboardWidget(dashboardLayout, id, 1))}
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+            <span className="text-[10px] font-bold uppercase text-ink-faint ml-2">Size</span>
             {(['small', 'medium', 'wide'] as DashboardWidgetSize[]).map(size => (
               <button
                 key={size}
@@ -343,7 +362,9 @@ export default function DashboardPage() {
       )}
 
       {/* Equipment Due for Review Section with 2.2 Batch Actions */}
-      {dueForReviewEquipment.length > 0 && (
+      {dueForReviewEquipment.length > 0 &&
+        widgetShell(
+          'lifespan',
         <div className="card card-pad stack">
           <div className="spread items-center border-b border-line pb-3 flex-wrap gap-2">
             <div>
@@ -452,7 +473,7 @@ export default function DashboardPage() {
             })}
           </div>
         </div>
-      )}
+        )}
 
 
       {/* Metric Tiles */}
@@ -479,11 +500,13 @@ export default function DashboardPage() {
         )}
         {customizeLayout && (
           <p className="text-[11px] text-ink-faint m-0">
-            Drag widgets to reorder. Size presets: small / medium / wide (saved for your account).
+            Use ↑ ↓ on each section to reorder. Size presets save for your account.
           </p>
         )}
       </div>
-      <div className="grid-auto" style={{ '--min': '15rem' } as React.CSSProperties}>
+      {widgetShell(
+        'stats',
+        <div className="grid-auto" style={{ '--min': '15rem' } as React.CSSProperties}>
         <div className="card card-pad flex flex-col">
           <div className="spread items-start">
             <span className="icon-tile icon-tile-lg" data-status="idle">
@@ -581,8 +604,11 @@ export default function DashboardPage() {
           </div>
         </Link>
       </div>
+      )}
 
-      <div className="card card-pad stack">
+      {widgetShell(
+        'safety',
+        <div className="card card-pad stack">
         <div className="spread items-center">
           <h2 className="card-title">Van needs</h2>
           <Link href="/issues" className="link-action text-xs">
@@ -609,10 +635,11 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+      )}
 
-      {/* Main 3-column content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--gutter)]">
-        {/* 1.1 Activity Stream with Filter Chips */}
+      {/* Main content widgets — ordered via layout */}
+        {widgetShell(
+          'activity',
         <div className="card flex flex-col">
           <div className="card-head spread items-center pb-2">
             <div>
@@ -711,8 +738,10 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+        )}
 
-        {/* Compact Calendar */}
+        {widgetShell(
+          'calendar',
         <div
           onClick={() => router.push('/calendar')}
           className="card card-link card-pad flex flex-col cursor-pointer"
@@ -726,9 +755,10 @@ export default function DashboardPage() {
             onDayClick={(d) => router.push(`/calendar?date=${d}`)}
           />
         </div>
+        )}
 
-        
-        {/* Today's Issues — distinct from open-issue backlog */}
+        {widgetShell(
+          'today_issues',
         <div className="card flex flex-col" data-widget="today_issues">
           <div className="card-head">
             <h2 className="card-title">Today&apos;s issues</h2>
@@ -769,8 +799,10 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+        )}
 
-        {/* Open Issues Tile */}
+        {widgetShell(
+          'open_issues',
         <div className="card flex flex-col">
           <div className="card-head">
             <h2 className="card-title">Open issues</h2>
@@ -822,9 +854,10 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
-      </div>
+        )}
 
-      {/* 1.3 Vehicles in Use Table with Quick Shift Actions */}
+      {widgetShell(
+        'in_use',
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--gutter)]">
         <div className="card lg:col-span-2">
           <div className="card-head">
@@ -998,6 +1031,7 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* Lifespan Action Modal */}
       <LifespanActionModal

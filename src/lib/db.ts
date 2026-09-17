@@ -366,6 +366,29 @@ class DataStore {
         console.warn('Firestore checklist listener (using local cache):', err.message);
       });
 
+      // Vehicle damage: merge remote into local (never wipe local from an empty cloud collection)
+      onSnapshot(collection(db, 'vehicleDamage'), (snapshot) => {
+        const remote: VehicleDamageEvent[] = [];
+        snapshot.forEach((d) => remote.push(d.data() as VehicleDamageEvent));
+        if (remote.length === 0) return;
+        const local = this.readVehicleDamageEvents();
+        const byId = new Map<string, VehicleDamageEvent>();
+        for (const e of local) byId.set(e.id, e);
+        for (const e of remote) {
+          const prev = byId.get(e.id);
+          if (!prev || (e.createdAt || '') >= (prev.createdAt || '')) {
+            byId.set(e.id, e);
+          }
+        }
+        const merged = Array.from(byId.values()).sort((a, b) =>
+          b.createdAt.localeCompare(a.createdAt)
+        );
+        localStorage.setItem(STORAGE_KEYS.VEHICLE_DAMAGE, JSON.stringify(merged));
+        window.dispatchEvent(new Event('sunny_db_update'));
+      }, (err) => {
+        console.warn('Firestore vehicleDamage listener (using local cache):', err.message);
+      });
+
     } catch (e: any) {
       console.warn('Could not attach Firestore listeners:', e.message);
     }
@@ -3540,13 +3563,34 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     };
 
     const next = [event, ...this.readVehicleDamageEvents()];
-    localStorage.setItem(STORAGE_KEYS.VEHICLE_DAMAGE, JSON.stringify(next));
+    try {
+      localStorage.setItem(STORAGE_KEYS.VEHICLE_DAMAGE, JSON.stringify(next));
+    } catch (e: any) {
+      const msg = e?.name === 'QuotaExceededError' || /quota/i.test(String(e?.message || e))
+        ? 'Could not save damage photos — browser storage is full. Try fewer or smaller photos.'
+        : 'Could not save damage entry to this device.';
+      throw new Error(msg);
+    }
 
     if (db) {
       try {
+        // Photos as data URLs can exceed Firestore doc size; store metadata + region always,
+        // keep photos local when the full doc is too large.
         await setDoc(doc(db, 'vehicleDamage', event.id), sanitizeForFirestore(event));
       } catch (e: any) {
-        console.warn('Firestore vehicleDamage write error (saved locally):', e?.message || e);
+        try {
+          const { photoDataUrls: _photos, ...meta } = event;
+          await setDoc(
+            doc(db, 'vehicleDamage', event.id),
+            sanitizeForFirestore({ ...meta, photoDataUrls: [] as string[] })
+          );
+          console.warn(
+            'Firestore vehicleDamage: saved without photos (doc too large or rules); kept photos locally.',
+            e?.message || e
+          );
+        } catch (e2: any) {
+          console.warn('Firestore vehicleDamage write error (saved locally):', e2?.message || e2);
+        }
       }
     }
 

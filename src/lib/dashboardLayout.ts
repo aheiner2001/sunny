@@ -26,6 +26,17 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardWidgetLayout[] = [
   { id: 'calendar', size: 'wide' },
 ];
 
+export const DASHBOARD_WIDGET_LABELS: Record<DashboardWidgetId, string> = {
+  stats: 'Fleet stats',
+  today_issues: "Today's issues",
+  open_issues: 'Open issues',
+  safety: 'Van needs',
+  in_use: 'Vehicles in use',
+  activity: "Today's activity",
+  lifespan: 'Equipment due for review',
+  calendar: 'Calendar',
+};
+
 export const DASHBOARD_LAYOUT_KEY_PREFIX = 'sunny_dashboard_layout_';
 
 export function dashboardLayoutStorageKey(userId?: string | null): string {
@@ -131,4 +142,18 @@ export function setDashboardWidgetSize(
   size: DashboardWidgetSize
 ): DashboardWidgetLayout[] {
   return normalizeDashboardLayout(layout).map(w => (w.id === id ? { ...w, size } : w));
+}
+
+/** Move a widget one step up (-1) or down (+1) in the layout list. */
+export function moveDashboardWidget(
+  layout: DashboardWidgetLayout[],
+  id: DashboardWidgetId,
+  direction: -1 | 1
+): DashboardWidgetLayout[] {
+  const next = normalizeDashboardLayout(layout);
+  const fromIndex = next.findIndex(w => w.id === id);
+  if (fromIndex < 0) return next;
+  const toIndex = fromIndex + direction;
+  if (toIndex < 0 || toIndex >= next.length) return next;
+  return reorderDashboardLayout(next, id, next[toIndex].id);
 }

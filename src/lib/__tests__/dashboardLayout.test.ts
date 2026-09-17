@@ -4,6 +4,7 @@ import {
   DEFAULT_DASHBOARD_LAYOUT,
   filterTodaysIssues,
   loadDashboardLayout,
+  moveDashboardWidget,
   normalizeDashboardLayout,
   reorderDashboardLayout,
   resetDashboardLayout,
@@ -93,5 +94,12 @@ describe('dashboard layout persistence', () => {
       expect.arrayContaining(DEFAULT_DASHBOARD_LAYOUT.map(w => w.id))
     );
     expect(normalized).toHaveLength(DEFAULT_DASHBOARD_LAYOUT.length);
+  });
+
+  it('moveDashboardWidget shifts one step', () => {
+    const layout = DEFAULT_DASHBOARD_LAYOUT.map(w => ({ ...w }));
+    const moved = moveDashboardWidget(layout, 'stats', 1);
+    expect(moved[0].id).toBe('today_issues');
+    expect(moved[1].id).toBe('stats');
   });
 });

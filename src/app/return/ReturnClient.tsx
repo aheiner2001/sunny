@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertTriangle, Camera, CheckCircle2, Truck, X } from 'lucide-react';
@@ -18,7 +18,7 @@ import {
   shouldShowPhotoCapture,
 } from '@/lib/checklistPairing';
 import { activeChecklistQuestions } from '@/lib/checklistQuestions';
-import { VehicleDamageCapture } from '@/components/VehicleDamageCapture';
+import { VehicleDamageCapture, type VehicleDamageCaptureHandle } from '@/components/VehicleDamageCapture';
 import type {
   ChecklistQuestion,
   InspectionResponse,
@@ -82,6 +82,7 @@ export default function ReturnClient() {
   const [error, setError] = useState<string | null>(null);
   const [returnedVehicle, setReturnedVehicle] = useState<string | null>(null);
   const [jobsCompleted, setJobsCompleted] = useState('0');
+  const damageRef = useRef<VehicleDamageCaptureHandle>(null);
 
   const load = () => {
     const fleet = dbService.getVehicles();
@@ -164,6 +165,13 @@ export default function ReturnClient() {
     setIsSubmitting(true);
     setError(null);
     try {
+      const damageResult = await damageRef.current?.saveIfNeeded();
+      if (damageResult && !damageResult.ok) {
+        setError(damageResult.error || 'Could not save damage entry.');
+        setIsSubmitting(false);
+        return;
+      }
+
       const payload: InspectionResponse[] = questions.map((q) => {
         const resp = responses[q.id];
         return {
@@ -442,7 +450,7 @@ export default function ReturnClient() {
         </div>
 
         {user && vehicle && (
-          <VehicleDamageCapture vehicleId={vehicle.id} user={user} />
+          <VehicleDamageCapture ref={damageRef} vehicleId={vehicle.id} user={user} />
         )}
 
         {error && (
