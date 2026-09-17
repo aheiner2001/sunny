@@ -31,6 +31,7 @@ import {
   answerIndicatesIssue,
   buildEquipmentFlagPayload,
   getBinaryButtonLabels,
+  listVehicleEquipmentForFamily,
   shouldShowPhotoCapture,
 } from '@/lib/checklistPairing';
 import { activeChecklistQuestions } from '@/lib/checklistQuestions';
@@ -52,6 +53,7 @@ export default function InspectClient() {
   const [questions, setQuestions] = useState<ChecklistQuestion[]>([]);
   const [responses, setResponses] = useState<Record<string, { value: string; isFlagged: boolean; notes?: string; photoUrl?: string }>>({});
   const [flagIssues, setFlagIssues] = useState<Record<string, { title: string; description: string; photoUrl?: string }>>({});
+  const [equipmentPicks, setEquipmentPicks] = useState<Record<string, string>>({});
   const [generalNotes, setGeneralNotes] = useState('');
   const [generalPhotos, setGeneralPhotos] = useState<string[]>([]);
   const [signatureBase64, setSignatureBase64] = useState<string | null>(null);
@@ -434,6 +436,20 @@ export default function InspectClient() {
       return;
     }
 
+    const allEquipmentForGate = dbService.getEquipment();
+    const missingEquipmentPick = questions.find(q => {
+      const resp = responses[q.id];
+      if (!resp?.isFlagged || !q.equipmentFamily) return false;
+      const matches = listVehicleEquipmentForFamily(allEquipmentForGate, vehicle.id, q.equipmentFamily);
+      return matches.length >= 2 && !equipmentPicks[q.id];
+    });
+    if (missingEquipmentPick) {
+      alert(
+        `Select which ${missingEquipmentPick.equipmentFamily} this flag applies to before submitting.`
+      );
+      return;
+    }
+
     const currentOdo = vehicle.odometer || 0;
     const parsedOdo = collectOdometer && odometer ? Number(odometer) : null;
     if (collectOdometer && parsedOdo !== null && parsedOdo < currentOdo) {
@@ -449,9 +465,29 @@ export default function InspectClient() {
       const linkedByQuestion = new Map(
         questions.map(q => {
           const resp = responses[q.id];
-          const linked = resp?.isFlagged
-            ? buildEquipmentFlagPayload(q, resp?.value || 'flagged', allEquipment, vehicle.id)
-            : null;
+          if (!resp?.isFlagged) return [q.id, null] as const;
+          let linked = buildEquipmentFlagPayload(
+            q,
+            resp?.value || 'flagged',
+            allEquipment,
+            vehicle.id
+          );
+          if (!linked && q.equipmentFamily) {
+            const matches = listVehicleEquipmentForFamily(
+              allEquipment,
+              vehicle.id,
+              q.equipmentFamily
+            );
+            const pickId = equipmentPicks[q.id];
+            const chosen = pickId ? matches.find(e => e.id === pickId) : undefined;
+            if (chosen) {
+              linked = {
+                equipmentId: chosen.id,
+                equipmentName: chosen.name,
+                status: 'flagged',
+              };
+            }
+          }
           return [q.id, linked] as const;
         })
       );
@@ -479,7 +515,12 @@ export default function InspectClient() {
         const linked = linkedByQuestion.get(qId) || null;
         return {
           equipmentId: linked?.equipmentId || question?.equipmentId || null,
-          equipmentName: linked?.equipmentName || question?.equipmentName || issueData.title || 'Equipment Item',
+          equipmentName:
+            linked?.equipmentName ||
+            question?.equipmentFamily ||
+            question?.equipmentName ||
+            issueData.title ||
+            'Equipment Item',
           title: issueData.title || 'Flagged Issue',
           description: issueData.description || '',
           questionType: question?.type,
@@ -1182,6 +1223,50 @@ export default function InspectClient() {
 
                         {isFlagged && (
                           <div className="mt-3 pt-3 border-t border-amber-200/80 bg-amber-100/40 p-3 rounded-xl space-y-3 animate-in fade-in duration-150">
+                            {q.equipmentFamily && vehicle && (() => {
+                              const candidates = listVehicleEquipmentForFamily(
+                                dbService.getEquipment(),
+                                vehicle.id,
+                                q.equipmentFamily
+                              );
+                              if (candidates.length === 0) {
+                                return (
+                                  <p className="text-[11px] font-semibold text-amber-900 m-0">
+                                    No {q.equipmentFamily} assigned to this van — issue will not link to a
+                                    specific unit.
+                                  </p>
+                                );
+                              }
+                              if (candidates.length === 1) {
+                                return (
+                                  <p className="text-[11px] text-amber-800/80 m-0">
+                                    Links to {candidates[0].name}
+                                  </p>
+                                );
+                              }
+                              return (
+                                <div>
+                                  <label className="block text-[11px] font-bold text-amber-900 uppercase tracking-wider mb-1">
+                                    Select which {q.equipmentFamily} this flag applies to
+                                  </label>
+                                  <select
+                                    value={equipmentPicks[q.id] || ''}
+                                    onChange={e =>
+                                      setEquipmentPicks(prev => ({ ...prev, [q.id]: e.target.value }))
+                                    }
+                                    className="w-full px-3 py-1.5 text-xs rounded-lg border border-amber-200 bg-surface focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold"
+                                    required
+                                  >
+                                    <option value="">Choose unit…</option>
+                                    {candidates.map(c => (
+                                      <option key={c.id} value={c.id}>
+                                        {c.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              );
+                            })()}
                             <div className="text-[11px] font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1">
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
                               Optional notes for the permanent log
