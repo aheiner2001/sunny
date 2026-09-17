@@ -9,6 +9,7 @@ import type { Config } from 'tailwindcss';
  * of stock). Primary actions are `ink`.
  */
 const config: Config = {
+  darkMode: 'class',
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',

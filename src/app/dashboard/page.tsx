@@ -29,6 +29,18 @@ import { InspectionCalendar } from '@/components/InspectionCalendar';
 import { EmptyState } from '@/components/EmptyState';
 import { LifespanActionModal } from '@/components/LifespanActionModal';
 import { useAuth } from '@/context/AuthContext';
+import {
+  filterTodaysIssues,
+  loadDashboardLayout,
+  saveDashboardLayout,
+  resetDashboardLayout,
+  reorderDashboardLayout,
+  setDashboardWidgetSize,
+  sizeToColSpan,
+  type DashboardWidgetLayout,
+  type DashboardWidgetId,
+  type DashboardWidgetSize,
+} from '@/lib/dashboardLayout';
 
 const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
   stock_low_inventory: 'Stock / Low Inventory',
@@ -50,7 +62,7 @@ function issueTypeLabel(issue: Issue): string {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -70,6 +82,10 @@ export default function DashboardPage() {
   const [selectedLifespanIds, setSelectedLifespanIds] = useState<string[]>([]);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
 
+  const [dashboardLayout, setDashboardLayout] = useState<DashboardWidgetLayout[]>([]);
+  const [customizeLayout, setCustomizeLayout] = useState(false);
+  const [dragWidgetId, setDragWidgetId] = useState<DashboardWidgetId | null>(null);
+
   const loadData = () => {
     setVehicles(dbService.getVehicles());
     setInspections(dbService.getInspections());
@@ -80,15 +96,16 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadData();
+    setDashboardLayout(loadDashboardLayout(user?.id));
     window.addEventListener('sunny_db_update', loadData);
     return () => window.removeEventListener('sunny_db_update', loadData);
-  }, []);
+  }, [user?.id]);
 
   const today = new Date();
   const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const totalVehiclesCount = vehicles.length;
   const todayInspections = inspections.filter(i => i.dateString === todayString);
-  const todayIssues = issues.filter(i => i.dateString === todayString);
+  const todayIssues = filterTodaysIssues(issues, todayString);
   const todayInspectionsCount = todayInspections.length;
   const openIssuesCount = issues.filter(i => i.status !== 'fixed').length;
   const openIssues = issues.filter(i => i.status !== 'fixed');
@@ -178,6 +195,52 @@ export default function DashboardPage() {
     ...(activityFilter !== 'issues' ? todayInspections.map(insp => ({ type: 'inspection' as const, insp, at: insp.submittedAt })) : []),
     ...(activityFilter !== 'inspections' ? todayIssues.map(issue => ({ type: 'issue' as const, issue, at: issue.reportedAt })) : [])
   ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
+
+  const persistLayout = (next: DashboardWidgetLayout[]) => {
+    setDashboardLayout(saveDashboardLayout(next, user?.id));
+  };
+
+  const onWidgetDragStart = (id: DashboardWidgetId) => setDragWidgetId(id);
+  const onWidgetDrop = (toId: DashboardWidgetId) => {
+    if (!dragWidgetId || dragWidgetId === toId) return;
+    persistLayout(reorderDashboardLayout(dashboardLayout, dragWidgetId, toId));
+    setDragWidgetId(null);
+  };
+  const onWidgetSize = (id: DashboardWidgetId, size: DashboardWidgetSize) => {
+    persistLayout(setDashboardWidgetSize(dashboardLayout, id, size));
+  };
+
+  const widgetShell = (id: DashboardWidgetId, children: React.ReactNode) => {
+    const entry = dashboardLayout.find(w => w.id === id) || { id, size: 'medium' as DashboardWidgetSize };
+    return (
+      <div
+        className={`${sizeToColSpan(entry.size)} ${customizeLayout ? 'outline outline-1 outline-dashed outline-line rounded-2xl' : ''}`}
+        draggable={customizeLayout}
+        onDragStart={() => onWidgetDragStart(id)}
+        onDragOver={e => customizeLayout && e.preventDefault()}
+        onDrop={() => onWidgetDrop(id)}
+      >
+        {customizeLayout && (
+          <div className="flex items-center gap-1 px-2 pt-2">
+            <span className="text-[10px] font-bold uppercase text-ink-faint">Size</span>
+            {(['small', 'medium', 'wide'] as DashboardWidgetSize[]).map(size => (
+              <button
+                key={size}
+                type="button"
+                className={`btn btn-sm ${entry.size === size ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => onWidgetSize(id, size)}
+              >
+                {size}
+              </button>
+            ))}
+          </div>
+        )}
+        {children}
+      </div>
+    );
+  };
+
 
   return (
     <div className="page max-w-full overflow-x-hidden stack gap-6">
@@ -393,6 +456,33 @@ export default function DashboardPage() {
 
 
       {/* Metric Tiles */}
+
+      <div className="spread items-center gap-2 flex-wrap mb-3">
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => setCustomizeLayout(v => !v)}
+        >
+          {customizeLayout ? 'Done customizing' : 'Customize layout'}
+        </button>
+        {customizeLayout && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              const next = resetDashboardLayout(user?.id);
+              setDashboardLayout(next);
+            }}
+          >
+            <RotateCcw className="w-3.5 h-3.5" /> Reset layout
+          </button>
+        )}
+        {customizeLayout && (
+          <p className="text-[11px] text-ink-faint m-0">
+            Drag widgets to reorder. Size presets: small / medium / wide (saved for your account).
+          </p>
+        )}
+      </div>
       <div className="grid-auto" style={{ '--min': '15rem' } as React.CSSProperties}>
         <div className="card card-pad flex flex-col">
           <div className="spread items-start">
@@ -635,6 +725,49 @@ export default function DashboardPage() {
             onMonthChange={setCurrentMonthDate}
             onDayClick={(d) => router.push(`/calendar?date=${d}`)}
           />
+        </div>
+
+        
+        {/* Today's Issues — distinct from open-issue backlog */}
+        <div className="card flex flex-col" data-widget="today_issues">
+          <div className="card-head">
+            <h2 className="card-title">Today&apos;s issues</h2>
+            <Link href="/issues" className="link-action">
+              View all <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+          <div>
+            {todayIssues.slice(0, 5).map((issue) => (
+              <div
+                key={issue.id}
+                className="row"
+                data-status={issue.priority === 'critical' ? 'critical' : 'flagged'}
+              >
+                <span className="icon-tile" data-status="flagged">
+                  <AlertTriangle className="w-4 h-4" />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold truncate m-0">{issue.equipmentName}</p>
+                  <p className="unit-tag truncate m-0">
+                    {issue.vehicleNumber} · reported today
+                  </p>
+                </div>
+                <IssueStatusBadge status={issue.status} />
+              </div>
+            ))}
+            {todayIssues.length === 0 && (
+              <EmptyState
+                icon={
+                  <span className="icon-tile icon-tile-lg" data-status="ok">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </span>
+                }
+                title="No issues today"
+              >
+                Nothing new reported today. Open issues below are the broader backlog.
+              </EmptyState>
+            )}
+          </div>
         </div>
 
         {/* Open Issues Tile */}

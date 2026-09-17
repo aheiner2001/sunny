@@ -12,7 +12,9 @@ export const QUESTION_TYPES: QuestionType[] = [
   'pass_fail',
   'yes_no',
   'text',
+  'photo',
   'equipment_status',
+  'equipment_check',
   'checkbox',
   'multiple_choice'
 ];
@@ -49,7 +51,7 @@ export const AI_IMPORT_PROMPT = `Analyze my text/image instructions and output R
       "id": "string            // stable id, e.g. \\"q-engine-1\\"",
       "category": "string      // MUST equal the id of one of the categories above",
       "text": "string          // the question the employee reads",
-      "type": "pass_fail | yes_no | text | equipment_status | checkbox | multiple_choice",
+      "type": "pass_fail | yes_no | text | photo | equipment_status | equipment_check | checkbox | multiple_choice",
       "required": true,
       "order": 1,
       "helperText": "string|null   // optional guidance shown under the question",

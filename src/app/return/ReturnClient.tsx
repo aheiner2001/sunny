@@ -11,7 +11,12 @@ import {
   resolveReturnVehicle,
   vehiclesInUse,
 } from '@/lib/returnFlow';
-import { canSubmitInspection } from '../inspect/inspectionValidation';
+import { canSubmitInspection, getUnansweredInspectionQuestions } from '../inspect/inspectionValidation';
+import {
+  answerIndicatesIssue,
+  getBinaryButtonLabels,
+  shouldShowPhotoCapture,
+} from '@/lib/checklistPairing';
 import { activeChecklistQuestions } from '@/lib/checklistQuestions';
 import { VehicleDamageCapture } from '@/components/VehicleDamageCapture';
 import type {
@@ -140,6 +145,7 @@ export default function ReturnClient() {
   };
 
   const allRequiredAnswered = canSubmitInspection(questions, responses);
+  const unansweredQuestions = getUnansweredInspectionQuestions(questions, responses);
 
   const deferCatchUp = () => {
     if (user) {
@@ -311,44 +317,44 @@ export default function ReturnClient() {
           const resp = responses[q.id];
           const isFlagged = Boolean(resp?.isFlagged);
           return (
-            <div key={q.id} className="border-b border-line last:border-b-0 pb-4 last:pb-0">
+            <div key={q.id} id={`return-q-${q.id}`} className="border-b border-line last:border-b-0 pb-4 last:pb-0 scroll-mt-24">
               <div className="flex items-start justify-between gap-3">
                 <p className="text-sm font-bold text-ink">
                   {q.text}
                   {q.required ? <span className="text-[var(--critical)]"> *</span> : null}
                 </p>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {(q.type === 'pass_fail' || q.type === 'yes_no' || !q.type) && (
+                  {(q.type === 'pass_fail' || q.type === 'yes_no' || q.type === 'equipment_status' || q.type === 'equipment_check' || !q.type) && (
                     <>
                       <button
                         type="button"
-                        onClick={() =>
-                          setResponse(q, q.type === 'pass_fail' ? 'pass' : 'yes', false)
-                        }
+                        onClick={() => {
+                          const labels = getBinaryButtonLabels(q.type || 'yes_no');
+                          const value = labels.positiveValue;
+                          setResponse(q, value, answerIndicatesIssue(q, value));
+                        }}
                         className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                          !isFlagged && (resp?.value === 'pass' || resp?.value === 'yes')
+                          !isFlagged && (resp?.value === 'pass' || resp?.value === 'yes' || resp?.value === 'working')
                             ? 'bg-emerald-600 text-white shadow-sm'
                             : 'bg-surface border border-line text-ink-muted hover:bg-surface-alt'
                         }`}
                       >
-                        Pass
+                        {getBinaryButtonLabels(q.type || 'yes_no').positive}
                       </button>
                       <button
                         type="button"
-                        onClick={() =>
-                          setResponse(
-                            q,
-                            q.type === 'pass_fail' ? 'fail' : 'no',
-                            q.type === 'pass_fail'
-                          )
-                        }
+                        onClick={() => {
+                          const labels = getBinaryButtonLabels(q.type || 'yes_no');
+                          const value = labels.negativeValue;
+                          setResponse(q, value, answerIndicatesIssue(q, value));
+                        }}
                         className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                          isFlagged || resp?.value === 'fail' || resp?.value === 'no'
+                          isFlagged || resp?.value === 'fail' || resp?.value === 'no' || resp?.value === 'flagged'
                             ? 'bg-amber-500 text-white shadow-sm'
                             : 'bg-surface border border-line text-amber-700 hover:bg-amber-50'
                         }`}
                       >
-                        Flag
+                        {getBinaryButtonLabels(q.type || 'yes_no').negative}
                       </button>
                     </>
                   )}
@@ -378,7 +384,7 @@ export default function ReturnClient() {
                   className="mt-2 w-full px-3 py-1.5 text-xs rounded-xl border border-line bg-surface focus:outline-none focus:ring-2 focus:ring-ink/20"
                 />
               )}
-              {q.type === 'photo' && (
+              {(q.type === 'photo' || shouldShowPhotoCapture(q)) && (
                 <div className="mt-2 space-y-2">
                   <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-line bg-surface text-xs font-bold text-ink hover:bg-surface-alt">
                     <Camera className="w-3.5 h-3.5" />
@@ -441,6 +447,25 @@ export default function ReturnClient() {
 
         {error && (
           <p className="text-xs font-semibold text-[var(--critical)]">{error}</p>
+        )}
+
+        {unansweredQuestions.length > 0 && (
+          <div className="mb-3 p-3 rounded-xl border border-amber-200 bg-amber-50/60 space-y-2">
+            <p className="text-xs font-bold text-amber-900">
+              {unansweredQuestions.length} unanswered required question{unansweredQuestions.length === 1 ? '' : 's'}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                const first = unansweredQuestions[0];
+                const el = first && document.getElementById(`return-q-${first.id}`);
+                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+              className="text-xs font-bold text-amber-900 underline"
+            >
+              Take me to unanswered
+            </button>
+          </div>
         )}
 
         <button
