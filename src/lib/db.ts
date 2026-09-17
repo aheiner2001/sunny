@@ -27,6 +27,7 @@ import {
   LifespanStatus,
   VehicleDayLog,
   MissedReturn,
+  DamageRegion,
   VehicleDamageEvent,
   VehicleSide
 } from '@/types';
@@ -34,7 +35,7 @@ import { classifyIssueType } from './issueClassification';
 import { checkInFields, checkOutFields, occupancyAfterInspection, shouldAutoReturnVehicle, localDateString } from './occupancy';
 import { DEFAULT_RETURN_QUESTIONS, hasReturnForShift, normalizeReturnQuestions, shiftDateStringForVehicle } from './returnFlow';
 import { repairDuplicateCategoryIds } from './checklistCategories';
-import { assertDamagePayload } from './vehicleDamage';
+import { assertDamagePayload, normalizeRegion } from './vehicleDamage';
 import { 
   computeLifespanStatus,
   calculateLifespanDueDate,
@@ -3502,6 +3503,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     noNewDamage: boolean;
     note?: string;
     photoDataUrls: string[];
+    region?: DamageRegion | null;
     inspectionId?: string | null;
     userId: string;
     userName: string;
@@ -3513,10 +3515,14 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     if (!vehicle) throw new Error('Vehicle not found');
 
     const photoDataUrls = (input.photoDataUrls || []).slice(0, 8);
+    const region =
+      input.noNewDamage || !input.region ? null : normalizeRegion(input.region);
+
     assertDamagePayload({
       noNewDamage: input.noNewDamage,
       side: input.noNewDamage ? null : input.side,
       photoDataUrls: input.noNewDamage ? [] : photoDataUrls,
+      region,
     });
 
     const event: VehicleDamageEvent = {
@@ -3526,6 +3532,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       noNewDamage: Boolean(input.noNewDamage),
       note: input.note?.trim() || undefined,
       photoDataUrls: input.noNewDamage ? [] : photoDataUrls,
+      region: input.noNewDamage || !region ? undefined : region,
       inspectionId: input.inspectionId ?? null,
       userId: input.userId,
       userName: input.userName,

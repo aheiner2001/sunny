@@ -1,7 +1,9 @@
 'use client';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { DamageRegionOverlay } from '@/components/DamageRegionOverlay';
 import { dbService } from '@/lib/db';
 import {
+  eventsWithRegionForSide,
   latestStatusBySide,
   OVERVIEW_IMAGE,
   SIDE_IMAGE,
@@ -17,6 +19,8 @@ type Props = {
 export function VehicleDamagePanel({ vehicleId }: Props) {
   const [events, setEvents] = useState<VehicleDamageEvent[]>([]);
   const [selectedSide, setSelectedSide] = useState<VehicleSide | 'all'>('all');
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const historyRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const load = () => {
     setEvents(dbService.getVehicleDamageEvents(vehicleId));
@@ -35,12 +39,22 @@ export function VehicleDamagePanel({ vehicleId }: Props) {
     return events.filter((e) => e.side === selectedSide);
   }, [events, selectedSide]);
 
-  const toggle = (s: VehicleSide) => setSelectedSide((cur) => (cur === s ? 'all' : s));
+  const toggle = (s: VehicleSide) => {
+    setSelectedSide((cur) => (cur === s ? 'all' : s));
+    setSelectedEventId(null);
+  };
 
-  const previewSrc = selectedSide === 'all' ? OVERVIEW_IMAGE : SIDE_IMAGE[selectedSide];
   const previewLabel = selectedSide === 'all' ? 'Overview' : SIDE_LABEL[selectedSide];
   const previewLogged =
     selectedSide !== 'all' && latest[selectedSide] ? latest[selectedSide] : null;
+
+  const markers =
+    selectedSide === 'all'
+      ? []
+      : eventsWithRegionForSide(events, selectedSide).map((e) => ({
+          id: e.id,
+          region: e.region!,
+        }));
 
   return (
     <div className="stack gap-4">
@@ -48,10 +62,19 @@ export function VehicleDamagePanel({ vehicleId }: Props) {
         <div className="spread items-start gap-2 mb-3">
           <div>
             <h2 className="card-title">Damage overview</h2>
-            <p className="hint mt-1">Tap a side to preview the van and filter history.</p>
+            <p className="hint mt-1">
+              Tap a side to preview marks. Tap a red box to open that history entry.
+            </p>
           </div>
           {selectedSide !== 'all' && (
-            <button type="button" className="btn btn-ghost btn-sm text-xs" onClick={() => setSelectedSide('all')}>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm text-xs"
+              onClick={() => {
+                setSelectedSide('all');
+                setSelectedEventId(null);
+              }}
+            >
               Show overview
             </button>
           )}
@@ -69,11 +92,26 @@ export function VehicleDamagePanel({ vehicleId }: Props) {
             ) : null}
           </div>
           <div className="flex items-center justify-center min-h-[180px] sm:min-h-[220px] p-4 sm:p-6">
-            <img
-              src={previewSrc}
-              alt={`${previewLabel} vehicle diagram`}
-              className="max-h-52 sm:max-h-64 w-auto max-w-full object-contain drop-shadow-sm"
-            />
+            {selectedSide === 'all' ? (
+              <img
+                src={OVERVIEW_IMAGE}
+                alt="Overview vehicle diagram"
+                className="max-h-52 sm:max-h-64 w-auto max-w-full object-contain drop-shadow-sm"
+              />
+            ) : (
+              <DamageRegionOverlay
+                imageSrc={SIDE_IMAGE[selectedSide]}
+                imageAlt={`${SIDE_LABEL[selectedSide]} vehicle diagram`}
+                mode="display"
+                markers={markers}
+                selectedId={selectedEventId}
+                onSelect={(id) => {
+                  setSelectedEventId(id);
+                  const node = historyRefs.current[id];
+                  node?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }}
+              />
+            )}
           </div>
         </div>
 
@@ -119,7 +157,15 @@ export function VehicleDamagePanel({ vehicleId }: Props) {
           <p className="hint">No damage entries yet.</p>
         ) : (
           timeline.map((e) => (
-            <div key={e.id} className="border-b border-line last:border-b-0 pb-3 last:pb-0 space-y-2">
+            <div
+              key={e.id}
+              ref={(el) => {
+                historyRefs.current[e.id] = el;
+              }}
+              className={`border-b border-line last:border-b-0 pb-3 last:pb-0 space-y-2 rounded-lg ${
+                selectedEventId === e.id ? 'ring-2 ring-rose-500/60 bg-rose-50/40 px-2 -mx-2' : ''
+              }`}
+            >
               <div className="spread items-start gap-2">
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-ink">

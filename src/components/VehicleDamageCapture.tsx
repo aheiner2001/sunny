@@ -1,9 +1,16 @@
 'use client';
 import React, { useState } from 'react';
 import { Camera, Check, X } from 'lucide-react';
+import { DamageRegionOverlay } from '@/components/DamageRegionOverlay';
 import { dbService } from '@/lib/db';
-import { MAX_DAMAGE_PHOTOS, SIDE_LABEL, VEHICLE_SIDES } from '@/lib/vehicleDamage';
-import type { User, VehicleDamageEvent, VehicleSide } from '@/types';
+import {
+  MAX_DAMAGE_PHOTOS,
+  SIDE_IMAGE,
+  SIDE_LABEL,
+  VEHICLE_SIDES,
+  isValidRegion,
+} from '@/lib/vehicleDamage';
+import type { DamageRegion, User, VehicleDamageEvent, VehicleSide } from '@/types';
 
 function processImageFile(file: File, callback: (dataUrl: string) => void) {
   const reader = new FileReader();
@@ -49,6 +56,7 @@ export function VehicleDamageCapture({ vehicleId, user, onRecorded }: Props) {
   const [side, setSide] = useState<VehicleSide | ''>('');
   const [note, setNote] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
+  const [region, setRegion] = useState<DamageRegion | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -75,18 +83,25 @@ export function VehicleDamageCapture({ vehicleId, user, onRecorded }: Props) {
     setError(null);
     setBusy(true);
     try {
+      if (!noNewDamage && !isValidRegion(region)) {
+        setError('Draw a box on the diagram to mark where the damage is');
+        setBusy(false);
+        return;
+      }
       const event = await dbService.addVehicleDamageEvent({
         vehicleId,
         side: noNewDamage ? null : (side as VehicleSide) || null,
         noNewDamage,
         note: note.trim() || undefined,
         photoDataUrls: noNewDamage ? [] : photos,
+        region: noNewDamage ? null : region,
         userId: user.id,
         userName: user.name,
       });
       setSaved(true);
       setNote('');
       setPhotos([]);
+      setRegion(null);
       onRecorded?.(event);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Could not save damage entry.');
@@ -114,6 +129,7 @@ export function VehicleDamageCapture({ vehicleId, user, onRecorded }: Props) {
           checked={noNewDamage}
           onChange={(e) => {
             setNoNewDamage(e.target.checked);
+            if (e.target.checked) setRegion(null);
             setSaved(false);
             setError(null);
           }}
@@ -136,6 +152,7 @@ export function VehicleDamageCapture({ vehicleId, user, onRecorded }: Props) {
                   onClick={() => {
                     setSide(s);
                     setPhotos([]);
+                    setRegion(null);
                     setSaved(false);
                     setError(null);
                   }}
@@ -156,6 +173,25 @@ export function VehicleDamageCapture({ vehicleId, user, onRecorded }: Props) {
             )}
           </div>
 
+          {side && (
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-muted mb-1">
+                Mark damage on diagram
+              </label>
+              <DamageRegionOverlay
+                imageSrc={SIDE_IMAGE[side]}
+                imageAlt={`${SIDE_LABEL[side]} diagram`}
+                mode="draw"
+                value={region}
+                onChange={(r) => {
+                  setRegion(r);
+                  setSaved(false);
+                  setError(null);
+                }}
+              />
+            </div>
+          )}
+
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-ink-muted mb-1">
               Note (optional)
@@ -167,7 +203,7 @@ export function VehicleDamageCapture({ vehicleId, user, onRecorded }: Props) {
                 setNote(e.target.value);
                 setSaved(false);
               }}
-              placeholder="Scratches near handleâ€¦"
+              placeholder="Scratches near handle…"
               className="w-full px-3 py-1.5 text-xs rounded-xl border border-line bg-surface focus:outline-none focus:ring-2 focus:ring-ink/20"
             />
           </div>
@@ -240,7 +276,7 @@ export function VehicleDamageCapture({ vehicleId, user, onRecorded }: Props) {
         className="btn btn-secondary btn-sm w-full disabled:opacity-50"
       >
         {busy
-          ? 'Savingâ€¦'
+          ? 'Saving…'
           : noNewDamage
             ? 'Record no new damage'
             : sideName
