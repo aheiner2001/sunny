@@ -39,7 +39,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { QuantityModal } from '@/components/QuantityModal';
 import { EquipmentAllocationModal } from '@/components/EquipmentAllocationModal';
 import { LifespanActionModal } from '@/components/LifespanActionModal';
-import { groupEquipmentByFamily } from '@/lib/equipmentGrouping';
+import { groupEquipmentByFamily, getEquipmentFamilyKey } from '@/lib/equipmentGrouping';
 import { QRCodeSVG } from 'qrcode.react';
 
 const emptyForm = {
@@ -115,6 +115,7 @@ function EquipmentPageContent() {
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
   const actionMenuBtnRef = useRef<HTMLButtonElement | null>(null);
 
@@ -395,6 +396,48 @@ function EquipmentPageContent() {
     setModal('edit');
   };
 
+  // Deep-link from Issues "See equipment" → scroll to + highlight that unit (no edit modal)
+  useEffect(() => {
+    const id = searchParams?.get('id')?.trim();
+    if (!id || equipment.length === 0) return;
+    const match = equipment.find((eq) => eq.id === id);
+    if (!match) return;
+
+    setSearchTerm('');
+    setStatusFilter('all');
+    setCategoryFilter('all');
+    setLifespanFilter('all');
+    setHighlightedId(id);
+
+    const familyKey = getEquipmentFamilyKey(match);
+    setExpandedFamilies((prev) => ({ ...prev, [familyKey]: true }));
+    const vehicleId = match.assignments?.[0]?.vehicleId || match.vehicleId;
+    if (vehicleId) {
+      setExpandedVehicles((prev) => ({ ...prev, [vehicleId]: true }));
+    }
+
+    const params = new URLSearchParams(searchParams?.toString() || '');
+    params.delete('id');
+    const query = params.toString();
+    router.replace(query ? `/equipment?${query}` : '/equipment', { scroll: false });
+
+    const scrollToRow = () => {
+      document.getElementById(`equipment-row-${id}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    };
+    const scrollTimer = window.setTimeout(scrollToRow, 100);
+    const scrollRetry = window.setTimeout(scrollToRow, 350);
+    const clearTimer = window.setTimeout(() => setHighlightedId(null), 5000);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(scrollRetry);
+      window.clearTimeout(clearTimer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once when id arrives
+  }, [searchParams, equipment]);
+
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!form.name.trim()) return;
@@ -638,8 +681,19 @@ function EquipmentPageContent() {
   const compactRow = (eq: Equipment) => {
     const isSelected = selectedEquipmentIds.includes(eq.id);
     const belowPar = isLowPar(eq);
+    const isHighlighted = highlightedId === eq.id;
     return (
-      <div key={eq.id} className={`border-t border-line px-3 py-2.5 transition-colors ${isSelected ? 'bg-primary/5' : ''} ${belowPar ? 'border-l-4 border-l-red-500' : ''}`}>
+      <div
+        id={`equipment-row-${eq.id}`}
+        key={eq.id}
+        className={`border-t border-line px-3 py-2.5 transition-colors ${
+          isHighlighted
+            ? 'bg-amber-100 ring-2 ring-amber-400 ring-inset'
+            : isSelected
+              ? 'bg-primary/5'
+              : ''
+        } ${belowPar ? 'border-l-4 border-l-red-500' : ''}`}
+      >
         <div className="spread items-start gap-2">
           <div className="flex items-start gap-2.5 min-w-0 flex-1">
             <input
@@ -694,8 +748,19 @@ function EquipmentPageContent() {
   const card = (eq: Equipment) => {
     const isSelected = selectedEquipmentIds.includes(eq.id);
     const belowPar = isLowPar(eq);
+    const isHighlighted = highlightedId === eq.id;
     return (
-      <div key={eq.id} className={`card card-pad relative ${isSelected ? 'ring-2 ring-primary' : ''} ${belowPar ? 'border-2 border-red-500/50' : ''}`}>
+      <div
+        id={`equipment-row-${eq.id}`}
+        key={eq.id}
+        className={`card card-pad relative transition-colors ${
+          isHighlighted
+            ? 'bg-amber-100 ring-2 ring-amber-400'
+            : isSelected
+              ? 'ring-2 ring-primary'
+              : ''
+        } ${belowPar ? 'border-2 border-red-500/50' : ''}`}
+      >
         <div className="spread items-start mb-3">
           <div className="cluster items-start min-w-0 gap-2.5">
             <input

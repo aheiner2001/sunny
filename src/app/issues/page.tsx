@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import {
   AlertTriangle,
   Search,
@@ -15,6 +16,7 @@ import {
   DollarSign,
   UserCheck,
   X,
+  ExternalLink,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Issue, IssueType, IssuePriority } from '@/types';
@@ -506,7 +508,22 @@ function IssuesPageContent() {
                     )}
                   </div>
 
-                  <div className="cluster justify-end pt-2 border-t border-line mt-4">
+                  <div className="cluster justify-between flex-wrap gap-2 pt-2 border-t border-line mt-4">
+                    {issue.equipmentId ? (
+                      <Link
+                        href={`/equipment?id=${encodeURIComponent(issue.equipmentId)}`}
+                        onClick={(event) => event.stopPropagation()}
+                        className="btn btn-secondary btn-sm"
+                      >
+                        <Wrench className="h-3.5 w-3.5" aria-hidden />
+                        See equipment
+                        <ExternalLink className="h-3 w-3 opacity-60" aria-hidden />
+                      </Link>
+                    ) : (
+                      <span className="text-[11px] text-ink-faint self-center">
+                        No linked equipment unit
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={(event) => {

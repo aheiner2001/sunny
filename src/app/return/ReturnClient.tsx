@@ -166,6 +166,9 @@ export default function ReturnClient() {
     setError(null);
     try {
       const damageResult = await damageRef.current?.saveIfNeeded();
+      if (!damageRef.current) {
+        console.warn('Damage capture not ready on submit; return continues without damage write.');
+      }
       if (damageResult && !damageResult.ok) {
         setError(damageResult.error || 'Could not save damage entry.');
         setIsSubmitting(false);

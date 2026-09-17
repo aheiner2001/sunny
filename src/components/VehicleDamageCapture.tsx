@@ -1,5 +1,5 @@
 'use client';
-import React, { forwardRef, useImperativeHandle, useState } from 'react';
+import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import { Camera, Check, X } from 'lucide-react';
 import { DamageRegionOverlay } from '@/components/DamageRegionOverlay';
 import { dbService } from '@/lib/db';
@@ -58,6 +58,18 @@ export type VehicleDamageCaptureHandle = {
   hasUnsavedDraft: () => boolean;
 };
 
+type DraftSnapshot = {
+  noNewDamage: boolean;
+  side: VehicleSide | '';
+  note: string;
+  photos: string[];
+  region: DamageRegion | null;
+  saved: boolean;
+  vehicleId: string;
+  userId: string;
+  userName: string;
+};
+
 export const VehicleDamageCapture = forwardRef<VehicleDamageCaptureHandle, Props>(
   function VehicleDamageCapture({ vehicleId, user, onRecorded }, ref) {
     const [noNewDamage, setNoNewDamage] = useState(false);
@@ -69,59 +81,88 @@ export const VehicleDamageCapture = forwardRef<VehicleDamageCaptureHandle, Props
     const [error, setError] = useState<string | null>(null);
     const [saved, setSaved] = useState(false);
 
-    const persist = async (): Promise<{ ok: boolean; error?: string }> => {
+    // Refs keep Submit's saveIfNeeded() from seeing a stale empty draft
+    // (React Compiler / memoized imperative handles can otherwise skip the save).
+    const draftRef = useRef<DraftSnapshot>({
+      noNewDamage: false,
+      side: '',
+      note: '',
+      photos: [],
+      region: null,
+      saved: false,
+      vehicleId,
+      userId: user.id,
+      userName: user.name,
+    });
+    draftRef.current = {
+      noNewDamage,
+      side,
+      note,
+      photos,
+      region,
+      saved,
+      vehicleId,
+      userId: user.id,
+      userName: user.name,
+    };
+    const onRecordedRef = useRef(onRecorded);
+    onRecordedRef.current = onRecorded;
+
+    const persistFromDraft = async (
+      draft: DraftSnapshot
+    ): Promise<{ ok: boolean; error?: string }> => {
       try {
-        if (noNewDamage) {
+        if (draft.noNewDamage) {
           const event = await dbService.addVehicleDamageEvent({
-            vehicleId,
+            vehicleId: draft.vehicleId,
             side: null,
             noNewDamage: true,
-            note: note.trim() || undefined,
+            note: draft.note.trim() || undefined,
             photoDataUrls: [],
             region: null,
-            userId: user.id,
-            userName: user.name,
+            userId: draft.userId,
+            userName: draft.userName,
           });
           setSaved(true);
           setNote('');
           setPhotos([]);
           setRegion(null);
-          onRecorded?.(event);
+          onRecordedRef.current?.(event);
           return { ok: true };
         }
 
-        if (!side && photos.length === 0 && !region) {
+        if (!draft.side && draft.photos.length === 0 && !draft.region) {
           return { ok: true };
         }
 
-        if (!side) {
+        if (!draft.side) {
           return { ok: false, error: 'Pick Front, Rear, Left, Right, or Cab for damage.' };
         }
-        if (!isValidRegion(region)) {
+        if (!isValidRegion(draft.region)) {
           return {
             ok: false,
             error: 'Draw a box on the diagram to mark where the damage is',
           };
         }
-        if (photos.length < 1) {
+        if (draft.photos.length < 1) {
           return { ok: false, error: 'Add at least one photo when reporting damage' };
         }
 
         const event = await dbService.addVehicleDamageEvent({
-          vehicleId,
-          side,
+          vehicleId: draft.vehicleId,
+          side: draft.side,
           noNewDamage: false,
-          note: note.trim() || undefined,
-          photoDataUrls: photos,
-          region,
-          userId: user.id,
-          userName: user.name,
+          note: draft.note.trim() || undefined,
+          photoDataUrls: draft.photos,
+          region: draft.region,
+          userId: draft.userId,
+          userName: draft.userName,
         });
         setSaved(true);
         setNote('');
         setPhotos([]);
         setRegion(null);
-        onRecorded?.(event);
+        onRecordedRef.current?.(event);
         return { ok: true };
       } catch (err: unknown) {
         return {
@@ -131,20 +172,26 @@ export const VehicleDamageCapture = forwardRef<VehicleDamageCaptureHandle, Props
       }
     };
 
-    useImperativeHandle(ref, () => ({
-      hasUnsavedDraft: () => {
-        if (saved) return false;
-        if (noNewDamage) return true;
-        return Boolean(side || photos.length > 0 || region);
-      },
-      saveIfNeeded: async () => {
-        if (saved) return { ok: true };
-        if (!noNewDamage && !side && photos.length === 0 && !region) {
-          return { ok: true };
-        }
-        return persist();
-      },
-    }));
+    useImperativeHandle(
+      ref,
+      () => ({
+        hasUnsavedDraft: () => {
+          const d = draftRef.current;
+          if (d.saved) return false;
+          if (d.noNewDamage) return true;
+          return Boolean(d.side || d.photos.length > 0 || d.region);
+        },
+        saveIfNeeded: async () => {
+          const d = draftRef.current;
+          if (d.saved) return { ok: true };
+          if (!d.noNewDamage && !d.side && d.photos.length === 0 && !d.region) {
+            return { ok: true };
+          }
+          return persistFromDraft(d);
+        },
+      }),
+      []
+    );
 
     const addFiles = (files: FileList | null) => {
       if (!files?.length) return;
@@ -167,7 +214,7 @@ export const VehicleDamageCapture = forwardRef<VehicleDamageCaptureHandle, Props
     const handleRecord = async () => {
       setError(null);
       setBusy(true);
-      const result = await persist();
+      const result = await persistFromDraft(draftRef.current);
       if (!result.ok) setError(result.error || 'Could not save damage entry.');
       setBusy(false);
     };

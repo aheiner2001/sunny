@@ -369,16 +369,42 @@ class DataStore {
       // Vehicle damage: merge remote into local (never wipe local from an empty cloud collection)
       onSnapshot(collection(db, 'vehicleDamage'), (snapshot) => {
         const remote: VehicleDamageEvent[] = [];
-        snapshot.forEach((d) => remote.push(d.data() as VehicleDamageEvent));
+        snapshot.forEach((d) => {
+          const data = d.data() as VehicleDamageEvent;
+          remote.push({
+            ...data,
+            id: data.id || d.id,
+            photoDataUrls: Array.isArray(data.photoDataUrls) ? data.photoDataUrls : [],
+          });
+        });
         if (remote.length === 0) return;
         const local = this.readVehicleDamageEvents();
         const byId = new Map<string, VehicleDamageEvent>();
         for (const e of local) byId.set(e.id, e);
         for (const e of remote) {
+          if (!e.id) continue;
           const prev = byId.get(e.id);
-          if (!prev || (e.createdAt || '') >= (prev.createdAt || '')) {
+          if (!prev) {
             byId.set(e.id, e);
+            continue;
           }
+          // Prefer newer metadata, but keep local photos if cloud stripped them (doc size / rules)
+          const remoteNewer = (e.createdAt || '') >= (prev.createdAt || '');
+          const base = remoteNewer ? e : prev;
+          const other = remoteNewer ? prev : e;
+          const mergedPhotos =
+            (e.photoDataUrls?.length || 0) > 0
+              ? e.photoDataUrls
+              : (prev.photoDataUrls?.length || 0) > 0
+                ? prev.photoDataUrls
+                : base.photoDataUrls || [];
+          byId.set(e.id, {
+            ...base,
+            photoDataUrls: mergedPhotos,
+            region: base.region ?? other.region,
+            id: e.id,
+            vehicleId: base.vehicleId || other.vehicleId,
+          });
         }
         const merged = Array.from(byId.values()).sort((a, b) =>
           b.createdAt.localeCompare(a.createdAt)
@@ -3574,11 +3600,13 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
 
     if (db) {
       try {
+        await ensureAuth();
         // Photos as data URLs can exceed Firestore doc size; store metadata + region always,
         // keep photos local when the full doc is too large.
         await setDoc(doc(db, 'vehicleDamage', event.id), sanitizeForFirestore(event));
       } catch (e: any) {
         try {
+          await ensureAuth();
           const { photoDataUrls: _photos, ...meta } = event;
           await setDoc(
             doc(db, 'vehicleDamage', event.id),
