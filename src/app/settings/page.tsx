@@ -488,7 +488,7 @@ function SettingsPageContent() {
         type: questionForm.type,
         required: questionForm.required,
         helperText: questionForm.helperText.trim() || undefined,
-        equipmentName: questionForm.equipmentName.trim() || undefined,
+        equipmentName: undefined,
         flagCondition: questionForm.flagCondition || 'on_no',
         photoRequirement: questionForm.photoRequirement || 'optional',
         equipmentFamily: questionForm.equipmentFamily.trim() || undefined,
@@ -510,7 +510,7 @@ function SettingsPageContent() {
         required: questionForm.required,
         order: questions.length + 1,
         helperText: questionForm.helperText.trim() || undefined,
-        equipmentName: questionForm.equipmentName.trim() || undefined,
+        equipmentName: undefined,
         flagCondition: questionForm.flagCondition || 'on_no',
         photoRequirement: questionForm.photoRequirement || 'optional',
         equipmentFamily: questionForm.equipmentFamily.trim() || undefined,
@@ -878,9 +878,9 @@ function SettingsPageContent() {
                           Required
                         </span>
                       )}
-                      {q.equipmentName && (
+                      {q.equipmentFamily && (
                         <span className="text-[10px] font-medium text-ink-muted bg-surface-sunk px-1.5 py-0.5 rounded">
-                          Linked: {q.equipmentName}
+                          Tagged: {q.equipmentFamily}
                         </span>
                       )}
                     </div>
@@ -1432,24 +1432,32 @@ function SettingsPageContent() {
                 </div>
               )}
 
-              {(questionForm.type === 'equipment_check' || questionForm.type === 'equipment_status') && (
-                <div>
-                  <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
-                    Equipment Family (linked to van inventory)
-                  </label>
-                  <select
-                    value={questionForm.equipmentFamily}
-                    onChange={(e) => setQuestionForm({ ...questionForm, equipmentFamily: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-line bg-surface focus:ring-2 focus:ring-sky-500 focus:outline-none font-semibold"
-                  >
-                    <option value="">Select tool family…</option>
-                    {listDistinctEquipmentFamilies(dbService.getEquipment()).map((f) => (
-                      <option key={f.key} value={f.label}>{f.label}</option>
-                    ))}
-                  </select>
-                  <p className="text-[10px] text-ink-faint mt-1">Tags a tool family (e.g. Pressure Washer), not a specific unit.</p>
-                </div>
-              )}
+              <div>
+                <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
+                  Tag equipment (Optional)
+                </label>
+                <select
+                  value={questionForm.equipmentFamily}
+                  onChange={(e) =>
+                    setQuestionForm({
+                      ...questionForm,
+                      equipmentFamily: e.target.value,
+                      equipmentName: '',
+                    })
+                  }
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-line bg-surface focus:ring-2 focus:ring-sky-500 focus:outline-none font-semibold"
+                >
+                  <option value="">None</option>
+                  {listDistinctEquipmentFamilies(dbService.getEquipment()).map((f) => (
+                    <option key={f.key} value={f.label}>
+                      {f.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-ink-faint mt-1">
+                  Family only (e.g. Air Compressor). The van&apos;s unit is resolved when someone inspects.
+                </p>
+              </div>
 
               {questionForm.type !== 'checkbox' && questionForm.type !== 'photo' && (
                 <div>
@@ -1477,19 +1485,6 @@ function SettingsPageContent() {
                   placeholder="e.g. Check oil level, drain valve closed, listen for leaks."
                   value={questionForm.helperText}
                   onChange={(e) => setQuestionForm({ ...questionForm, helperText: e.target.value })}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
-                  Associated Equipment Name (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Pressure Washer, Air Compressor"
-                  value={questionForm.equipmentName}
-                  onChange={(e) => setQuestionForm({ ...questionForm, equipmentName: e.target.value })}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none"
                 />
               </div>
