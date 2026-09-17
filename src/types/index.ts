@@ -67,7 +67,7 @@ export interface LifespanLogEntry {
   timestamp: string; // ISO string
   userId?: string | null;
   userName?: string | null;
-  action: 'extended' | 'replaced' | 'retired' | 'threshold_updated' | 'created';
+  action: 'extended' | 'replaced' | 'retired' | 'unretired' | 'threshold_updated' | 'created';
   previousValues?: {
     carsUsed?: number;
     expectedCars?: number | null;

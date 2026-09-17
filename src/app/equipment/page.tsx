@@ -102,7 +102,7 @@ function EquipmentPageContent() {
     label: string;
   } | null>(null);
   const [allocationTarget, setAllocationTarget] = useState<Equipment | null>(null);
-  const [lifespanAction, setLifespanAction] = useState<{ item: Equipment; mode: 'extend' | 'replace' | 'retire' } | null>(null);
+  const [lifespanAction, setLifespanAction] = useState<{ item: Equipment; mode: 'extend' | 'replace' | 'retire' | 'unretire' } | null>(null);
 
   // 3.3 Multi-Select Inventory Transfers
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState<string[]>([]);
@@ -783,6 +783,27 @@ function EquipmentPageContent() {
                   <Archive className="w-3.5 h-3.5" />
                   Retire
                 </button>
+                {eq.retiredAt && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const ok = window.confirm(
+                        `Un-retire ${eq.name}? It will return to shop inventory. Choose OK for Working, or Cancel then use Needs Inspection from the dialog.`
+                      );
+                      if (!ok) {
+                        setLifespanAction({ item: eq, mode: 'unretire' });
+                        return;
+                      }
+                      setLifespanAction({ item: eq, mode: 'unretire' });
+                    }}
+                    className="btn btn-secondary btn-sm"
+                    title="Un-retire tool back to shop"
+                    aria-label="Un-retire tool"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Un-retire
+                  </button>
+                )}
               </div>
             )}
           </div>

@@ -333,3 +333,65 @@ export function calculateWearForecast(
 
   return { daysRemaining: null, estimatedExpiryDate: null, forecastText: 'No forecast available' };
 }
+
+
+
+export type UnretireRestoreStatus = 'working' | 'flagged';
+
+/**
+ * Manager un-retire: clears retiredAt, returns item to shop, keeps retirement history.
+ * "Needs inspection" maps to status `flagged` + lifespanStatus due_for_review.
+ */
+export function unretireLifespan(
+  equipment: Equipment,
+  meta?: {
+    userId?: string | null;
+    userName?: string | null;
+    reason?: string;
+    restoreStatus?: UnretireRestoreStatus;
+  }
+): Equipment {
+  if (!equipment.retiredAt) return equipment;
+
+  const nowIso = new Date().toISOString();
+  const restoreStatus: UnretireRestoreStatus = meta?.restoreStatus === 'flagged' ? 'flagged' : 'working';
+  const prevValues = {
+    retiredAt: equipment.retiredAt,
+    lifespanStatus: equipment.lifespanStatus,
+    status: equipment.status,
+    vehicleId: equipment.vehicleId ?? null,
+  };
+
+  const base: Equipment = {
+    ...equipment,
+    retiredAt: null,
+    status: restoreStatus,
+    vehicleId: null,
+    vehicleNumber: null,
+    assignments: [],
+    updatedAt: nowIso,
+  };
+
+  const lifespanStatus =
+    restoreStatus === 'flagged'
+      ? 'due_for_review'
+      : computeLifespanStatus(base);
+
+  const updated: Equipment = {
+    ...base,
+    lifespanStatus,
+  };
+
+  updated.lifespanHistory = appendLifespanLog(equipment, 'unretired', {
+    userId: meta?.userId,
+    userName: meta?.userName,
+    reason: meta?.reason || 'Restored from retirement to shop inventory',
+    previousValues: prevValues,
+    newValues: {
+      retiredAt: null,
+      lifespanStatus,
+    },
+  });
+
+  return updated;
+}

@@ -41,6 +41,7 @@ import {
   extendLifespan,
   replaceLifespan,
   retireLifespan,
+  unretireLifespan,
   formatIndividualToolName,
   isMultiQtyLifespanItem
 } from './lifespan';
@@ -1803,6 +1804,22 @@ class DataStore {
     const item = this.getEquipmentItem(equipmentId);
     if (!item) throw new Error('Equipment not found.');
     const updated = retireLifespan(item, meta);
+    return this.updateEquipment(updated);
+  }
+
+  public async unretireEquipment(
+    equipmentId: string,
+    meta?: {
+      userId?: string | null;
+      userName?: string | null;
+      reason?: string;
+      restoreStatus?: 'working' | 'flagged';
+    }
+  ): Promise<Equipment> {
+    const item = this.getEquipmentItem(equipmentId);
+    if (!item) throw new Error('Equipment not found.');
+    if (!item.retiredAt) throw new Error('Equipment is not retired.');
+    const updated = unretireLifespan(item, meta);
     return this.updateEquipment(updated);
   }
 

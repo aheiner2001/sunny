@@ -17,6 +17,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
+import { findPossibleMissedIssues } from '@/lib/possibleMissedIssues';
 import { Inspection, Issue, Vehicle, Equipment, ReportSettings } from '@/types';
 import { ManagerOnly } from '@/components/ManagerOnly';
 import { ReportsAnalytics } from '@/components/ReportsAnalytics';
@@ -154,6 +155,11 @@ function ReportsPageContent() {
   }, [vehicles, filteredIssues, filteredInspections]);
 
   // 6.4 Operator Reliability Scorecards
+  const possibleMissedSignals = useMemo(
+    () => findPossibleMissedIssues(issues, inspections, { windowHours: 72 }),
+    [issues, inspections]
+  );
+
   const operatorLeaderboard = useMemo(() => {
     const users = dbService.getUsers().filter((u) => u.status === 'active');
     return users.map((user) => {
@@ -611,7 +617,39 @@ function ReportsPageContent() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {operatorLeaderboard.map((op, rank) => (
+          
+      <div className="card card-pad stack gap-3 mb-4">
+        <div>
+          <h2 className="card-title">Possible missed issues</h2>
+          <p className="text-xs text-ink-muted m-0">
+            Soft advisory only — when a later inspection flags something, we gently associate a prior
+            inspection/operator for the same van in a 72-hour window. This does <strong>not</strong> change pass rates.
+          </p>
+        </div>
+        {possibleMissedSignals.length === 0 ? (
+          <p className="text-sm text-ink-faint m-0">No soft signals in the current report window.</p>
+        ) : (
+          <ul className="stack gap-2 m-0 p-0 list-none">
+            {possibleMissedSignals.slice(0, 12).map(signal => (
+              <li key={`${signal.issueId}-${signal.priorInspectionId}`} className="rounded-xl border border-line p-3 bg-surface-sunk/40">
+                <p className="text-xs font-bold m-0">{signal.issueTitle}</p>
+                <p className="text-[11px] text-ink-muted m-0">
+                  {signal.vehicleNumber || signal.vehicleId}
+                  {signal.equipmentName ? ` · ${signal.equipmentName}` : ''}
+                </p>
+                <p className="text-[11px] m-0 mt-1">
+                  Flagged {new Date(signal.flaggedAt).toLocaleString()} 
+                  {signal.flaggedByUserName ? ` by ${signal.flaggedByUserName}` : ''}.
+                  Prior inspection by <strong>{signal.priorUserName}</strong> on{' '}
+                  {new Date(signal.priorSubmittedAt).toLocaleString()} may be worth a gentle follow-up.
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {operatorLeaderboard.map((op, rank) => (
             <div
               key={op.user.id}
               className="p-3.5 rounded-2xl border border-line bg-surface flex flex-col justify-between hover:border-ink transition-all shadow-xs"

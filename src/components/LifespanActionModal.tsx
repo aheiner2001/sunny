@@ -8,7 +8,7 @@ import { Sparkles, Calendar, RotateCcw, AlertTriangle, Archive, History, Clock, 
 
 interface LifespanActionModalProps {
   item: Equipment | null;
-  mode: 'extend' | 'replace' | 'retire' | null;
+  mode: 'extend' | 'replace' | 'retire' | 'unretire' | null;
   onClose: () => void;
   onSuccess?: () => void;
 }
@@ -24,6 +24,7 @@ export function LifespanActionModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showHistory, setShowHistory] = useState(false);
+  const [restoreStatus, setRestoreStatus] = useState<'working' | 'flagged'>('working');
 
   if (!item || !mode) return null;
 
@@ -55,6 +56,11 @@ export function LifespanActionModal({
         await dbService.replaceEquipmentLifespan(item.id, meta);
       } else if (mode === 'retire') {
         await dbService.retireEquipment(item.id, meta);
+      } else if (mode === 'unretire') {
+        await dbService.unretireEquipment(item.id, {
+          ...meta,
+          restoreStatus,
+        });
       }
 
       onSuccess?.();
@@ -84,12 +90,14 @@ export function LifespanActionModal({
               {mode === 'extend' && (isUsage ? <Sparkles className="w-5 h-5" /> : <Calendar className="w-5 h-5" />)}
               {mode === 'replace' && <RotateCcw className="w-5 h-5" />}
               {mode === 'retire' && <Archive className="w-5 h-5" />}
+              {mode === 'unretire' && <RotateCcw className="w-5 h-5" />}
             </span>
             <div>
               <h2 id="lifespan-modal-title" className="card-title">
                 {mode === 'extend' && `Extend Lifespan: ${item.name}`}
                 {mode === 'replace' && `Mark Replaced: ${item.name}`}
                 {mode === 'retire' && `Retire Tool: ${item.name}`}
+                {mode === 'unretire' && `Un-retire Tool: ${item.name}`}
               </h2>
               <p className="hint text-xs">{item.vehicleNumber ? `Assigned to ${item.vehicleNumber}` : 'In shop / unassigned'}</p>
             </div>
@@ -206,7 +214,13 @@ export function LifespanActionModal({
               className={`btn btn-sm ${mode === 'retire' ? 'btn-critical' : 'btn-primary'}`}
             >
               {loading ? 'Processing...' : (
-                mode === 'extend' ? 'Extend Life' : mode === 'replace' ? 'Mark Replaced' : 'Retire Tool'
+                mode === 'extend'
+                  ? 'Extend Life'
+                  : mode === 'replace'
+                    ? 'Mark Replaced'
+                    : mode === 'unretire'
+                      ? 'Confirm Un-retire'
+                      : 'Retire Tool'
               )}
             </button>
           </div>
