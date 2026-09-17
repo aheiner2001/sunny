@@ -7,6 +7,7 @@ import {
   getUnansweredQuestions,
   isAnswerComplete,
   listDistinctEquipmentFamilies,
+  listVehicleEquipmentForFamily,
   resolveVehicleEquipmentForFamily,
   shouldShowPhotoCapture,
 } from '@/lib/checklistPairing';
@@ -186,5 +187,110 @@ describe('checklistPairing equipment family resolution + flagging', () => {
       equipmentName: 'Pressure Washer #1',
       status: 'flagged',
     });
+  });
+});
+
+describe('listVehicleEquipmentForFamily', () => {
+  const fleet = [
+    eq({
+      id: 'a1',
+      name: 'Air Compressor #1',
+      toolFamily: 'Air Compressor',
+      vehicleId: 'van-1',
+    }),
+    eq({
+      id: 'a2',
+      name: 'Air Compressor #2',
+      toolFamily: 'Air Compressor',
+      vehicleId: 'van-1',
+    }),
+    eq({
+      id: 'a3',
+      name: 'Air Compressor #3',
+      toolFamily: 'Air Compressor',
+      vehicleId: 'van-2',
+    }),
+    eq({
+      id: 'pw',
+      name: 'Pressure Washer #1',
+      toolFamily: 'Pressure Washer',
+      vehicleId: 'van-1',
+    }),
+  ];
+
+  it('returns all matching units on the van', () => {
+    expect(
+      listVehicleEquipmentForFamily(fleet, 'van-1', 'Air Compressor')
+        .map(e => e.id)
+        .sort()
+    ).toEqual(['a1', 'a2']);
+  });
+
+  it('returns empty when van has none', () => {
+    expect(listVehicleEquipmentForFamily(fleet, 'van-2', 'Pressure Washer')).toEqual([]);
+  });
+
+  it('returns a single match', () => {
+    expect(listVehicleEquipmentForFamily(fleet, 'van-1', 'Pressure Washer').map(e => e.id)).toEqual([
+      'pw',
+    ]);
+  });
+});
+
+describe('buildEquipmentFlagPayload for tagged yes_no', () => {
+  it('links yes_no with equipmentFamily when one unit on van', () => {
+    const fleet = [
+      eq({
+        id: 'a1',
+        name: 'Air Compressor #1',
+        toolFamily: 'Air Compressor',
+        vehicleId: 'van-1',
+      }),
+    ];
+    const payload = buildEquipmentFlagPayload(
+      q({ type: 'yes_no', flagCondition: 'on_no', equipmentFamily: 'Air Compressor' }),
+      'no',
+      fleet,
+      'van-1'
+    );
+    expect(payload).toEqual({
+      equipmentId: 'a1',
+      equipmentName: 'Air Compressor #1',
+      status: 'flagged',
+    });
+  });
+
+  it('returns null when zero matches (caller still creates issue without id)', () => {
+    const payload = buildEquipmentFlagPayload(
+      q({ type: 'yes_no', flagCondition: 'on_no', equipmentFamily: 'Air Compressor' }),
+      'no',
+      [],
+      'van-1'
+    );
+    expect(payload).toBeNull();
+  });
+
+  it('returns null when two+ matches so UI can force a pick', () => {
+    const fleet = [
+      eq({
+        id: 'a1',
+        name: 'Air Compressor #1',
+        toolFamily: 'Air Compressor',
+        vehicleId: 'van-1',
+      }),
+      eq({
+        id: 'a2',
+        name: 'Air Compressor #2',
+        toolFamily: 'Air Compressor',
+        vehicleId: 'van-1',
+      }),
+    ];
+    const payload = buildEquipmentFlagPayload(
+      q({ type: 'yes_no', flagCondition: 'on_no', equipmentFamily: 'Air Compressor' }),
+      'no',
+      fleet,
+      'van-1'
+    );
+    expect(payload).toBeNull();
   });
 });

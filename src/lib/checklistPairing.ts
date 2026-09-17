@@ -158,6 +158,24 @@ function isAssignedToVehicle(eq: Equipment, vehicleId: string): boolean {
 }
 
 /**
+ * All active units on the van matching an equipment family tag.
+ */
+export function listVehicleEquipmentForFamily(
+  equipment: Equipment[],
+  vehicleId: string,
+  family?: string | null
+): Equipment[] {
+  const familyKey = (family || '').trim().toLowerCase();
+  if (!familyKey) return [];
+  return equipment.filter(
+    eqItem =>
+      isAssignedToVehicle(eqItem, vehicleId) &&
+      !eqItem.retiredAt &&
+      getEquipmentFamilyKey(eqItem) === familyKey
+  );
+}
+
+/**
  * Resolve the van's assigned unit for a checklist equipment family.
  * Prefers toolFamily match; falls back to equipmentName / stripped name.
  */
@@ -167,18 +185,16 @@ export function resolveVehicleEquipmentForFamily(
   family?: string | null,
   fallbackName?: string | null
 ): Equipment | undefined {
-  const onVan = equipment.filter(eq => isAssignedToVehicle(eq, vehicleId) && !eq.retiredAt);
-  const familyKey = (family || '').trim().toLowerCase();
-  if (familyKey) {
-    const byFamily = onVan.find(eq => getEquipmentFamilyKey(eq) === familyKey);
-    if (byFamily) return byFamily;
-  }
+  const matches = listVehicleEquipmentForFamily(equipment, vehicleId, family);
+  if (matches.length === 1) return matches[0];
+  if (matches.length > 1) return matches[0]; // legacy single-pick callers; prefer list helper for multi
+  const onVan = equipment.filter(eqItem => isAssignedToVehicle(eqItem, vehicleId) && !eqItem.retiredAt);
   const name = (fallbackName || family || '').trim().toLowerCase();
   if (!name) return undefined;
   return (
-    onVan.find(eq => eq.name.toLowerCase() === name) ||
-    onVan.find(eq => getEquipmentFamilyKey(eq) === name) ||
-    onVan.find(eq => eq.name.toLowerCase().includes(name))
+    onVan.find(eqItem => eqItem.name.toLowerCase() === name) ||
+    onVan.find(eqItem => getEquipmentFamilyKey(eqItem) === name) ||
+    onVan.find(eqItem => eqItem.name.toLowerCase().includes(name))
   );
 }
 
@@ -197,16 +213,17 @@ type EquipmentLinkQuestion = {
   text?: string;
 };
 
-/** Build equipment status updates + issue linkage when equipment_check/status is flagged. */
+/**
+ * Build equipment status updates + issue linkage when a question is flagged.
+ * Supports family tags on any question type. Returns null when 2+ van matches
+ * so the inspect UI can force a unit pick.
+ */
 export function buildEquipmentFlagPayload(
   question: EquipmentLinkQuestion,
   value: string,
   equipment: Equipment[],
   vehicleId: string
 ): FlaggedEquipmentUpdate | null {
-  if (question.type !== 'equipment_check' && question.type !== 'equipment_status') {
-    return null;
-  }
   if (!answerIndicatesIssue(question, value)) return null;
 
   if (question.equipmentId) {
@@ -217,6 +234,16 @@ export function buildEquipmentFlagPayload(
       status: 'flagged',
     };
   }
+
+  const matches = listVehicleEquipmentForFamily(equipment, vehicleId, question.equipmentFamily);
+  if (matches.length === 1) {
+    return {
+      equipmentId: matches[0].id,
+      equipmentName: matches[0].name,
+      status: 'flagged',
+    };
+  }
+  if (matches.length > 1) return null;
 
   const resolved = resolveVehicleEquipmentForFamily(
     equipment,
