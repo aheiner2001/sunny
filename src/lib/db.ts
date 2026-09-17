@@ -770,6 +770,17 @@ class DataStore {
     const updatedUsers = currentUsers.map(u => u.id === updated.id ? { ...u, ...updated } : u);
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(updatedUsers));
 
+    // Cascade name update to any vehicle currently occupied by this user
+    const vehicles = this.getVehicles();
+    vehicles.forEach(v => {
+      if (v.currentUserId === updated.id && v.currentUserName !== updated.name) {
+        this.updateVehicle({
+          ...v,
+          currentUserName: updated.name
+        });
+      }
+    });
+
     if (db) {
       try {
         await setDoc(doc(db, 'users', updated.id), sanitizeForFirestore(updated), { merge: true });
@@ -789,16 +800,11 @@ class DataStore {
     const currentUsers = this.getUsers().filter(u => u.id !== userId);
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(currentUsers));
 
-    // Clear user from any currently assigned vehicle
+    // Reset and return to shop any vehicle currently assigned to this user
     const vehicles = this.getVehicles();
     vehicles.forEach(v => {
       if (v.currentUserId === userId) {
-        this.updateVehicle({
-          ...v,
-          currentUserId: null,
-          currentUserName: null,
-          currentUserStartTime: null
-        });
+        this.updateVehicle(checkInFields(v));
       }
     });
 
@@ -1132,6 +1138,34 @@ class DataStore {
       return { ...eq, assignments };
     });
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(equipment));
+
+    // Cascade vehicleNumber update to linked issues
+    const currentIssues = this.getIssues();
+    let issuesChanged = false;
+    const updatedIssues = currentIssues.map(iss => {
+      if (iss.vehicleId === updated.id && iss.vehicleNumber !== updated.vehicleNumber) {
+        issuesChanged = true;
+        return { ...iss, vehicleNumber: updated.vehicleNumber };
+      }
+      return iss;
+    });
+    if (issuesChanged) {
+      localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(updatedIssues));
+    }
+
+    // Cascade vehicleNumber update to linked inspections
+    const currentInspections = this.getInspections();
+    let inspectionsChanged = false;
+    const updatedInspections = currentInspections.map(insp => {
+      if (insp.vehicleId === updated.id && insp.vehicleNumber !== updated.vehicleNumber) {
+        inspectionsChanged = true;
+        return { ...insp, vehicleNumber: updated.vehicleNumber };
+      }
+      return insp;
+    });
+    if (inspectionsChanged) {
+      localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(updatedInspections));
+    }
 
     window.dispatchEvent(new Event('sunny_db_update'));
 
@@ -1679,6 +1713,20 @@ class DataStore {
     const currentList = this.getEquipment();
     const updatedList = currentList.map(e => e.id === updated.id ? sanitized : e);
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(updatedList));
+
+    // Cascade equipmentName update to linked issues
+    const currentIssues = this.getIssues();
+    let issuesChanged = false;
+    const updatedIssues = currentIssues.map(iss => {
+      if (iss.equipmentId === updated.id && iss.equipmentName !== enriched.name) {
+        issuesChanged = true;
+        return { ...iss, equipmentName: enriched.name };
+      }
+      return iss;
+    });
+    if (issuesChanged) {
+      localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(updatedIssues));
+    }
 
     if (db) {
       try {
@@ -3385,6 +3433,20 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     const issue = this.getIssue(issueId);
     const issues = this.getIssues().filter(i => i.id !== issueId);
     localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(issues));
+
+    // Clean up issueId from any inspection's issueIds
+    const currentInspections = this.getInspections();
+    let inspectionsChanged = false;
+    const updatedInspections = currentInspections.map(insp => {
+      if (insp.issueIds && insp.issueIds.includes(issueId)) {
+        inspectionsChanged = true;
+        return { ...insp, issueIds: insp.issueIds.filter(id => id !== issueId) };
+      }
+      return insp;
+    });
+    if (inspectionsChanged) {
+      localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(updatedInspections));
+    }
 
     if (issue?.equipmentId) {
       const equipment = this.getEquipmentItem(issue.equipmentId);

@@ -839,7 +839,7 @@ function SettingsPageContent() {
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       {q.isSeasonal && (
                         <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                          {q.forcePaused ? 'Seasonal · paused' : q.forcePaused ? 'Seasonal · paused' : q.forceActive ? 'Seasonal · forced on' : `Seasonal · ${q.seasonStart || '?'}–${q.seasonEnd || '?'}`}
+                          {q.forcePaused ? 'Seasonal · paused' : q.forceActive ? 'Seasonal · forced on' : `Seasonal · ${q.seasonStart || '?'}–${q.seasonEnd || '?'}`}
                         </span>
                       )}
                       {q.isTemporary && !q.isSeasonal && (
