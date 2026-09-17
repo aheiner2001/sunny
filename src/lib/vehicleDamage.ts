@@ -33,10 +33,13 @@ export function normalizeRegion(raw: DamageRegion): DamageRegion {
   let w = Number.isFinite(raw.w) ? raw.w : 0;
   let h = Number.isFinite(raw.h) ? raw.h : 0;
 
-  w = Math.max(0, w);
-  h = Math.max(0, h);
+  w = Math.min(1, Math.max(0, w));
+  h = Math.min(1, Math.max(0, h));
   x = Math.min(Math.max(0, x), 1);
   y = Math.min(Math.max(0, y), 1);
+  // Prefer preserving size: pull origin back when the box would overflow.
+  if (x + w > 1) x = Math.max(0, 1 - w);
+  if (y + h > 1) y = Math.max(0, 1 - h);
   if (x + w > 1) w = 1 - x;
   if (y + h > 1) h = 1 - y;
   return { x, y, w, h };
