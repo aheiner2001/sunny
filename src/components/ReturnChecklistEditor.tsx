@@ -204,6 +204,8 @@ export function ReturnChecklistEditor() {
                   <option value="text">Text Note</option>
                   <option value="photo">Photo</option>
                   <option value="checkbox">Checkbox (mark done)</option>
+                  <option value="equipment_check">Equipment Check - Linked to Van Equipment</option>
+                  <option value="equipment_status">Equipment Status</option>
                 </select>
               </div>
               <div>

@@ -31,7 +31,8 @@ import {
   Fuel,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
-import { ChecklistQuestion, ChecklistCategoryConfig, QuestionType, ChecklistConfig, EquipmentOption, FleetTask } from '@/types';
+import { ChecklistQuestion, ChecklistCategoryConfig, QuestionType, ChecklistConfig, EquipmentOption, FleetTask, FlagCondition, PhotoRequirement } from '@/types';
+import { listDistinctEquipmentFamilies } from '@/lib/checklistPairing';
 import { useAuth } from '@/context/AuthContext';
 import { ManagerOnly } from '@/components/ManagerOnly';
 import { AiImportModal } from '@/components/AiImportModal';
@@ -111,6 +112,9 @@ function SettingsPageContent() {
     helperText: string;
     equipmentName: string;
     reasonPresets: string;
+    flagCondition: FlagCondition;
+    photoRequirement: PhotoRequirement;
+    equipmentFamily: string;
     visibility: 'always' | 'temporary' | 'seasonal';
     isTemporary: boolean;
     expiresAt: string;
@@ -128,6 +132,9 @@ function SettingsPageContent() {
     helperText: '',
     equipmentName: '',
     reasonPresets: '',
+    flagCondition: 'on_no',
+    photoRequirement: 'optional',
+    equipmentFamily: '',
     visibility: 'always',
     isTemporary: false,
     expiresAt: '',
@@ -422,6 +429,9 @@ function SettingsPageContent() {
       helperText: '',
       equipmentName: '',
       reasonPresets: '',
+      flagCondition: 'on_no',
+      photoRequirement: 'optional',
+      equipmentFamily: '',
       visibility: 'always',
       isTemporary: false,
       expiresAt: '',
@@ -444,8 +454,10 @@ function SettingsPageContent() {
       required: q.required,
       helperText: q.helperText || '',
       equipmentName: q.equipmentName || '',
-      reasonPresets: (q.reasonPresets || []).join(', ')
-    ,
+      reasonPresets: (q.reasonPresets || []).join(', '),
+      flagCondition: q.flagCondition || 'on_no',
+      photoRequirement: q.photoRequirement || 'optional',
+      equipmentFamily: q.equipmentFamily || '',
       visibility: q.isSeasonal ? 'seasonal' : q.isTemporary ? 'temporary' : 'always',
       isTemporary: Boolean(q.isTemporary),
       expiresAt: q.expiresAt || '',
@@ -477,6 +489,9 @@ function SettingsPageContent() {
         required: questionForm.required,
         helperText: questionForm.helperText.trim() || undefined,
         equipmentName: questionForm.equipmentName.trim() || undefined,
+        flagCondition: questionForm.flagCondition || 'on_no',
+        photoRequirement: questionForm.photoRequirement || 'optional',
+        equipmentFamily: questionForm.equipmentFamily.trim() || undefined,
         reasonPresets: questionForm.reasonPresets.split(',').map(s => s.trim()).filter(Boolean),
         isTemporary: questionForm.visibility === 'temporary' || undefined,
         expiresAt: questionForm.visibility === 'temporary' && questionForm.expiresAt ? questionForm.expiresAt : null,
@@ -496,6 +511,9 @@ function SettingsPageContent() {
         order: questions.length + 1,
         helperText: questionForm.helperText.trim() || undefined,
         equipmentName: questionForm.equipmentName.trim() || undefined,
+        flagCondition: questionForm.flagCondition || 'on_no',
+        photoRequirement: questionForm.photoRequirement || 'optional',
+        equipmentFamily: questionForm.equipmentFamily.trim() || undefined,
         reasonPresets: questionForm.reasonPresets.split(',').map(s => s.trim()).filter(Boolean),
         isTemporary: questionForm.visibility === 'temporary' || undefined,
         expiresAt: questionForm.visibility === 'temporary' && questionForm.expiresAt ? questionForm.expiresAt : null,
@@ -565,7 +583,9 @@ function SettingsPageContent() {
       case 'text': return 'Text Note';
       case 'photo': return 'Photo';
       case 'equipment_status': return 'Equipment Status';
+      case 'equipment_check': return 'Equipment Check - Linked to Van Equipment';
       case 'checkbox': return 'Checkbox';
+      case 'multiple_choice': return 'Multiple Choice';
       default: return type;
     }
   };
@@ -1388,10 +1408,65 @@ function SettingsPageContent() {
                     <option value="text">Text Note</option>
                     <option value="photo">Photo</option>
                     <option value="equipment_status">Equipment Status (Working/Flag)</option>
+                    <option value="equipment_check">Equipment Check - Linked to Van Equipment</option>
                     <option value="checkbox">Checkbox (mark done)</option>
+                    <option value="multiple_choice">Multiple Choice</option>
                   </select>
                 </div>
               </div>
+
+              {questionForm.type === 'yes_no' && (
+                <div>
+                  <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
+                    Issue Trigger
+                  </label>
+                  <select
+                    value={questionForm.flagCondition}
+                    onChange={(e) => setQuestionForm({ ...questionForm, flagCondition: e.target.value as FlagCondition })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-line bg-surface focus:ring-2 focus:ring-sky-500 focus:outline-none font-semibold"
+                  >
+                    <option value="on_no">No indicates issue</option>
+                    <option value="on_yes">Yes indicates issue</option>
+                    <option value="never">Informational (never)</option>
+                  </select>
+                </div>
+              )}
+
+              {(questionForm.type === 'equipment_check' || questionForm.type === 'equipment_status') && (
+                <div>
+                  <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
+                    Equipment Family (linked to van inventory)
+                  </label>
+                  <select
+                    value={questionForm.equipmentFamily}
+                    onChange={(e) => setQuestionForm({ ...questionForm, equipmentFamily: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-line bg-surface focus:ring-2 focus:ring-sky-500 focus:outline-none font-semibold"
+                  >
+                    <option value="">Select tool family…</option>
+                    {listDistinctEquipmentFamilies(dbService.getEquipment()).map((f) => (
+                      <option key={f.key} value={f.label}>{f.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-ink-faint mt-1">Tags a tool family (e.g. Pressure Washer), not a specific unit.</p>
+                </div>
+              )}
+
+              {questionForm.type !== 'checkbox' && questionForm.type !== 'photo' && (
+                <div>
+                  <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
+                    Photo Requirement
+                  </label>
+                  <select
+                    value={questionForm.photoRequirement}
+                    onChange={(e) => setQuestionForm({ ...questionForm, photoRequirement: e.target.value as PhotoRequirement })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-line bg-surface focus:ring-2 focus:ring-sky-500 focus:outline-none font-semibold"
+                  >
+                    <option value="optional">Optional (default)</option>
+                    <option value="required">Required</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">

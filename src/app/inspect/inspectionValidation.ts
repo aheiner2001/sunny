@@ -1,7 +1,15 @@
+import {
+  getUnansweredQuestions,
+  isAnswerComplete,
+  type PhotoRequirement,
+} from '@/lib/checklistPairing';
+
 type InspectionQuestion = {
   id: string;
   required?: boolean;
   type?: string;
+  photoRequirement?: PhotoRequirement;
+  text?: string;
 };
 
 type InspectionResponse = {
@@ -16,16 +24,13 @@ export function canSubmitInspection(
   responses: Record<string, InspectionResponse>,
 ): boolean {
   return questions
-    .filter(question => question.required)
-    .every(question => {
-      const response = responses[question.id];
-      if (question.type === 'photo') {
-        return Boolean(response?.photoUrl);
-      }
-      if (question.type === 'checkbox') {
-        return response?.value === 'checked';
-      }
-      const value = response?.value;
-      return value !== undefined && value !== null && value !== '';
-    });
+    .filter(question => question.required !== false)
+    .every(question => isAnswerComplete(question, responses[question.id]));
+}
+
+export function getUnansweredInspectionQuestions(
+  questions: InspectionQuestion[],
+  responses: Record<string, InspectionResponse>,
+): InspectionQuestion[] {
+  return getUnansweredQuestions(questions, responses);
 }

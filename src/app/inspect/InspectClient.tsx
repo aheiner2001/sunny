@@ -26,7 +26,13 @@ import {
 import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { Vehicle, ChecklistQuestion, ChecklistCategoryConfig, InspectionResponse, FleetTask, Inspection } from '@/types';
-import { canSubmitInspection } from './inspectionValidation';
+import { canSubmitInspection, getUnansweredInspectionQuestions } from './inspectionValidation';
+import {
+  answerIndicatesIssue,
+  buildEquipmentFlagPayload,
+  getBinaryButtonLabels,
+  shouldShowPhotoCapture,
+} from '@/lib/checklistPairing';
 import { activeChecklistQuestions } from '@/lib/checklistQuestions';
 import { occupancyKind, formatCheckoutStarted, vehicleInspectedOnLocalDay } from '@/lib/occupancy';
 import { RecentInspectors } from '@/components/RecentInspectors';
@@ -408,11 +414,13 @@ export default function InspectClient() {
 
   const flaggedCount = Object.keys(flagIssues).length;
   const allRequiredAnswered = canSubmitInspection(questions, responses);
-  const flaggedMissingNotes = questions.some(q => {
+  const unansweredQuestions = getUnansweredInspectionQuestions(questions, responses);
+  const photoMissing = questions.some(q => {
+    if (!shouldShowPhotoCapture(q)) return false;
     const resp = responses[q.id];
-    return resp?.isFlagged && !(resp.notes || '').trim();
+    return q.required !== false && !resp?.photoUrl;
   });
-  const canSubmit = allRequiredAnswered && !flaggedMissingNotes && !isSubmitting;
+  const canSubmit = allRequiredAnswered && !photoMissing && !isSubmitting;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -421,16 +429,9 @@ export default function InspectClient() {
       return;
     }
 
-    if (flaggedMissingNotes) {
-      alert('Please provide a problem description for all flagged items before submitting.');
+    if (photoMissing) {
+      alert('Please attach required photos before submitting.');
       return;
-    }
-
-    for (const [, issue] of Object.entries(flagIssues)) {
-      if (!issue.description || !issue.description.trim()) {
-        alert('Please provide a problem description for all flagged items before submitting.');
-        return;
-      }
     }
 
     const currentOdo = vehicle.odometer || 0;
@@ -444,8 +445,20 @@ export default function InspectClient() {
     try {
       setIsSubmitting(true);
 
+      const allEquipment = dbService.getEquipment();
+      const linkedByQuestion = new Map(
+        questions.map(q => {
+          const resp = responses[q.id];
+          const linked = resp?.isFlagged
+            ? buildEquipmentFlagPayload(q, resp?.value || 'flagged', allEquipment, vehicle.id)
+            : null;
+          return [q.id, linked] as const;
+        })
+      );
+
       const inspectionResponses: InspectionResponse[] = questions.map(q => {
         const resp = responses[q.id];
+        const linked = linkedByQuestion.get(q.id);
         return {
           questionId: q.id,
           questionText: q.text,
@@ -454,8 +467,8 @@ export default function InspectClient() {
           isFlagged: Boolean(resp?.isFlagged),
           notes: resp?.notes || '',
           photoUrl: resp?.photoUrl || flagIssues[q.id]?.photoUrl || null as any,
-          equipmentId: q.equipmentId || null as any,
-          equipmentName: q.equipmentName || null as any
+          equipmentId: linked?.equipmentId || q.equipmentId || null as any,
+          equipmentName: linked?.equipmentName || q.equipmentName || null as any
         };
       });
 
@@ -463,9 +476,10 @@ export default function InspectClient() {
         const question = questions.find(q => q.id === qId);
         const response = responses[qId];
         const quantities = issueData.description.match(/\d+(?:\.\d+)?/g)?.map(Number) || [];
+        const linked = linkedByQuestion.get(qId) || null;
         return {
-          equipmentId: question?.equipmentId || null,
-          equipmentName: question?.equipmentName || issueData.title || 'Equipment Item',
+          equipmentId: linked?.equipmentId || question?.equipmentId || null,
+          equipmentName: linked?.equipmentName || question?.equipmentName || issueData.title || 'Equipment Item',
           title: issueData.title || 'Flagged Issue',
           description: issueData.description || '',
           questionType: question?.type,
@@ -1028,7 +1042,8 @@ export default function InspectClient() {
                     return (
                       <div
                         key={q.id}
-                        className={`p-4 rounded-2xl border transition-all ${
+                        id={`question-${q.id}`}
+                        className={`p-4 rounded-2xl border transition-all scroll-mt-24 ${
                           isFlagged
                             ? 'border-amber-300 bg-amber-50/40'
                             : 'border-line bg-surface-sunk/50 hover:bg-surface-sunk'
@@ -1043,18 +1058,14 @@ export default function InspectClient() {
                           </div>
 
                           <div className="flex items-center gap-1.5 shrink-0">
-                            {(q.type === 'equipment_status' || q.type === 'pass_fail' || q.type === 'yes_no') && (
+                            {(q.type === 'equipment_status' || q.type === 'equipment_check' || q.type === 'pass_fail' || q.type === 'yes_no') && (
                               <>
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const value =
-                                      q.type === 'equipment_status'
-                                        ? 'working'
-                                        : q.type === 'yes_no'
-                                          ? 'yes'
-                                          : 'pass';
-                                    handleSetResponse(q, value, false);
+                                    const labels = getBinaryButtonLabels(q.type);
+                                    const value = labels.positiveValue;
+                                    handleSetResponse(q, value, answerIndicatesIssue(q, value));
                                   }}
                                   className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
                                     !isFlagged && resp?.value && (resp.value === 'working' || resp.value === 'pass' || resp.value === 'yes')
@@ -1062,18 +1073,14 @@ export default function InspectClient() {
                                       : 'bg-surface border border-line text-ink-muted hover:bg-surface-alt'
                                   }`}
                                 >
-                                  Pass
+                                  {getBinaryButtonLabels(q.type).positive}
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const value =
-                                      q.type === 'equipment_status'
-                                        ? 'flagged'
-                                        : q.type === 'yes_no'
-                                          ? 'no'
-                                          : 'fail';
-                                    handleSetResponse(q, value, true);
+                                    const labels = getBinaryButtonLabels(q.type);
+                                    const value = labels.negativeValue;
+                                    handleSetResponse(q, value, answerIndicatesIssue(q, value));
                                   }}
                                   className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
                                     isFlagged
@@ -1081,7 +1088,7 @@ export default function InspectClient() {
                                       : 'bg-surface border border-line text-amber-700 hover:bg-amber-50'
                                   }`}
                                 >
-                                  Flag
+                                  {getBinaryButtonLabels(q.type).negative}
                                 </button>
                               </>
                             )}
@@ -1177,7 +1184,7 @@ export default function InspectClient() {
                           <div className="mt-3 pt-3 border-t border-amber-200/80 bg-amber-100/40 p-3 rounded-xl space-y-3 animate-in fade-in duration-150">
                             <div className="text-[11px] font-bold text-amber-800 uppercase tracking-wider flex items-center gap-1">
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                              Describe the problem for the permanent log
+                              Optional notes for the permanent log
                             </div>
                             <input
                               type="text"
@@ -1202,18 +1209,19 @@ export default function InspectClient() {
                             )}
                             <textarea
                               rows={2}
-                              placeholder="Detailed explanation of what is wrong or needs repair..."
+                              placeholder="Optional: describe what is wrong or needs repair..."
                               value={currentIssue?.description || ''}
                               onChange={(e) => handleIssueChange(q.id, 'description', e.target.value)}
                               className="w-full px-3 py-1.5 text-xs rounded-lg border border-amber-200 bg-surface focus:outline-none focus:ring-2 focus:ring-amber-500"
                             />
 
-                            {/* 4.1 Photo Upload / Camera Capture for Issue */}
+                            {/* Photo only when photoRequirement === 'required' */}
+                            {shouldShowPhotoCapture(q) && (
                             <div className="pt-1">
                               <div className="flex items-center gap-2">
                                 <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-surface text-xs font-bold text-amber-900 hover:bg-amber-50 transition-colors shadow-xs">
                                   <Camera className="w-3.5 h-3.5 text-amber-700" />
-                                  <span>{currentIssue?.photoUrl ? 'Change Photo' : 'Attach Photo / Camera'}</span>
+                                  <span>{currentIssue?.photoUrl ? 'Change Photo' : 'Attach required photo'}</span>
                                   <input
                                     type="file"
                                     accept="image/*"
@@ -1249,6 +1257,7 @@ export default function InspectClient() {
                                 </div>
                               )}
                             </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1364,7 +1373,34 @@ export default function InspectClient() {
           />
         </div>
 
-        <button
+        
+        {unansweredQuestions.length > 0 && (
+          <div className="mb-3 p-3 rounded-xl border border-amber-200 bg-amber-50/60 space-y-2">
+            <p className="text-xs font-bold text-amber-900">
+              {unansweredQuestions.length} unanswered required question{unansweredQuestions.length === 1 ? '' : 's'}
+            </p>
+            <ul className="text-[11px] text-amber-800 list-disc pl-4 space-y-0.5">
+              {unansweredQuestions.slice(0, 6).map(q => (
+                <li key={q.id}>{q.text || q.id}</li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={() => {
+                const first = unansweredQuestions[0];
+                if (!first) return;
+                const el = document.getElementById(`question-${first.id}`);
+                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el?.classList.add('ring-2', 'ring-amber-400');
+                setTimeout(() => el?.classList.remove('ring-2', 'ring-amber-400'), 1600);
+              }}
+              className="text-xs font-bold text-amber-900 underline"
+            >
+              Take me to unanswered
+            </button>
+          </div>
+        )}
+<button
           type="submit"
           disabled={!canSubmit}
           className="btn btn-primary btn-block py-4 rounded-2xl text-sm font-extrabold gap-2 active:scale-[0.99]"
@@ -1377,11 +1413,7 @@ export default function InspectClient() {
             Answer every required question before submitting.
           </p>
         )}
-        {!isSubmitting && allRequiredAnswered && flaggedMissingNotes && (
-          <p className="text-center text-xs text-amber-700">
-            Add a problem description for every flagged item before submitting.
-          </p>
-        )}
+        
       </form>
     </div>
   );

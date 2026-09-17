@@ -173,14 +173,21 @@ export interface ChecklistConfig {
   returnQuestions?: ChecklistQuestion[];
 }
 
-export type QuestionType = 
+export type QuestionType =
   | 'pass_fail'
   | 'yes_no'
+  | 'equipment_status'
+  | 'equipment_check'
+  | 'checkbox'
   | 'text'
   | 'photo'
-  | 'equipment_status'
-  | 'checkbox'
   | 'multiple_choice';
+
+/** When a binary answer should open the issue path. Default: on_no. */
+export type FlagCondition = 'on_no' | 'on_yes' | 'never';
+
+/** Photo capture policy for a question. Default: optional (UI hidden unless required). */
+export type PhotoRequirement = 'optional' | 'required' | 'none';
 
 export interface ChecklistQuestion {
   id: string;
@@ -205,6 +212,15 @@ export interface ChecklistQuestion {
   forceActive?: boolean;
   /** Hide seasonal question even inside its window (e.g. no snow yet). */
   forcePaused?: boolean;
+  /** When the answer should open the issue path. Default on_no. */
+  flagCondition?: FlagCondition;
+  /** Photo capture policy. Default optional — UI hidden unless required. */
+  photoRequirement?: PhotoRequirement;
+  /**
+   * Generic tool family for equipment_check / equipment_status
+   * (e.g. Pressure Washer / Air Compressor) — NOT a specific unit id.
+   */
+  equipmentFamily?: string;
 }
 
 export interface InspectionResponse {
