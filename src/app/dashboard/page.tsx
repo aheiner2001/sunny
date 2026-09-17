@@ -23,6 +23,7 @@ import {
   Trash2,
   ChevronUp,
   ChevronDown,
+  X,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { Vehicle, Inspection, Issue, IssueType, Equipment, User } from '@/types';
@@ -37,6 +38,7 @@ import {
   saveDashboardLayout,
   resetDashboardLayout,
   moveDashboardWidget,
+  reorderDashboardLayout,
   setDashboardWidgetSize,
   sizeToColSpan,
   DASHBOARD_WIDGET_LABELS,
@@ -84,9 +86,12 @@ export default function DashboardPage() {
   // 2.2 Batch Lifespan selection
   const [selectedLifespanIds, setSelectedLifespanIds] = useState<string[]>([]);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const [safetyAlertDismissed, setSafetyAlertDismissed] = useState(false);
 
   const [dashboardLayout, setDashboardLayout] = useState<DashboardWidgetLayout[]>([]);
   const [customizeLayout, setCustomizeLayout] = useState(false);
+  const [dragId, setDragId] = useState<DashboardWidgetId | null>(null);
+  const [dragOverId, setDragOverId] = useState<DashboardWidgetId | null>(null);
 
   const loadData = () => {
     setVehicles(dbService.getVehicles());
@@ -214,10 +219,36 @@ export default function DashboardPage() {
 
   const widgetShell = (id: DashboardWidgetId, children: React.ReactNode) => {
     const entry = dashboardLayout.find(w => w.id === id) || { id, size: 'medium' as DashboardWidgetSize };
+    const isDragOver = customizeLayout && dragOverId === id;
+    const isDragging = customizeLayout && dragId === id;
     return (
       <div
-        className={`${sizeToColSpan(entry.size)} ${customizeLayout ? 'outline outline-1 outline-dashed outline-line rounded-2xl' : ''}`}
+        className={[
+          sizeToColSpan(entry.size),
+          customizeLayout ? 'outline outline-1 outline-dashed outline-line rounded-2xl' : '',
+          isDragOver ? 'ring-2 ring-primary ring-offset-2' : '',
+          isDragging ? 'opacity-40' : '',
+          customizeLayout ? 'cursor-grab' : '',
+          'transition-all',
+        ].filter(Boolean).join(' ')}
         style={{ order: layoutOrder(id) }}
+        draggable={customizeLayout}
+        onDragStart={() => customizeLayout && setDragId(id)}
+        onDragEnd={() => { setDragId(null); setDragOverId(null); }}
+        onDragOver={(e) => {
+          if (customizeLayout && dragId && dragId !== id) {
+            e.preventDefault();
+            setDragOverId(id);
+          }
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          if (customizeLayout && dragId && dragId !== id) {
+            persistLayout(reorderDashboardLayout(dashboardLayout, dragId, id));
+          }
+          setDragId(null);
+          setDragOverId(null);
+        }}
       >
         {customizeLayout && (
           <div className="flex items-center gap-1 px-2 pt-2 flex-wrap">
@@ -242,17 +273,6 @@ export default function DashboardPage() {
             >
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
-            <span className="text-[10px] font-bold uppercase text-ink-faint ml-2">Size</span>
-            {(['small', 'medium', 'wide'] as DashboardWidgetSize[]).map(size => (
-              <button
-                key={size}
-                type="button"
-                className={`btn btn-sm ${entry.size === size ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => onWidgetSize(id, size)}
-              >
-                {size}
-              </button>
-            ))}
           </div>
         )}
         {children}
@@ -261,10 +281,11 @@ export default function DashboardPage() {
   };
 
 
+
   return (
     <div className="page max-w-full overflow-x-hidden stack gap-6">
       {/* 1.2 Urgent Vehicle Safety Banner */}
-      {urgentSafetyVehicles.length > 0 && (
+      {urgentSafetyVehicles.length > 0 && !safetyAlertDismissed && (
         <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400 flex items-center justify-between flex-wrap gap-3" role="status" aria-live="polite">
           <div className="flex items-center gap-3">
             <ShieldAlert className="w-6 h-6 text-red-600 dark:text-red-400 shrink-0" />
@@ -293,6 +314,14 @@ export default function DashboardPage() {
                 Ground / Check In {v.vehicleNumber}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => setSafetyAlertDismissed(true)}
+              className="btn btn-ghost btn-sm text-red-700 dark:text-red-400 ml-1"
+              title="Acknowledge and dismiss for this session"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}
@@ -500,7 +529,7 @@ export default function DashboardPage() {
         )}
         {customizeLayout && (
           <p className="text-[11px] text-ink-faint m-0">
-            Use ↑ ↓ on each section to reorder. Size presets save for your account.
+          Drag sections to reorder, or use ↑ ↓ buttons. Size presets save for your account.
           </p>
         )}
       </div>
