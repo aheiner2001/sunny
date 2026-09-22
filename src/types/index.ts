@@ -212,6 +212,8 @@ export interface ChecklistQuestion {
   forceActive?: boolean;
   /** Hide seasonal question even inside its window (e.g. no snow yet). */
   forcePaused?: boolean;
+  /** Manager enable/disable; omitted or true = shown in inspect/return. */
+  enabled?: boolean;
   /** When the answer should open the issue path. Default on_no. */
   flagCondition?: FlagCondition;
   /** Photo capture policy. Default optional — UI hidden unless required. */

@@ -25,13 +25,15 @@ export function isDateInSeason(seasonStart: string, seasonEnd: string, today = n
   return md >= start || md <= end;
 }
 
-/** Drop inactive temporary/seasonal questions from inspect/return checklists. */
+/** Drop disabled, inactive temporary, or out-of-season questions from inspect/return checklists. */
 export function activeChecklistQuestions(
   questions: ChecklistQuestion[],
   today = new Date()
 ): ChecklistQuestion[] {
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   return questions.filter((q) => {
+    // Manager disable toggle: explicit false hides from inspect/return; omit/true keeps.
+    if (q.enabled === false) return false;
     if (q.isSeasonal) {
       if (q.forcePaused) return false;
       if (q.forceActive) return true;

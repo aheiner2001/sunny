@@ -77,4 +77,29 @@ describe('activeChecklistQuestions', () => {
     ];
     expect(activeChecklistQuestions(qs, new Date('2026-07-10')).map((q) => q.id)).toEqual(['s']);
   });
+
+  it('excludes questions with enabled===false (manager disable toggle)', () => {
+    const qs: ChecklistQuestion[] = [
+      { ...base, id: 'on', text: 'Enabled by default' },
+      { ...base, id: 'explicit', text: 'Explicitly on', enabled: true },
+      { ...base, id: 'off', text: 'Turned off', enabled: false },
+    ];
+    expect(activeChecklistQuestions(qs, new Date('2026-09-16')).map((q) => q.id)).toEqual([
+      'on',
+      'explicit',
+    ]);
+  });
+
+  it('persistence pairing: disable then re-enable via field update mirrors Settings toggle', () => {
+    let qs: ChecklistQuestion[] = [
+      { ...base, id: 'q1', text: 'Lights work?' },
+      { ...base, id: 'q2', text: 'Tires OK?' },
+    ];
+    // Simulate Settings toggle OFF + persist payload
+    qs = qs.map((q) => (q.id === 'q1' ? { ...q, enabled: false } : q));
+    expect(activeChecklistQuestions(qs).map((q) => q.id)).toEqual(['q2']);
+    // Simulate Settings toggle ON again
+    qs = qs.map((q) => (q.id === 'q1' ? { ...q, enabled: true } : q));
+    expect(activeChecklistQuestions(qs).map((q) => q.id)).toEqual(['q1', 'q2']);
+  });
 });
