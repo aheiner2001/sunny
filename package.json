@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build && node -e \"require('fs').copyFileSync('public/404.html', 'out/404.html')\"",
-    "start": "next start",
-    "lint": "next lint",
-    "test": "vitest run",
-    "test:watch": "vitest"
-  },
+  "dev": "next dev",
+  "build": "next build",
+  "start": "next start",
+  "lint": "next lint",
+  "test": "vitest run",
+  "test:watch": "vitest"
+}
   "dependencies": {
     "@tanstack/react-table": "^8.21.3",
     "agy": "^0.0.0",
