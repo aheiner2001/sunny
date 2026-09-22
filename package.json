@@ -2,9 +2,9 @@
   "name": "sunny-fleet-accountability",
   "version": "0.1.0",
   "private": true,
-  "scripts": {
+    "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node -e \"require('fs').copyFileSync('public/404.html', 'out/404.html')\"",
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
