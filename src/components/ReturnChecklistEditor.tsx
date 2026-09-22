@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { ArrowDown, ArrowUp, Edit2, ListChecks, Plus, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Edit2, ListChecks, Plus, ToggleLeft, ToggleRight, Trash2, X } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { normalizeReturnQuestions } from '@/lib/returnFlow';
 import type { ChecklistQuestion, QuestionType } from '@/types';
@@ -96,6 +96,15 @@ export function ReturnChecklistEditor() {
     await persist(questions.filter((q) => q.id !== id));
   };
 
+
+  const toggleEnabled = async (id: string) => {
+    await persist(
+      questions.map((q) =>
+        q.id === id ? { ...q, enabled: q.enabled === false ? true : false } : q
+      )
+    );
+  };
+
   const move = async (index: number, direction: 'up' | 'down') => {
     const target = direction === 'up' ? index - 1 : index + 1;
     if (target < 0 || target >= questions.length) return;
@@ -132,14 +141,16 @@ export function ReturnChecklistEditor() {
         {questions.map((q, idx) => (
           <div
             key={q.id}
-            className="p-4 rounded-2xl border border-line bg-surface flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+            className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+              q.enabled === false ? 'border-line bg-surface-sunk/60 opacity-60' : 'border-line bg-surface'
+            }`}
           >
             <div className="flex items-start gap-3 min-w-0">
               <span className="w-6 h-6 rounded-lg bg-surface-sunk text-ink-muted font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
                 {idx + 1}
               </span>
               <div className="min-w-0">
-                <p className="text-xs font-bold text-ink leading-snug">{q.text}</p>
+                <p className={`text-xs font-bold leading-snug ${q.enabled === false ? 'text-ink-muted' : 'text-ink'}`}>{q.text}</p>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
                     {TYPE_LABEL[q.type] || q.type}
@@ -149,10 +160,26 @@ export function ReturnChecklistEditor() {
                       Required
                     </span>
                   )}
+                  {q.enabled === false && (
+                    <span className="text-[10px] font-bold text-ink-muted bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                      Off · hidden from inspections
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
             <div className="flex items-center justify-end gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => toggleEnabled(q.id)}
+                className={`p-1.5 rounded-lg hover:bg-surface-sunk ${
+                  q.enabled === false ? 'text-ink-faint' : 'text-emerald-600 hover:text-emerald-700'
+                }`}
+                title={q.enabled === false ? 'Enable question' : 'Disable question'}
+                aria-pressed={q.enabled !== false}
+              >
+                {q.enabled === false ? <ToggleLeft className="w-4 h-4" /> : <ToggleRight className="w-4 h-4" />}
+              </button>
               <button type="button" onClick={() => move(idx, 'up')} disabled={idx === 0} className="p-1.5 rounded-lg text-ink-faint hover:text-ink hover:bg-surface-sunk disabled:opacity-20" title="Move up">
                 <ArrowUp className="w-3.5 h-3.5" />
               </button>

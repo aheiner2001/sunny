@@ -29,6 +29,8 @@ import {
   History,
   Gauge,
   Fuel,
+  ToggleLeft,
+  ToggleRight,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { ChecklistQuestion, ChecklistCategoryConfig, QuestionType, ChecklistConfig, EquipmentOption, FleetTask, FlagCondition, PhotoRequirement } from '@/types';
@@ -538,6 +540,16 @@ function SettingsPageContent() {
     await dbService.saveChecklistQuestions(updatedQs);
   };
 
+
+  const handleToggleQuestionEnabled = async (qId: string) => {
+    const updatedQs = questions.map((q) =>
+      q.id === qId ? { ...q, enabled: q.enabled === false ? true : false } : q
+    );
+    setQuestions(updatedQs);
+    await dbService.saveChecklistQuestions(updatedQs);
+  };
+
+
   const sortedQuestions = useMemo(
     () => [...questions].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
     [questions]
@@ -842,14 +854,18 @@ function SettingsPageContent() {
             return (
               <div
                 key={q.id}
-                className="p-4 rounded-2xl border border-line bg-surface hover:border-slate-300 shadow-sm transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                className={`p-4 rounded-2xl border shadow-sm transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                  q.enabled === false
+                    ? 'border-line bg-surface-sunk/60 opacity-60'
+                    : 'border-line bg-surface hover:border-slate-300'
+                }`}
               >
                 <div className="flex items-start gap-3 min-w-0">
                   <span className="w-6 h-6 rounded-lg bg-surface-sunk text-ink-muted font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
                     {idx + 1}
                   </span>
                   <div className="min-w-0">
-                    <p className="text-xs font-bold text-ink leading-snug">{q.text}</p>
+                    <p className={`text-xs font-bold leading-snug ${q.enabled === false ? 'text-ink-muted' : 'text-ink'}`}>{q.text}</p>
                     {q.helperText && (
                       <p className="text-[11px] text-ink-faint mt-0.5 italic flex items-center gap-1">
                         <HelpCircle className="w-3 h-3 text-ink-faint shrink-0" />
@@ -865,6 +881,11 @@ function SettingsPageContent() {
                       {q.isTemporary && !q.isSeasonal && (
                         <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
                           Temporary · until {q.expiresAt || '?'}
+                        </span>
+                      )}
+                      {q.enabled === false && (
+                        <span className="text-[10px] font-bold text-ink-muted bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                          Off · hidden from inspections
                         </span>
                       )}
                       <span className="text-[10px] font-bold text-sky-700 bg-surface-sunk px-2 py-0.5 rounded border border-sky-100">
@@ -903,6 +924,22 @@ function SettingsPageContent() {
                     title="Move Down"
                   >
                     <ArrowDown className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleQuestionEnabled(q.id)}
+                    className={`p-1.5 rounded-lg hover:bg-surface-sunk ${
+                      q.enabled === false ? 'text-ink-faint' : 'text-emerald-600 hover:text-emerald-700'
+                    }`}
+                    title={q.enabled === false ? 'Enable question (show in inspections)' : 'Disable question (hide from inspections)'}
+                    aria-pressed={q.enabled !== false}
+                    aria-label={q.enabled === false ? 'Enable question' : 'Disable question'}
+                  >
+                    {q.enabled === false ? (
+                      <ToggleLeft className="w-4 h-4" />
+                    ) : (
+                      <ToggleRight className="w-4 h-4" />
+                    )}
                   </button>
                   <button
                     onClick={() => handleOpenEditQuestion(q)}
