@@ -386,13 +386,13 @@ export default function VehicleDetailClient() {
         <div className="card card-pad">
           <div className="stat">
             <span className="stat-label">Operator</span>
-            <span className="stat-value text-base cluster">
+            <span className="stat-value text-base cluster min-w-0 break-words">
               <User className="h-4 w-4 text-[var(--info)]" aria-hidden />
               {vehicle.currentUserName || 'In depot'}
             </span>
             {isTrueManager && (
-              <button type="button" className="btn btn-secondary btn-sm mt-2" onClick={startAssignment}>
-                Assign / Switch employee
+              <button type="button" className="btn btn-secondary btn-sm mt-3 w-full min-w-0 whitespace-normal text-center leading-tight py-2" onClick={startAssignment}>
+                {vehicle.currentUserId ? 'Switch employee' : 'Assign employee'}
               </button>
             )}
           </div>
