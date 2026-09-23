@@ -385,7 +385,10 @@ const filteredInspections = inspections.filter((insp) => {
                       )}
                     </div>
                     <p className="text-xs text-ink-muted mt-0.5">
-                      Submitted by <strong>{insp.userName}</strong> ({insp.userEmail})
+                      Inspection for <strong>{insp.userName}</strong> ({insp.userEmail})
+                      {insp.submittedById && insp.submittedById !== insp.userId && (
+                        <span> · Submitted by <strong>{insp.submittedByName}</strong></span>
+                      )}
                     </p>
                   </div>
                 </div>

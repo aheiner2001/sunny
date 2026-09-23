@@ -54,6 +54,7 @@ describe('returnAllInUseVehicles', () => {
     expect(list.every((v: { currentUserId: string | null }) => !v.currentUserId)).toBe(true);
     expect(list.find((v: { id: string }) => v.id === 'van-1').status).toBe('active');
     expect(dbService.getMissedReturns()).toEqual([]);
+    expect(dbService.getVehicleAssignments('van-1')[0].endedAt).toBeTruthy();
   });
 
   it('returns zero when nobody is checked out', async () => {

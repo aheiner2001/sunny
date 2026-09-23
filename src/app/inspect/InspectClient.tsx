@@ -65,6 +65,7 @@ export default function InspectClient() {
   const [submittedInspection, setSubmittedInspection] = useState<any | null>(null);
   const [tasks, setTasks] = useState<FleetTask[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState('');
+  const [managerSubjectId, setManagerSubjectId] = useState('');
   
   // Offline sync state
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -95,6 +96,7 @@ export default function InspectClient() {
 
       if (v) {
         setVehicle(v);
+        if (v.currentUserId) setManagerSubjectId(v.currentUserId);
         if (v.odometer) setOdometer(String(v.odometer));
         if (v.fuelLevel !== undefined && v.fuelLevel !== null) setFuelLevel(v.fuelLevel);
       } else {
@@ -531,11 +533,16 @@ export default function InspectClient() {
         };
       });
 
+      const selectedEmployee = role === 'manager' && managerSubjectId
+        ? dbService.getUsers().find(candidate => candidate.id === managerSubjectId && candidate.status === 'active')
+        : null;
       const payload = {
         vehicleId: vehicle.id,
-        userId: user?.id || 'emp-anon',
-        userName: user?.name || 'Employee Operator',
-        userEmail: user?.email || 'employee@sunnyfleet.com',
+        userId: selectedEmployee?.id || user?.id || 'emp-anon',
+        userName: selectedEmployee?.name || user?.name || 'Employee Operator',
+        userEmail: selectedEmployee?.email || user?.email || 'employee@sunnyfleet.com',
+        submittedById: user?.id || 'emp-anon',
+        submittedByName: user?.name || 'Employee Operator',
         responses: inspectionResponses,
         flaggedIssues: flaggedList,
         generalNotes: generalNotes.trim() || null,
@@ -558,6 +565,8 @@ export default function InspectClient() {
           userId: payload.userId,
           userName: payload.userName,
           userEmail: payload.userEmail,
+          submittedById: payload.submittedById,
+          submittedByName: payload.submittedByName,
           status: flaggedList.length > 0 ? 'issues_found' : 'passed',
           startedAt: nowIso,
           submittedAt: nowIso,
@@ -713,7 +722,7 @@ export default function InspectClient() {
     );
   }
 
-  if (kind === 'theirs') {
+  if (kind === 'theirs' && !(role === 'manager' && managerSubjectId === vehicle.currentUserId)) {
     return (
       <div className="page max-w-md mx-auto py-8">
         <div className="card card-pad stack">
@@ -1055,6 +1064,17 @@ export default function InspectClient() {
           <p className="text-xs text-ink-faint mt-0.5">
             Complete all required items before vehicle checkout.
           </p>
+          {role === 'manager' && (
+            <label className="block mt-3 text-sm font-bold">Inspection for
+              <select className="select mt-1" value={managerSubjectId} onChange={e => setManagerSubjectId(e.target.value)}>
+                {!vehicle.currentUserId && <option value="">Myself</option>}
+                {dbService.getUsers().filter(candidate => candidate.status === 'active' && candidate.role === 'employee' && (!vehicle.currentUserId || candidate.id === vehicle.currentUserId)).map(candidate => (
+                  <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
+                ))}
+              </select>
+              <span className="hint block mt-1">The inspection will show you as the person who submitted it.</span>
+            </label>
+          )}
         </div>
 
         <div className="space-y-8">

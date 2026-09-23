@@ -21,7 +21,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { dbService } from '@/lib/db';
-import { Vehicle, Equipment, Inspection, Issue } from '@/types';
+import { toLocalAssignmentTime } from '@/lib/assignmentTime';
+import { Vehicle, Equipment, Inspection, Issue, VehicleAssignment } from '@/types';
 import { VehicleStatusBadge, InspectionStatusBadge, EquipmentStatusBadge, IssueStatusBadge, LifespanStatusBadge } from '@/components/StatusBadges';
 import { QRCodeDisplay } from '@/components/QRCodeDisplay';
 import { IssueTimeline } from '@/components/IssueTimeline';
@@ -33,13 +34,19 @@ import { VehicleDamagePanel } from '@/components/VehicleDamagePanel';
 export default function VehicleDetailClient() {
   const searchParams = useSearchParams();
   const vehicleId = searchParams?.get('id') || '';
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, isTrueManager } = useAuth();
 
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
+  const [assignmentHistory, setAssignmentHistory] = useState<VehicleAssignment[]>([]);
+  const [assignmentOpen, setAssignmentOpen] = useState(false);
+  const [assignmentEmployeeId, setAssignmentEmployeeId] = useState('');
+  const [assignmentTime, setAssignmentTime] = useState('');
+  const [assignmentSaving, setAssignmentSaving] = useState(false);
+  const [assignmentError, setAssignmentError] = useState('');
   const [activeTab, setActiveTab] = useState<'timeline' | 'equipment' | 'qr' | 'issues' | 'damage'>('timeline');
   const [showAllTimeline, setShowAllTimeline] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
@@ -77,6 +84,7 @@ export default function VehicleDetailClient() {
         setEquipment(vehicleEquipment);
         setInspections(dbService.getInspectionsForVehicle(v.id));
         setIssues(dbService.getIssuesForVehicle(v.id));
+        setAssignmentHistory(dbService.getVehicleAssignments(v.id));
         const currentJobs = dbService.getTodayJobsCount(v.id);
         setJobsToday(currentJobs);
         setJobsTodayInput(String(currentJobs));
@@ -109,6 +117,35 @@ export default function VehicleDetailClient() {
   const getVehicleAllocation = (item: Equipment) => {
     return item.assignments?.find(assignment => assignment.vehicleId === vehicle?.id)?.quantity
       || (item.vehicleId === vehicle?.id ? 1 : 0);
+  };
+
+  const startAssignment = () => {
+    setAssignmentTime(toLocalAssignmentTime(new Date()));
+    setAssignmentEmployeeId('');
+    setAssignmentError('');
+    setAssignmentOpen(true);
+  };
+
+  const saveAssignment = async (release = false) => {
+    if (!vehicle || !currentUser || !isTrueManager) return;
+    const at = new Date(assignmentTime);
+    if (!Number.isFinite(at.getTime())) { setAssignmentError('Enter a valid start time.'); return; }
+    if (!release && !assignmentEmployeeId) { setAssignmentError('Choose an employee.'); return; }
+    if (!release) {
+      const other = dbService.getVehicles().find(v => v.id !== vehicle.id && v.currentUserId === assignmentEmployeeId);
+      if (other && !window.confirm(`This will end the employee's assignment to ${other.vehicleNumber}. Continue?`)) return;
+      if (vehicle.currentUserId && vehicle.currentUserId !== assignmentEmployeeId &&
+          !window.confirm(`This will end ${vehicle.currentUserName || 'the current employee'}'s assignment to ${vehicle.vehicleNumber}. Continue?`)) return;
+    }
+    setAssignmentSaving(true);
+    setAssignmentError('');
+    try {
+      if (release) await dbService.releaseVehicle(vehicle.id, at.toISOString(), currentUser);
+      else await dbService.assignVehicle(vehicle.id, assignmentEmployeeId, at.toISOString(), currentUser);
+      setAssignmentOpen(false);
+      await loadData();
+    } catch (error: any) { setAssignmentError(error.message || 'Could not update the assignment.'); }
+    finally { setAssignmentSaving(false); }
   };
 
   const handleUpdateJobsToday = async (val: number) => {
@@ -242,11 +279,13 @@ export default function VehicleDetailClient() {
 
   type TimelineItem =
     | { type: 'inspection'; date: string; data: Inspection }
-    | { type: 'issue'; date: string; data: Issue };
+    | { type: 'issue'; date: string; data: Issue }
+    | { type: 'assignment'; date: string; data: VehicleAssignment };
 
   const timelineItems: TimelineItem[] = [
     ...inspections.map(i => ({ type: 'inspection' as const, date: i.submittedAt, data: i })),
-    ...issues.map(iss => ({ type: 'issue' as const, date: iss.reportedAt, data: iss }))
+    ...issues.map(iss => ({ type: 'issue' as const, date: iss.reportedAt, data: iss })),
+    ...assignmentHistory.map(a => ({ type: 'assignment' as const, date: a.startedAt, data: a }))
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const recentCutoff = new Date();
   recentCutoff.setDate(recentCutoff.getDate() - 30);
@@ -351,6 +390,11 @@ export default function VehicleDetailClient() {
               <User className="h-4 w-4 text-[var(--info)]" aria-hidden />
               {vehicle.currentUserName || 'In depot'}
             </span>
+            {isTrueManager && (
+              <button type="button" className="btn btn-secondary btn-sm mt-2" onClick={startAssignment}>
+                Assign / Switch employee
+              </button>
+            )}
           </div>
         </div>
 
@@ -544,6 +588,16 @@ export default function VehicleDetailClient() {
 
           <div className="relative pl-6 stack before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-line before:content-['']">
             {visibleTimelineItems.map((item) => {
+              if (item.type === 'assignment') {
+                const a = item.data;
+                return (
+                  <div key={a.id} className="relative rounded-xl border border-line bg-[var(--surface-alt)] px-3 py-2.5">
+                    <p className="text-sm font-bold">{a.userName} assigned to {a.vehicleNumber}</p>
+                    <p className="hint">{new Date(a.startedAt).toLocaleString()} — {a.endedAt ? new Date(a.endedAt).toLocaleString() : 'Current'}</p>
+                    <p className="hint">Recorded by {a.actorName}{Math.abs(new Date(a.recordedAt).getTime() - new Date(a.startedAt).getTime()) > 60_000 ? ` on ${new Date(a.recordedAt).toLocaleString()}` : ''}</p>
+                  </div>
+                );
+              }
               if (item.type === 'inspection') {
                 const insp = item.data;
                 const isPassed = insp.status === 'passed';
@@ -571,7 +625,7 @@ export default function VehicleDetailClient() {
                         </span>
                       </div>
                       <p className="text-sm text-ink-muted break-words">
-                        {insp.userName}
+                        {insp.userName}{insp.submittedById && insp.submittedById !== insp.userId ? ` · Submitted by ${insp.submittedByName}` : ''}
                       </p>
                       {insp.generalNotes ? (
                         <p className="text-sm italic text-ink-muted break-words">
@@ -613,7 +667,7 @@ export default function VehicleDetailClient() {
             {visibleTimelineItems.length === 0 && (
               <p className="hint py-4">
                 {timelineItems.length === 0
-                  ? 'No inspections or issues yet.'
+                  ? 'No vehicle activity yet.'
                   : 'No recent records — show older history.'}
               </p>
             )}
@@ -759,6 +813,32 @@ export default function VehicleDetailClient() {
         </div>
       
         </div>)}
+
+      {assignmentOpen && isTrueManager && (
+        <div className="fixed inset-0 z-50 bg-ink/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setAssignmentOpen(false)}>
+          <div className="card card-pad w-full max-w-md stack" role="dialog" aria-modal="true" aria-labelledby="assign-driver-title" onClick={e => e.stopPropagation()}>
+            <h2 id="assign-driver-title" className="card-title">Assign employee to {vehicle.vehicleNumber}</h2>
+            <p className="hint">Update the driver without completing an inspection.</p>
+            <label className="stack-tight text-sm font-bold">Employee
+              <select className="select" value={assignmentEmployeeId} onChange={e => setAssignmentEmployeeId(e.target.value)}>
+                <option value="">Choose employee...</option>
+                {dbService.getUsers().filter(u => u.role === 'employee' && u.status === 'active').map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="stack-tight text-sm font-bold">Assignment start
+              <input className="input" type="datetime-local" step={1} value={assignmentTime} onChange={e => setAssignmentTime(e.target.value)} />
+            </label>
+            {assignmentError && <p role="alert" className="text-sm text-[var(--critical)]">{assignmentError}</p>}
+            <div className="cluster justify-end">
+              <button className="btn btn-ghost" type="button" onClick={() => setAssignmentOpen(false)}>Cancel</button>
+              {vehicle.currentUserId && <button className="btn btn-secondary" type="button" disabled={assignmentSaving} onClick={() => void saveAssignment(true)}>Release van</button>}
+              <button className="btn btn-primary" type="button" disabled={assignmentSaving} onClick={() => void saveAssignment()}>{assignmentSaving ? 'Saving...' : 'Save assignment'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {assignModalOpen && (
         <div
