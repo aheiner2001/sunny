@@ -367,11 +367,18 @@ function VehiclesPageContent() {
                 </div>
               </div>
 
-              <div className="card-foot">
+              <div className="card-foot flex-col items-stretch">
+                <Link
+                  href={`/vehicles/detail?id=${encodeURIComponent(vehicle.id)}`}
+                  className="btn btn-primary btn-sm w-full justify-between"
+                >
+                  Details
+                  <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                </Link>
                 <div className="cluster w-full justify-between">
                   <Link
                     href={`/inspect?id=${encodeURIComponent(vehicle.id)}`}
-                    className="btn btn-primary btn-sm"
+                    className="btn btn-secondary btn-sm"
                   >
                     Inspect
                   </Link>
@@ -392,15 +399,6 @@ function VehiclesPageContent() {
                         role="menu"
                         className="absolute right-0 bottom-full mb-1 z-20 min-w-[12rem] rounded-[var(--radius)] border border-line bg-surface shadow-lg p-1 stack-tight"
                       >
-                        <Link
-                          role="menuitem"
-                          href={`/vehicles/detail?id=${encodeURIComponent(vehicle.id)}`}
-                          className="btn btn-ghost btn-sm w-full justify-start gap-2"
-                          onClick={() => setVehicleMenuId(null)}
-                        >
-                          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-                          Details
-                        </Link>
                         <button
                           type="button"
                           role="menuitem"
