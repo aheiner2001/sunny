@@ -20,7 +20,7 @@
 - `src/app/home/page.tsx` — Employee scan-first home: prominent "Scan vehicle" CTA, open assigned fleet task, and recent personal inspections (`EmptyState` when none).
 - `src/app/dashboard/page.tsx` — KPI tiles, recent activity, and compact `InspectionCalendar` widget.
 - `src/app/vehicles/page.tsx` — Vehicle roster with create/edit/delete, equipment counts, and QR code access (manager).
-- `src/app/vehicles/detail/page.tsx` + `VehicleDetailClient.tsx` — Single-vehicle view (`?id=`/QR lookup): assigned equipment, shop transfers, inspection and issue history.
+- `src/app/vehicles/detail/page.tsx` + `VehicleDetailClient.tsx` — Single-vehicle view (`?id=`/QR lookup): manager quick employee assignment/release with editable start time, assignment timeline, equipment, inspections and issues.
 - `src/app/inspections/page.tsx` — Completed inspection log with filtering, detail expansion, and delete.
 - `src/app/inspect/page.tsx` + `InspectClient.tsx` — The inspection workflow itself: loads the checklist config, walks questions by category, and submits results (auto-raising issues).
 - `src/app/scan/page.tsx` — Standalone vehicle QR scan/lookup page that routes into an inspection.
@@ -52,7 +52,8 @@
 
 ## State / Data / Services
 - `src/context/AuthContext.tsx` — `AuthProvider` + `useAuth()`: current user, role, `switchUser`, and `availableUsers` (demo RBAC switching).
-- `src/lib/db.ts` — The core `dbService` singleton: all vehicle/equipment/inspection/issue/user/checklist reads and writes, vehicle daily job logs (`setVehicleJobsToday`), equipment lifespan tracking, `AppSettings` (`recentInspectorsDepth`, `theme`), `getRecentInspectors()`, stock issue resolution (`resolveStockIssue`), `localStorage` persistence, Firestore sync, seeding, and the `sunny_db_update` change event.
+- `src/lib/db.ts` — The core `dbService` singleton: all vehicle/equipment/inspection/issue/user/checklist reads and writes, manager vehicle assignments and local/Firestore assignment history, vehicle daily job logs (`setVehicleJobsToday`), equipment lifespan tracking, `AppSettings` (`recentInspectorsDepth`, `theme`), `getRecentInspectors()`, stock issue resolution (`resolveStockIssue`), `localStorage` persistence, Firestore sync, seeding, and the `sunny_db_update` change event.
+- `src/lib/vehicleAssignments.ts` — Validates assignment times, closes conflicting van/employee intervals, and projects current occupancy onto vehicles.
 - `src/lib/lifespan.ts` — Equipment lifespan calculations: usage wear (cars cleaned), time-based calendar lifespans, threshold evaluation (`ok`, `getting_low`, `due_for_review`), and manager actions (`extendLifespan`, `replaceLifespan`, `retireLifespan`).
 - `src/lib/issueClassification.ts` — Auto-classifies issues into `IssueType` (`stock_low_inventory`, `equipment_replacement`, `needs_repair`); overridable in the issues UI.
 - `src/lib/__tests__/inventory.test.ts` — Vitest: return-to-shop, multi-qty assign, catalog delete cascade, vehicle delete, `resolveStockIssue`.

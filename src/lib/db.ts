@@ -29,10 +29,12 @@ import {
   MissedReturn,
   DamageRegion,
   VehicleDamageEvent,
-  VehicleSide
+  VehicleSide,
+  VehicleAssignment
 } from '@/types';
+import { transitionAssignment } from './vehicleAssignments';
 import { classifyIssueType } from './issueClassification';
-import { checkInFields, checkOutFields, occupancyAfterInspection, shouldAutoReturnVehicle, localDateString } from './occupancy';
+import { shouldAutoReturnVehicle, localDateString } from './occupancy';
 import { DEFAULT_RETURN_QUESTIONS, hasReturnForShift, normalizeReturnQuestions, shiftDateStringForVehicle } from './returnFlow';
 import { repairDuplicateCategoryIds } from './checklistCategories';
 import { assertDamagePayload, normalizeRegion } from './vehicleDamage';
@@ -95,6 +97,7 @@ const STORAGE_KEYS = {
   MISSED_RETURNS: 'sunny_missed_returns',
   OVERNIGHT_RECONCILED: 'sunny_overnight_reconciled',
   VEHICLE_DAMAGE: 'sunny_vehicle_damage',
+  VEHICLE_ASSIGNMENTS: 'sunny_vehicle_assignments',
 };
 
 const DEFAULT_CHECKLIST_ID = 'standard-detailing-checklist';
@@ -136,6 +139,8 @@ export function sanitizeForFirestore<T>(data: T): T {
 class DataStore {
   private initialized = false;
   private listening = false;
+  private assignmentSnapshotLoaded = false;
+  private vehicleSnapshotLoaded = false;
   private overnightReconciledFor: string | null = null;
 
   private isClient(): boolean {
@@ -270,11 +275,25 @@ class DataStore {
           const list: Vehicle[] = [];
           snapshot.forEach((d) => list.push(d.data() as Vehicle));
           localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(list));
+          this.vehicleSnapshotLoaded = true;
+          if (this.assignmentSnapshotLoaded) this.getVehicleAssignments();
           window.dispatchEvent(new Event('sunny_db_update'));
         }
       }, (err) => {
         console.warn('Firestore vehicles listener (using local cache):', err.message);
       });
+
+      onSnapshot(collection(db, 'vehicleAssignments'), (snapshot) => {
+        const remote: VehicleAssignment[] = [];
+        snapshot.forEach(d => remote.push(d.data() as VehicleAssignment));
+        const byId = new Map<string, VehicleAssignment>();
+        for (const item of this.readVehicleAssignments()) byId.set(item.id, item);
+        for (const item of remote) byId.set(item.id, item);
+        localStorage.setItem(STORAGE_KEYS.VEHICLE_ASSIGNMENTS, JSON.stringify(Array.from(byId.values())));
+        this.assignmentSnapshotLoaded = true;
+        if (this.vehicleSnapshotLoaded) this.getVehicleAssignments();
+        window.dispatchEvent(new Event('sunny_db_update'));
+      }, err => console.warn('Firestore vehicle assignment listener:', err.message));
 
       // Listen to Issues collection
       onSnapshot(collection(db, 'issues'), (snapshot) => {
@@ -442,6 +461,10 @@ class DataStore {
         batch.set(ref, sanitizeForFirestore(v));
       });
 
+      this.getVehicleAssignments().forEach(item => {
+        batch.set(doc(db, 'vehicleAssignments', item.id), sanitizeForFirestore(item));
+      });
+
       // Seed Equipment
       this.getEquipment().forEach((eq) => {
         const ref = doc(db, 'equipment', eq.id);
@@ -520,6 +543,7 @@ class DataStore {
     localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(INITIAL_ISSUES));
     localStorage.setItem(STORAGE_KEYS.VEHICLE_DAY_LOGS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.VEHICLE_DAMAGE, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.VEHICLE_ASSIGNMENTS, JSON.stringify([]));
     const nowIso = new Date().toISOString();
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT_OPTIONS, JSON.stringify(
       INITIAL_EQUIPMENT.map((eq, index) => ({
@@ -554,6 +578,7 @@ class DataStore {
     localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.VEHICLE_ASSIGNMENTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.SEEDED, 'true');
     window.dispatchEvent(new Event('sunny_db_update'));
@@ -853,11 +878,11 @@ class DataStore {
 
     // Reset and return to shop any vehicle currently assigned to this user
     const vehicles = this.getVehicles();
-    vehicles.forEach(v => {
+    for (const v of vehicles) {
       if (v.currentUserId === userId) {
-        this.updateVehicle(checkInFields(v));
+        await this.checkInVehicle(v.id);
       }
-    });
+    }
 
     if (db) {
       try {
@@ -940,16 +965,23 @@ class DataStore {
       }
     }
 
-    const returnedIds = new Set(stale.map(v => v.id));
-    const next = list.map(v => (returnedIds.has(v.id) ? checkInFields(v) : v));
-    localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(next));
-    if (db) {
-      stale.forEach((v) => {
-        const updated = checkInFields(v);
-        setDoc(doc(db, 'vehicles', updated.id), sanitizeForFirestore(updated), { merge: true }).catch((e) =>
-          console.warn('Firestore overnight check-in write error:', e)
-        );
+    let state = { assignments: this.getVehicleAssignments(), vehicles: list };
+    for (const v of stale) {
+      state = transitionAssignment(state.assignments, state.vehicles, {
+        vehicleId: v.id, user: null, effectiveAt: new Date().toISOString(), recordedAt: new Date().toISOString(),
+        source: 'overnight', actor: { id: 'system', name: 'Overnight return' },
       });
+    }
+    localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(state.vehicles));
+    localStorage.setItem(STORAGE_KEYS.VEHICLE_ASSIGNMENTS, JSON.stringify(state.assignments));
+    if (db) {
+      for (const v of stale) {
+        const updated = state.vehicles.find(item => item.id === v.id)!;
+        setDoc(doc(db, 'vehicles', updated.id), sanitizeForFirestore(updated), { merge: true }).catch(e => console.warn('Overnight vehicle sync:', e));
+      }
+      for (const item of state.assignments.filter(a => stale.some(v => v.id === a.vehicleId && a.endedAt))) {
+        setDoc(doc(db, 'vehicleAssignments', item.id), sanitizeForFirestore(item), { merge: true }).catch(e => console.warn('Overnight assignment sync:', e));
+      }
     }
     window.dispatchEvent(new Event('sunny_db_update'));
   }
@@ -1231,10 +1263,95 @@ class DataStore {
     return sanitized;
   }
 
+  private readVehicleAssignments(): VehicleAssignment[] {
+    const data = localStorage.getItem(STORAGE_KEYS.VEHICLE_ASSIGNMENTS);
+    return data ? JSON.parse(data) as VehicleAssignment[] : [];
+  }
+
+  public getVehicleAssignments(vehicleId?: string): VehicleAssignment[] {
+    if (!this.isClient()) return [];
+    this.init();
+    const list = this.readVehicleAssignments();
+    if (db && (!this.assignmentSnapshotLoaded || !this.vehicleSnapshotLoaded)) {
+      return list.filter(item => !vehicleId || item.vehicleId === vehicleId);
+    }
+    const open = new Set(list.filter(item => !item.endedAt).map(item => item.vehicleId));
+    const legacy = this.readVehicleList().filter(v => v.currentUserId && !open.has(v.id)).map(v => ({
+      id: `legacy-${v.id}-${v.currentUserStartAt || 'unknown'}`,
+      vehicleId: v.id, vehicleNumber: v.vehicleNumber,
+      userId: v.currentUserId!, userName: v.currentUserName || 'Driver',
+      startedAt: v.currentUserStartAt || new Date().toISOString(), endedAt: null,
+      source: 'employee' as const, actorId: v.currentUserId!,
+      actorName: v.currentUserName || 'Driver', recordedAt: new Date().toISOString(),
+    }));
+    if (legacy.length) {
+      const byId = new Map([...list, ...legacy].map(item => [item.id, item]));
+      localStorage.setItem(STORAGE_KEYS.VEHICLE_ASSIGNMENTS, JSON.stringify(Array.from(byId.values())));
+      if (db) for (const item of legacy) {
+        setDoc(doc(db, 'vehicleAssignments', item.id), sanitizeForFirestore(item), { merge: true }).catch(e => console.warn('Assignment migration sync:', e));
+      }
+      return Array.from(byId.values()).filter(item => !vehicleId || item.vehicleId === vehicleId);
+    }
+    return list.filter(item => !vehicleId || item.vehicleId === vehicleId);
+  }
+
+  private async persistAssignmentTransition(
+    before: VehicleAssignment[], vehicles: Vehicle[], result: { assignments: VehicleAssignment[]; vehicles: Vehicle[] },
+    vehicleWrittenSeparately?: string
+  ): Promise<void> {
+    if (result.assignments === before) return;
+    localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(result.vehicles));
+    localStorage.setItem(STORAGE_KEYS.VEHICLE_ASSIGNMENTS, JSON.stringify(result.assignments));
+    window.dispatchEvent(new Event('sunny_db_update'));
+    if (db) {
+      try {
+        const batch = writeBatch(db);
+        for (const updated of result.vehicles) {
+          if (updated.id !== vehicleWrittenSeparately && updated !== vehicles.find(v => v.id === updated.id)) {
+            batch.set(doc(db, 'vehicles', updated.id), sanitizeForFirestore(updated), { merge: true });
+          }
+        }
+        for (const item of result.assignments) {
+          if (item !== before.find(previous => previous.id === item.id)) {
+            batch.set(doc(db, 'vehicleAssignments', item.id), sanitizeForFirestore(item), { merge: true });
+          }
+        }
+        await batch.commit();
+      } catch (e) { console.warn('Assignment sync fallback to local cache:', e); }
+    }
+  }
+
+  private async changeAssignment(
+    vehicleId: string, user: { id: string; name: string } | null, effectiveAt: string,
+    actor: { id: string; name: string }, source: VehicleAssignment['source']
+  ): Promise<Vehicle> {
+    const vehicles = this.getVehicles();
+    const before = this.getVehicleAssignments();
+    const result = transitionAssignment(before, vehicles, {
+      vehicleId, user, effectiveAt, recordedAt: new Date().toISOString(), actor, source,
+    });
+    await this.persistAssignmentTransition(before, vehicles, result);
+    return result.vehicles.find(v => v.id === vehicleId)!;
+  }
+
+  public async assignVehicle(vehicleId: string, userId: string, effectiveAt: string, actor: { id: string; name: string }): Promise<Vehicle> {
+    const manager = this.getUsers().find(u => u.id === actor.id && u.role === 'manager' && u.status === 'active');
+    if (!manager) throw new Error('Only an active manager can assign a vehicle.');
+    const employee = this.getUsers().find(u => u.id === userId && u.role === 'employee' && u.status === 'active');
+    if (!employee) throw new Error('Choose an active employee.');
+    return this.changeAssignment(vehicleId, employee, effectiveAt, { id: manager.id, name: manager.name }, 'manager');
+  }
+
+  public async releaseVehicle(vehicleId: string, effectiveAt: string, actor: { id: string; name: string }): Promise<Vehicle> {
+    const manager = this.getUsers().find(u => u.id === actor.id && u.role === 'manager' && u.status === 'active');
+    if (!manager) throw new Error('Only an active manager can release a vehicle.');
+    return this.changeAssignment(vehicleId, null, effectiveAt, { id: manager.id, name: manager.name }, 'manager');
+  }
+
   public async checkInVehicle(vehicleId: string): Promise<Vehicle> {
     const vehicle = this.getVehicle(vehicleId);
     if (!vehicle) throw new Error('Vehicle not found');
-    return this.updateVehicle(checkInFields(vehicle));
+    return this.changeAssignment(vehicleId, null, new Date().toISOString(), { id: vehicle.currentUserId || 'system', name: vehicle.currentUserName || 'System' }, 'employee');
   }
 
   /** Manager occupancy reset. Clears every driver; does not create missed-return nags. */
@@ -1242,32 +1359,17 @@ class DataStore {
     if (!this.isClient()) return { count: 0 };
     this.init();
     const list = this.readVehicleList();
-    let count = 0;
-    const clearedIds = new Set<string>();
-    const next = list.map((v) => {
-      if (!v.currentUserId) return v;
-      count += 1;
-      clearedIds.add(v.id);
-      return checkInFields(v);
-    });
-    if (count === 0) return { count: 0 };
-    localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(next));
-    window.dispatchEvent(new Event('sunny_db_update'));
-    if (db) {
-      next.forEach((v) => {
-        if (!clearedIds.has(v.id)) return;
-        setDoc(doc(db, 'vehicles', v.id), sanitizeForFirestore(v), { merge: true }).catch((e) =>
-          console.warn('Firestore return-all write error:', e)
-        );
-      });
+    const occupied = list.filter(v => v.currentUserId);
+    for (const vehicle of occupied) {
+      await this.changeAssignment(vehicle.id, null, new Date().toISOString(), { id: 'system', name: 'Manager reset' }, 'manager');
     }
-    return { count };
+    return { count: occupied.length };
   }
 
   public async checkOutVehicle(vehicleId: string, user: { id: string; name: string }): Promise<Vehicle> {
     const vehicle = this.getVehicle(vehicleId);
     if (!vehicle) throw new Error('Vehicle not found');
-    return this.updateVehicle(checkOutFields(vehicle, user));
+    return this.changeAssignment(vehicleId, user, new Date().toISOString(), user, 'employee');
   }
 
   public async deleteVehicle(
@@ -2680,6 +2782,8 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     userId: string;
     userName: string;
     userEmail: string;
+    submittedById?: string;
+    submittedByName?: string;
     responses: InspectionResponse[];
     flaggedIssues: Array<{
       equipmentId?: string | null;
@@ -2707,6 +2811,12 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
 
     const vehicle = this.getVehicle(data.vehicleId);
     if (!vehicle) throw new Error('Vehicle not found');
+    if (data.submittedById && data.submittedById !== data.userId) {
+      const submitter = this.getUsers().find(u => u.id === data.submittedById && u.status === 'active');
+      if (!submitter || this.getEffectiveRole(submitter) !== 'manager') throw new Error('Only a manager can inspect for another employee.');
+      const subject = this.getUsers().find(u => u.id === data.userId && u.status === 'active');
+      if (!subject) throw new Error('Choose an active employee.');
+    }
 
     const now = new Date();
     const nowIso = now.toISOString();
@@ -2724,8 +2834,8 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       const initialLog: IssueStatusLog = {
         id: `log-${Date.now()}-${idx}`,
         issueId,
-        changedById: data.userId || 'anon',
-        changedByName: data.userName || 'Inspector',
+        changedById: data.submittedById || data.userId || 'anon',
+        changedByName: data.submittedByName || data.userName || 'Inspector',
         oldStatus: 'created',
         newStatus: 'open',
         notes: `Flagged during inspection on ${vehicle.vehicleNumber}: ${flag.description}`,
@@ -2738,8 +2848,8 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
         vehicleNumber: vehicle.vehicleNumber,
         equipmentId: flag.equipmentId || null,
         equipmentName: flag.equipmentName || 'Vehicle Equipment',
-        reportedById: data.userId || 'anon',
-        reportedByName: data.userName || 'Inspector',
+        reportedById: data.submittedById || data.userId || 'anon',
+        reportedByName: data.submittedByName || data.userName || 'Inspector',
         reportedAt: nowIso,
         dateString: dateStr,
         inspectionId,
@@ -2800,6 +2910,8 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       userId: data.userId || 'anon',
       userName: data.userName || 'Inspector',
       userEmail: data.userEmail || 'inspector@sunnyfleet.com',
+      submittedById: data.submittedById || data.userId,
+      submittedByName: data.submittedByName || data.userName,
       status,
       startedAt: new Date(now.getTime() - 8 * 60 * 1000).toISOString(),
       submittedAt: nowIso,
@@ -2827,7 +2939,18 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     }
 
     // Update Vehicle state (checkout only if the van is free — never steal another driver)
-    const occupied = occupancyAfterInspection(vehicle, { id: data.userId, name: data.userName }, now);
+    let occupied = vehicle;
+    if (!vehicle.currentUserId) {
+      const before = this.getVehicleAssignments();
+      const vehiclesBefore = this.getVehicles();
+      const transition = transitionAssignment(before, vehiclesBefore, {
+        vehicleId: vehicle.id, user: { id: data.userId || 'anon', name: data.userName || 'Inspector' },
+        effectiveAt: nowIso, recordedAt: nowIso, source: 'inspection',
+        actor: { id: data.submittedById || data.userId, name: data.submittedByName || data.userName },
+      });
+      void this.persistAssignmentTransition(before, vehiclesBefore, transition, vehicle.id);
+      occupied = transition.vehicles.find(v => v.id === vehicle.id)!;
+    }
     const updatedVehicle: Vehicle = {
       ...occupied,
       lastInspectionId: inspectionId,
@@ -3215,8 +3338,8 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     const allInspections = [newInspection, ...this.getInspections()];
     localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(allInspections));
 
-    const cleared = checkInFields(vehicle);
-    this.updateVehicle(cleared);
+    // checkInVehicle updates local occupancy and closes the interval before its first await.
+    void this.checkInVehicle(vehicle.id);
 
     if (data.missedReturnId) {
       void this.completeMissedReturn(data.missedReturnId, inspectionId);

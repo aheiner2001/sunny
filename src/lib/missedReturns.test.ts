@@ -75,6 +75,7 @@ describe('overnight missed returns + submitReturnInspection', () => {
     expect(pending).toBeTruthy();
     expect(pending?.vehicleId).toBe('van-1');
     expect(pending?.status).toBe('pending');
+    expect(dbService.getVehicleAssignments('van-1')[0]?.endedAt).toBeTruthy();
   });
 
   it('submitReturnInspection clears occupancy and sets kind return', () => {
@@ -109,5 +110,6 @@ describe('overnight missed returns + submitReturnInspection', () => {
     const van = dbService.getVehicle('van-2');
     expect(van?.currentUserId).toBeNull();
     expect(van?.status).toBe('active');
+    expect(dbService.getVehicleAssignments('van-2')[0]?.endedAt).toBeTruthy();
   });
 });

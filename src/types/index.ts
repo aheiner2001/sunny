@@ -55,6 +55,21 @@ export interface Vehicle {
   createdAt?: string;
 }
 
+export interface VehicleAssignment {
+  id: string;
+  vehicleId: string;
+  vehicleNumber: string;
+  userId: string;
+  userName: string;
+  startedAt: string;
+  endedAt: string | null;
+  source: 'manager' | 'employee' | 'inspection' | 'overnight';
+  actorId: string;
+  actorName: string;
+  recordedAt: string;
+  corrections?: Array<{ previousStartedAt: string; correctedAt: string; actorId: string; actorName: string }>;
+}
+
 export type EquipmentCategory = 'equipment' | 'supplies' | 'vehicle_condition';
 export type EquipmentStatus = 'working' | 'flagged' | 'needs_repair' | 'being_repaired' | 'fixed';
 export type EquipmentKind = 'reusable' | 'consumable';
@@ -244,6 +259,9 @@ export interface Inspection {
   userId: string;
   userName: string;
   userEmail: string;
+  /** Person who completed the form, distinct from the assigned employee. */
+  submittedById?: string;
+  submittedByName?: string;
   status: InspectionStatus;
   startedAt: string;
   submittedAt: string;
