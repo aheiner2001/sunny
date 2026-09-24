@@ -95,7 +95,7 @@ export function VehicleDamagePanel({ vehicleId }: Props) {
 
   return (
     <div className="stack gap-4">
-      <div className="card card-pad">
+      <div className="card card-pad sticky top-0 z-10 max-h-[70dvh] overflow-y-auto overscroll-contain bg-surface shadow-panel">
         <div className="spread items-start gap-2 mb-3">
           <div>
             <h2 className="card-title">Damage overview</h2>

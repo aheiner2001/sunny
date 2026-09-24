@@ -1,0 +1,40 @@
+name: Hosting and QR safety
+
+on:
+  push:
+    branches: [preview]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  paths:
+    name: Check ${{ matrix.host }} URLs
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - host: GitHub Pages
+            base_path: /sunny
+            vercel: ''
+          - host: Vercel
+            base_path: ''
+            vercel: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_BASE_PATH: ${{ matrix.base_path }}
+          VERCEL: ${{ matrix.vercel }}
+      - run: node scripts/check-hosting-build.mjs
+        env:
+          EXPECTED_BASE_PATH: ${{ matrix.base_path }}

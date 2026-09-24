@@ -3,13 +3,13 @@
 import React, { useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Download, Printer, QrCode } from 'lucide-react';
-import { BASE_PATH, asset } from '@/lib/basePath';
+import { absoluteAssetUrl } from '@/lib/basePath';
 
 export function ShopExitQRCode() {
   const qrRef = useRef<HTMLDivElement>(null);
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://aheiner2001.github.io';
-  const logoUrl = `${origin}${asset('/sunny-logo.png')}`;
-  const returnUrl = `${origin}${BASE_PATH}/return`;
+  const logoUrl = absoluteAssetUrl(origin, '/sunny-logo.png');
+  const returnUrl = absoluteAssetUrl(origin, '/return');
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
