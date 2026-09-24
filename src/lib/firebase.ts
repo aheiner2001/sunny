@@ -10,6 +10,7 @@ const firebaseConfig = {
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "684641283346",
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:684641283346:web:630f5cd7b43d60f8df17cb",
 };
+console.log("ACTIVE FIREBASE PROJECT ID:", process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
 
 // Initialize Firebase safely for SSR/Client
 export const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
