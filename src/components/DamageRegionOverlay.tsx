@@ -94,8 +94,8 @@ export function DamageRegionOverlay({
     <div className="w-full flex flex-col items-center gap-2">
       <div
         ref={frameRef}
-        className={`relative inline-block max-w-full touch-none select-none ${
-          mode === 'draw' ? 'cursor-crosshair' : ''
+        className={`relative inline-block max-w-full select-none ${
+          mode === 'draw' ? 'touch-none cursor-crosshair' : 'touch-auto'
         }`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -106,7 +106,7 @@ export function DamageRegionOverlay({
           src={imageSrc}
           alt={imageAlt}
           draggable={false}
-          className="max-h-52 sm:max-h-64 w-auto max-w-full object-contain drop-shadow-sm block"
+          className="max-h-[min(40dvh,16rem)] w-auto max-w-full object-contain drop-shadow-sm block"
         />
         {mode === 'display' &&
           markers.map((m) => {
