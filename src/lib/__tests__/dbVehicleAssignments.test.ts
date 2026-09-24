@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { dbService } from '../db';
 
-vi.mock('../firebase', () => ({ db: null, ensureAuth: vi.fn().mockResolvedValue(null) }));
-vi.mock('firebase/firestore', () => ({ collection: vi.fn(), doc: vi.fn(), setDoc: vi.fn(), deleteDoc: vi.fn(), getDoc: vi.fn(), getDocs: vi.fn(), updateDoc: vi.fn(), onSnapshot: vi.fn(), writeBatch: vi.fn() }));
+vi.mock('../firebase', () => ({ db: {}, ensureAuth: vi.fn().mockResolvedValue(null) }));
+vi.mock('firebase/firestore', () => ({ collection: vi.fn(), doc: vi.fn(), setDoc: vi.fn().mockResolvedValue(undefined), deleteDoc: vi.fn(), getDoc: vi.fn(), getDocs: vi.fn(), updateDoc: vi.fn(), onSnapshot: vi.fn(() => () => {}), writeBatch: vi.fn(() => ({ set: vi.fn(), commit: vi.fn().mockResolvedValue(undefined) })) }));
 
 const van = (id: string, employee?: string) => ({
   id, vehicleNumber: id, name: id, licensePlate: id, qrCodeToken: id,
@@ -14,6 +14,7 @@ describe('manager vehicle assignment', () => {
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem('sunny_seeded_v2', 'true');
+    localStorage.setItem('sunny_overnight_reconciled', new Date().toLocaleDateString('en-CA'));
     localStorage.setItem('sunny_vehicles', JSON.stringify([van('A'), van('B')]));
     localStorage.setItem('sunny_users', JSON.stringify([
       { id: 'boss', name: 'Manager', role: 'manager', status: 'active' },
@@ -32,8 +33,13 @@ describe('manager vehicle assignment', () => {
     expect(dbService.getInspections()).toHaveLength(0);
   });
 
-  it('migrates occupied vans once and closes history on release', async () => {
+  it('closes an occupied van assignment on release', async () => {
     localStorage.setItem('sunny_vehicles', JSON.stringify([van('A', 'alex')]));
+    localStorage.setItem('sunny_vehicle_assignments', JSON.stringify([{
+      id: 'existing', vehicleId: 'A', vehicleNumber: 'A', userId: 'alex', userName: 'Alex',
+      startedAt: '2026-09-23T08:00:00.000Z', endedAt: null,
+      source: 'employee', actorId: 'alex', actorName: 'Alex', recordedAt: '2026-09-23T08:00:00.000Z',
+    }]));
     expect(dbService.getVehicleAssignments('A')).toHaveLength(1);
     expect(dbService.getVehicleAssignments('A')).toHaveLength(1);
     await dbService.releaseVehicle('A', '2026-09-23T10:00:00.000Z', { id: 'boss', name: 'Manager' });

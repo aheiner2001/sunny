@@ -1297,12 +1297,15 @@ class DataStore {
 
   private async persistAssignmentTransition(
     before: VehicleAssignment[], vehicles: Vehicle[], result: { assignments: VehicleAssignment[]; vehicles: Vehicle[] },
-    vehicleWrittenSeparately?: string
+    vehicleWrittenSeparately?: string, requireSharedWrite = false
   ): Promise<void> {
     if (result.assignments === before) return;
-    localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(result.vehicles));
-    localStorage.setItem(STORAGE_KEYS.VEHICLE_ASSIGNMENTS, JSON.stringify(result.assignments));
-    window.dispatchEvent(new Event('sunny_db_update'));
+    if (requireSharedWrite && !db) throw new Error('Shared vehicle assignments are unavailable. Try again when connected.');
+    if (!requireSharedWrite) {
+      localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(result.vehicles));
+      localStorage.setItem(STORAGE_KEYS.VEHICLE_ASSIGNMENTS, JSON.stringify(result.assignments));
+      window.dispatchEvent(new Event('sunny_db_update'));
+    }
     if (db) {
       try {
         const batch = writeBatch(db);
@@ -1317,20 +1320,28 @@ class DataStore {
           }
         }
         await batch.commit();
-      } catch (e) { console.warn('Assignment sync fallback to local cache:', e); }
+      } catch (e) {
+        if (requireSharedWrite) throw e;
+        console.warn('Assignment sync fallback to local cache:', e);
+      }
+    }
+    if (requireSharedWrite) {
+      localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(result.vehicles));
+      localStorage.setItem(STORAGE_KEYS.VEHICLE_ASSIGNMENTS, JSON.stringify(result.assignments));
+      window.dispatchEvent(new Event('sunny_db_update'));
     }
   }
 
   private async changeAssignment(
     vehicleId: string, user: { id: string; name: string } | null, effectiveAt: string,
-    actor: { id: string; name: string }, source: VehicleAssignment['source']
+    actor: { id: string; name: string }, source: VehicleAssignment['source'], requireSharedWrite = false
   ): Promise<Vehicle> {
     const vehicles = this.getVehicles();
     const before = this.getVehicleAssignments();
     const result = transitionAssignment(before, vehicles, {
       vehicleId, user, effectiveAt, recordedAt: new Date().toISOString(), actor, source,
     });
-    await this.persistAssignmentTransition(before, vehicles, result);
+    await this.persistAssignmentTransition(before, vehicles, result, undefined, requireSharedWrite);
     return result.vehicles.find(v => v.id === vehicleId)!;
   }
 
@@ -1339,13 +1350,13 @@ class DataStore {
     if (!manager) throw new Error('Only an active manager can assign a vehicle.');
     const employee = this.getUsers().find(u => u.id === userId && u.role === 'employee' && u.status === 'active');
     if (!employee) throw new Error('Choose an active employee.');
-    return this.changeAssignment(vehicleId, employee, effectiveAt, { id: manager.id, name: manager.name }, 'manager');
+    return this.changeAssignment(vehicleId, employee, effectiveAt, { id: manager.id, name: manager.name }, 'manager', true);
   }
 
   public async releaseVehicle(vehicleId: string, effectiveAt: string, actor: { id: string; name: string }): Promise<Vehicle> {
     const manager = this.getUsers().find(u => u.id === actor.id && u.role === 'manager' && u.status === 'active');
     if (!manager) throw new Error('Only an active manager can release a vehicle.');
-    return this.changeAssignment(vehicleId, null, effectiveAt, { id: manager.id, name: manager.name }, 'manager');
+    return this.changeAssignment(vehicleId, null, effectiveAt, { id: manager.id, name: manager.name }, 'manager', true);
   }
 
   public async checkInVehicle(vehicleId: string): Promise<Vehicle> {
