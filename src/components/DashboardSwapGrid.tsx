@@ -90,7 +90,7 @@ export function DashboardSwapGrid({ children, layout, colorful, customize, onReo
   return (
     <div ref={containerRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[var(--gutter)] items-start" aria-label="Dashboard widgets">
       {slotted.map(({ slotId, itemId, item }, index) => item && (
-        <div key={slotId} data-swapy-slot={slotId} className={sizeToColSpan(item.size)}>
+        <div key={slotId} data-swapy-slot={slotId} className={sizeToColSpan(layout.find(slot => slot.id === slotId)?.size ?? item.size)}>
           <section
             key={itemId}
             data-swapy-item={itemId}

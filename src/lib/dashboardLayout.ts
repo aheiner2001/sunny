@@ -146,10 +146,9 @@ export function reorderVisibleDashboardWidgets(
   const visible = new Set(visibleIds);
   if (new Set(newVisibleOrder).size !== visible.size ||
       newVisibleOrder.some(id => !visible.has(id))) return current;
-  const byId = new Map(current.map(item => [item.id, item]));
   let cursor = 0;
   return current.map(item => visible.has(item.id)
-    ? byId.get(newVisibleOrder[cursor++]) || item
+    ? { id: newVisibleOrder[cursor++], size: item.size }
     : item);
 }
 

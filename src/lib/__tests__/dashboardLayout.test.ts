@@ -111,8 +111,19 @@ describe('dashboard layout persistence', () => {
     const updated = reorderVisibleDashboardWidgets(layout, visible, swapped);
     expect(updated.filter(item => item.id === 'lifespan')).toEqual([{ id: 'lifespan', size: 'small' }]);
     expect(updated.filter(item => item.id !== 'lifespan').map(item => item.id)).toEqual(swapped);
+    expect(updated[0].size).toBe('wide');
+    expect(updated[1].size).toBe('medium');
     expect(new Set(updated.map(item => item.id)).size).toBe(DEFAULT_DASHBOARD_LAYOUT.length);
     saveDashboardLayout(updated, 'manager-a');
     expect(loadDashboardLayout('manager-a').filter(item => item.id !== 'lifespan').map(item => item.id)).toEqual(swapped);
+  });
+
+  it('keeps column widths in their slots when a wide card swaps with a narrow card', () => {
+    const visible = DEFAULT_DASHBOARD_LAYOUT.map(item => item.id);
+    const swapped = [visible[1], visible[0], ...visible.slice(2)];
+    const updated = reorderVisibleDashboardWidgets(DEFAULT_DASHBOARD_LAYOUT, visible, swapped);
+    expect(updated[0]).toEqual({ id: 'today_issues', size: 'wide' });
+    expect(updated[1]).toEqual({ id: 'stats', size: 'medium' });
+    expect(loadDashboardLayout('new-manager')[0]).toEqual({ id: 'stats', size: 'wide' });
   });
 });

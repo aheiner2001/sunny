@@ -476,7 +476,8 @@ export default function DashboardPage() {
 
       {widgetShell(
         'stats',
-        <div className="grid-auto" style={{ '--min': '15rem' } as React.CSSProperties}>
+        <div className="overflow-x-auto">
+        <div className="grid-auto lg:grid-cols-5 lg:min-w-[60rem]" style={{ '--min': '15rem' } as React.CSSProperties}>
         <div className="card card-pad flex flex-col">
           <div className="spread items-start">
             <span className="icon-tile icon-tile-lg" data-status="idle">
@@ -573,6 +574,7 @@ export default function DashboardPage() {
             </span>
           </div>
         </Link>
+      </div>
       </div>
       )}
 
@@ -828,7 +830,8 @@ export default function DashboardPage() {
 
       {widgetShell(
         'in_use',
-      <div className="grid grid-cols-1 gap-[var(--gutter)]">
+      <div className="overflow-x-auto">
+      <div className="grid grid-cols-1 lg:grid-cols-3 lg:min-w-[46rem] gap-[var(--gutter)]">
         <div className="card lg:col-span-2">
           <div className="card-head">
             <h2 className="card-title">Vehicles in use</h2>
@@ -1000,6 +1003,7 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+      </div>
       </div>
       )}
 
