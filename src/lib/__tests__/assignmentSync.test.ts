@@ -38,7 +38,9 @@ describe('Firestore assignment snapshot ordering', () => {
     listeners.get('vehicles')?.({ empty: false, forEach: (cb: (doc: any) => void) => [a, b].forEach(vehicle => cb({ data: () => vehicle })) });
     const original = { id: 'old-uuid', vehicleId: 'A', vehicleNumber: 'A', userId: 'alex', userName: 'Alex', startedAt: start, endedAt: null, source: 'employee', actorId: 'alex', actorName: 'Alex', recordedAt: start };
     listeners.get('vehicleAssignments')?.({ forEach: (cb: (doc: any) => void) => cb({ data: () => original }) });
-    dbService.submitInspection({ vehicleId: 'B', userId: 'alex', userName: 'Alex', userEmail: '', responses: [], flaggedIssues: [] });
+    await dbService.submitInspection({ vehicleId: 'B', userId: 'alex', userName: 'Alex', userEmail: '', responses: [], flaggedIssues: [] });
+    expect(batchSet.mock.calls.some(([ref]) => ref.path === 'inspections')).toBe(true);
+    expect(batchSet.mock.calls.some(([ref, data]) => ref.path === 'vehicles' && ref.id === 'B' && data.currentUserId === 'alex')).toBe(true);
     expect(batchSet.mock.calls.some(([ref, data]) => ref.path === 'vehicles' && ref.id === 'A' && data.currentUserId === null)).toBe(true);
     expect(batchSet.mock.calls.some(([ref, data]) => ref.path === 'vehicleAssignments' && ref.id === 'old-uuid' && Boolean(data.endedAt))).toBe(true);
   });

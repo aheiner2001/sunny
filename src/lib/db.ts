@@ -37,6 +37,7 @@ import { classifyIssueType } from './issueClassification';
 import { shouldAutoReturnVehicle, localDateString } from './occupancy';
 import { DEFAULT_RETURN_QUESTIONS, hasReturnForShift, normalizeReturnQuestions, shiftDateStringForVehicle } from './returnFlow';
 import { repairDuplicateCategoryIds } from './checklistCategories';
+import { compactConfirmedInspections } from './inspectionCache';
 import { assertDamagePayload, normalizeRegion } from './vehicleDamage';
 import { 
   computeLifespanStatus,
@@ -142,6 +143,23 @@ class DataStore {
   private assignmentSnapshotLoaded = false;
   private vehicleSnapshotLoaded = false;
   private overnightReconciledFor: string | null = null;
+  private confirmedInspections = new Map<string, Inspection>();
+  private inspectionMemory: Inspection[] | null = null;
+  private inspectedCacheValue: string | null = null;
+  private inspectionCacheWriteFailed = false;
+
+  private storeInspections(inspections: Inspection[]): void {
+    this.inspectionMemory = inspections;
+    const cached = JSON.stringify(compactConfirmedInspections(inspections, this.confirmedInspections));
+    try {
+      localStorage.setItem(STORAGE_KEYS.INSPECTIONS, cached);
+      this.inspectedCacheValue = cached;
+      this.inspectionCacheWriteFailed = false;
+    } catch (error) {
+      this.inspectionCacheWriteFailed = true;
+      throw error;
+    }
+  }
 
   private isClient(): boolean {
     return typeof window !== 'undefined';
@@ -311,8 +329,18 @@ class DataStore {
       onSnapshot(collection(db, 'inspections'), (snapshot) => {
         if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
           const list: Inspection[] = [];
-          snapshot.forEach((d) => list.push(d.data() as Inspection));
-          localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(list));
+          const confirmed = new Map<string, Inspection>();
+          snapshot.forEach((d) => {
+            const inspection = d.data() as Inspection;
+            list.push(inspection);
+            if (snapshot.metadata?.fromCache === false && !d.metadata?.hasPendingWrites) confirmed.set(d.id, inspection);
+          });
+          if (snapshot.metadata?.fromCache === false) this.confirmedInspections = confirmed;
+          try {
+            this.storeInspections(list);
+          } catch (error) {
+            console.warn('Inspection cache could not be saved on this device:', error);
+          }
           window.dispatchEvent(new Event('sunny_db_update'));
         }
       }, (err) => {
@@ -539,7 +567,7 @@ class DataStore {
     };
     localStorage.setItem(STORAGE_KEYS.CHECKLIST_CONFIG, JSON.stringify(initialConfig));
 
-    localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(INITIAL_INSPECTIONS));
+    this.storeInspections(INITIAL_INSPECTIONS);
     localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(INITIAL_ISSUES));
     localStorage.setItem(STORAGE_KEYS.VEHICLE_DAY_LOGS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.VEHICLE_DAMAGE, JSON.stringify([]));
@@ -577,7 +605,7 @@ class DataStore {
     if (!this.isClient()) return;
     localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify([]));
-    localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify([]));
+    this.storeInspections([]);
     localStorage.setItem(STORAGE_KEYS.VEHICLE_ASSIGNMENTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.SEEDED, 'true');
@@ -1247,7 +1275,7 @@ class DataStore {
       return insp;
     });
     if (inspectionsChanged) {
-      localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(updatedInspections));
+      this.storeInspections(updatedInspections);
     }
 
     window.dispatchEvent(new Event('sunny_db_update'));
@@ -1450,7 +1478,7 @@ class DataStore {
     localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(equipment));
 
     const inspections = this.getInspections().filter(i => i.vehicleId !== vehicleId);
-    localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(inspections));
+    this.storeInspections(inspections);
     const issues = this.getIssues().filter(i => i.vehicleId !== vehicleId);
     localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(issues));
 
@@ -2753,6 +2781,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     if (!this.isClient()) return [];
     this.init();
     const data = localStorage.getItem(STORAGE_KEYS.INSPECTIONS);
+    if (this.inspectionMemory && (this.inspectionCacheWriteFailed || data === this.inspectedCacheValue)) return this.inspectionMemory;
     return data ? JSON.parse(data) : [];
   }
 
@@ -2788,7 +2817,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     return this.getInspections().filter(i => i.dateString === dateStr);
   }
 
-  public submitInspection(data: {
+  public async submitInspection(data: {
     vehicleId: string;
     userId: string;
     userName: string;
@@ -2816,7 +2845,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     photoUrls?: string[] | null;
     odometer?: number | null;
     fuelLevel?: number | null;
-  }): { inspection: Inspection; newIssues: Issue[] } {
+  }): Promise<{ inspection: Inspection; newIssues: Issue[]; localCacheWarning: boolean }> {
     if (!this.isClient()) throw new Error('Client only');
     this.init();
 
@@ -2886,17 +2915,6 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
 
       newIssues.push(newIssue);
 
-      // Update equipment status if linked
-      if (flag.equipmentId) {
-        this.updateEquipmentStatus(flag.equipmentId, 'flagged', issueId);
-      }
-
-      // Sync Issue to Firestore (Sanitized)
-      if (db) {
-        setDoc(doc(db, 'issues', issueId), sanitizeForFirestore(newIssue)).catch((e) =>
-          console.warn('Firestore issue write error:', e)
-        );
-      }
     });
 
     const status: Inspection['status'] = newIssues.length > 0 ? 'issues_found' : 'passed';
@@ -2939,29 +2957,17 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       fuelLevel: data.fuelLevel !== undefined && data.fuelLevel !== null ? Number(data.fuelLevel) : null as any,
     };
 
-    // Save Inspection locally
-    const allInspections = [newInspection, ...this.getInspections()];
-    localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(allInspections));
-
-    // Save Issues locally
-    if (newIssues.length > 0) {
-      const allIssues = [...newIssues, ...this.getIssues()];
-      localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(allIssues));
-    }
-
-    // Update Vehicle state (checkout only if the van is free — never steal another driver)
-    let occupied = vehicle;
-    if (!vehicle.currentUserId) {
-      const before = this.getVehicleAssignments();
-      const vehiclesBefore = this.getVehicles();
-      const transition = transitionAssignment(before, vehiclesBefore, {
-        vehicleId: vehicle.id, user: { id: data.userId || 'anon', name: data.userName || 'Inspector' },
-        effectiveAt: nowIso, recordedAt: nowIso, source: 'inspection',
-        actor: { id: data.submittedById || data.userId, name: data.submittedByName || data.userName },
-      });
-      void this.persistAssignmentTransition(before, vehiclesBefore, transition, vehicle.id);
-      occupied = transition.vehicles.find(v => v.id === vehicle.id)!;
-    }
+    // Calculate checkout before committing so the inspection and vehicle state agree.
+    const vehiclesBefore = this.getVehicles();
+    const assignmentsBefore = !vehicle.currentUserId ? this.getVehicleAssignments() : [];
+    const transition = !vehicle.currentUserId
+      ? transitionAssignment(assignmentsBefore, vehiclesBefore, {
+          vehicleId: vehicle.id, user: { id: data.userId || 'anon', name: data.userName || 'Inspector' },
+          effectiveAt: nowIso, recordedAt: nowIso, source: 'inspection',
+          actor: { id: data.submittedById || data.userId, name: data.submittedByName || data.userName },
+        })
+      : null;
+    const occupied = transition?.vehicles.find(item => item.id === vehicle.id) || vehicle;
     const updatedVehicle: Vehicle = {
       ...occupied,
       lastInspectionId: inspectionId,
@@ -2970,24 +2976,69 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       odometer: data.odometer !== undefined && data.odometer !== null ? Number(data.odometer) : vehicle.odometer,
       fuelLevel: data.fuelLevel !== undefined && data.fuelLevel !== null ? Number(data.fuelLevel) : vehicle.fuelLevel,
     };
-    this.updateVehicle(updatedVehicle);
+
+    // A successful UI submission must mean the inspection, issues and checkout reached Firestore.
+    // Do this before changing the vehicle or removing the employee's draft.
+    if (db) {
+      await ensureAuth();
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'inspections', inspectionId), sanitizeForFirestore(newInspection));
+      for (const issue of newIssues) batch.set(doc(db, 'issues', issue.id), sanitizeForFirestore(issue));
+      batch.set(doc(db, 'vehicles', vehicle.id), sanitizeForFirestore(updatedVehicle), { merge: true });
+      if (transition) {
+        for (const item of transition.vehicles) {
+          if (item.id !== vehicle.id && item !== vehiclesBefore.find(before => before.id === item.id)) {
+            batch.set(doc(db, 'vehicles', item.id), sanitizeForFirestore(item), { merge: true });
+          }
+        }
+        for (const item of transition.assignments) {
+          if (item !== assignmentsBefore.find(before => before.id === item.id)) {
+            batch.set(doc(db, 'vehicleAssignments', item.id), sanitizeForFirestore(item), { merge: true });
+          }
+        }
+      }
+      await batch.commit();
+      this.confirmedInspections.set(inspectionId, newInspection);
+    }
+
+    let localCacheWarning = false;
+    const saveLocally = (action: () => void) => {
+      try { action(); }
+      catch (error) {
+        if (!db) throw error;
+        localCacheWarning = true;
+        console.warn('Inspection reached Firestore but a local update failed:', error);
+      }
+    };
+
+    // Keep a small offline cache; a failed browser write must not undo a confirmed cloud save.
+    const allInspections = [newInspection, ...this.getInspections().filter(item => item.id !== inspectionId)];
+    saveLocally(() => this.storeInspections(allInspections));
+
+    // Save Issues locally
+    if (newIssues.length > 0) {
+      const allIssues = [...newIssues, ...this.getIssues()];
+      saveLocally(() => localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(allIssues)));
+    }
+
+    for (const issue of newIssues) {
+      if (issue.equipmentId) saveLocally(() => this.updateEquipmentStatus(issue.equipmentId!, 'flagged', issue.id));
+    }
+
+    if (transition) saveLocally(() => localStorage.setItem(STORAGE_KEYS.VEHICLE_ASSIGNMENTS, JSON.stringify(transition.assignments)));
+    saveLocally(() => localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify((transition?.vehicles || vehiclesBefore).map(item =>
+      item.id === vehicle.id ? updatedVehicle : item
+    ))));
 
     if (data.taskId) {
       const task = this.getTasks().find(t => t.id === data.taskId);
       if (task && task.status !== 'completed') {
-        this.updateTask({ ...task, status: 'completed', completedAt: nowIso, completedInspectionId: inspectionId });
+        saveLocally(() => this.updateTask({ ...task, status: 'completed', completedAt: nowIso, completedInspectionId: inspectionId }));
       }
     }
 
-    // Sync Inspection to Firestore (Sanitized!)
-    if (db) {
-      setDoc(doc(db, 'inspections', inspectionId), sanitizeForFirestore(newInspection)).catch((e) =>
-        console.warn('Firestore inspection write error:', e)
-      );
-    }
-
     window.dispatchEvent(new Event('sunny_db_update'));
-    return { inspection: newInspection, newIssues };
+    return { inspection: newInspection, newIssues, localCacheWarning };
   }
 
   // Offline Inspections Support
@@ -3066,7 +3117,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     };
 
     const updated = inspections.map(i => (i.id === inspectionId ? updatedInspection : i));
-    localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(updated));
+    this.storeInspections(updated);
 
     // Sync to Firestore
     if (db) {
@@ -3188,7 +3239,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
 
     // Save new inspection locally
     const allInspections = [resubmittedInspection, ...this.getInspections()];
-    localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(allInspections));
+    this.storeInspections(allInspections);
 
     // Save new issues locally
     if (newIssues.length > 0) {
@@ -3214,7 +3265,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     const inspections = this.getInspections();
     const target = inspections.find(i => i.id === inspectionId);
     const updated = inspections.filter(i => i.id !== inspectionId);
-    localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(updated));
+    this.storeInspections(updated);
 
     // If the vehicle's lastInspectionId was this inspection, update the vehicle record
     if (target) {
@@ -3244,7 +3295,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
 
   private persistInspection(updated: Inspection): void {
     const list = this.getInspections().map(i => (i.id === updated.id ? updated : i));
-    localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(list));
+    this.storeInspections(list);
     if (db) {
       setDoc(doc(db, 'inspections', updated.id), sanitizeForFirestore(updated), { merge: true }).catch((e) =>
         console.warn('Firestore inspection write error:', e)
@@ -3347,7 +3398,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     };
 
     const allInspections = [newInspection, ...this.getInspections()];
-    localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(allInspections));
+    this.storeInspections(allInspections);
 
     // checkInVehicle updates local occupancy and closes the interval before its first await.
     void this.checkInVehicle(vehicle.id);
@@ -3646,7 +3697,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       return insp;
     });
     if (inspectionsChanged) {
-      localStorage.setItem(STORAGE_KEYS.INSPECTIONS, JSON.stringify(updatedInspections));
+      this.storeInspections(updatedInspections);
     }
 
     if (issue?.equipmentId) {
