@@ -5,17 +5,16 @@ import { QRCodeSVG } from 'qrcode.react';
 import Link from 'next/link';
 import { Download, Printer, QrCode } from 'lucide-react';
 import { Equipment } from '@/types';
-import { BASE_PATH } from '@/lib/basePath';
+import { absoluteAssetUrl } from '@/lib/basePath';
 
 export function EquipmentQRCodeDisplay({ equipment }: { equipment: Equipment }) {
   const qrRef = useRef<HTMLDivElement>(null);
-  const basePath = BASE_PATH;
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://aheiner2001.github.io';
   const token = equipment.qrCodeToken || equipment.qrCode;
   if (!token) {
     return <span className="text-[11px] text-ink-faint">No QR code assigned</span>;
   }
-  const scanUrl = `${origin}${basePath}/equipment/scan?id=${encodeURIComponent(token)}`;
+  const scanUrl = absoluteAssetUrl(origin, `/equipment/scan?id=${encodeURIComponent(token)}`);
 
   const handleDownloadPNG = () => {
     if (!qrRef.current) return;

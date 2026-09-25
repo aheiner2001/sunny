@@ -303,7 +303,7 @@ export default function VehicleDetailClient() {
     : null;
 
   return (
-    <div className="page max-w-full overflow-x-hidden">
+    <div className="page max-w-full overflow-x-clip">
       <div className="page-head">
         <div className="cluster items-start min-w-0">
           <Link

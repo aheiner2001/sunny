@@ -136,6 +136,22 @@ export function reorderDashboardLayout(
   return next;
 }
 
+/** Reorder visible slots without discarding widgets that currently have no content. */
+export function reorderVisibleDashboardWidgets(
+  layout: DashboardWidgetLayout[],
+  visibleIds: DashboardWidgetId[],
+  newVisibleOrder: DashboardWidgetId[]
+): DashboardWidgetLayout[] {
+  const current = normalizeDashboardLayout(layout);
+  const visible = new Set(visibleIds);
+  if (new Set(newVisibleOrder).size !== visible.size ||
+      newVisibleOrder.some(id => !visible.has(id))) return current;
+  let cursor = 0;
+  return current.map(item => visible.has(item.id)
+    ? { id: newVisibleOrder[cursor++], size: item.size }
+    : item);
+}
+
 export function setDashboardWidgetSize(
   layout: DashboardWidgetLayout[],
   id: DashboardWidgetId,

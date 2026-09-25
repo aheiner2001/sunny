@@ -9,6 +9,7 @@ import { QRScannerModal } from '@/components/QRScannerModal';
 import { QrCode, X } from 'lucide-react';
 import { SPARedirectHandler } from '@/components/SPARedirectHandler';
 import { PasscodeGate } from '@/components/PasscodeGate';
+import { DashboardThemeSync } from '@/components/DashboardThemeSync';
 
 export default function RootLayout({
   children,
@@ -32,6 +33,7 @@ export default function RootLayout({
           Skip to main content
         </a>
         <AuthProvider>
+          <DashboardThemeSync />
           <SPARedirectHandler />
           <PasscodeGate>
             <div className="flex h-full min-h-0">
@@ -47,7 +49,7 @@ export default function RootLayout({
                     className="fixed inset-0 bg-ink/60 backdrop-blur-sm"
                     onClick={() => setMobileMenuOpen(false)}
                   />
-                  <div className="relative bg-surface w-72 h-full shadow-lg flex flex-col justify-between z-10 animate-in slide-in-from-left duration-200">
+                  <div className="sunny-mobile-drawer relative bg-surface w-72 h-full shadow-lg flex flex-col justify-between z-10 animate-in slide-in-from-left duration-200">
                     <div className="absolute top-4 right-4">
                       <button
                         type="button"

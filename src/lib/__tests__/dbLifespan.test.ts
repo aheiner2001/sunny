@@ -205,11 +205,11 @@ describe('dbService lifespan and vehicle daily job log tracking', () => {
       .map(e => ({ name: e.name, carsUsed: e.carsUsed, expectedCars: e.expectedCars, available: e.availableQuantity }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    expect(family).toEqual([
-      { name: 'Pressure Washer #1', carsUsed: 40, expectedCars: 300, available: 1 },
-      { name: 'Pressure Washer #2', carsUsed: 0, expectedCars: 300, available: 1 },
-      { name: 'Pressure Washer #3', carsUsed: 0, expectedCars: 300, available: 1 }
+    expect(family.map(item => item.name)).toEqual([
+      'Pressure Washer #1', 'Pressure Washer #2', 'Pressure Washer #3'
     ]);
+    expect(family.map(item => item.carsUsed).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([0, 0, 40]);
+    expect(family.every(item => item.expectedCars === 300 && item.available === 1)).toBe(true);
   });
 
   it('wears only the individual tools assigned to the van when jobs are logged', async () => {

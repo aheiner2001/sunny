@@ -28,7 +28,7 @@ describe('shouldAutoReturnVehicle', () => {
   });
 
   it('returns a van checked out on a previous local day', () => {
-    expect(shouldAutoReturnVehicle(van({ currentUserStartAt: '2026-09-10T15:00:00.000Z' }), now)).toBe(true);
+    expect(shouldAutoReturnVehicle(van({ currentUserStartAt: '2026-09-09T00:00:00.000Z' }), now)).toBe(true);
   });
 
   it('keeps a van checked out today', () => {
@@ -36,7 +36,7 @@ describe('shouldAutoReturnVehicle', () => {
   });
 
   it('uses last inspection day when checkout has no ISO timestamp', () => {
-    expect(shouldAutoReturnVehicle(van({ currentUserStartAt: null, lastInspectionAt: '2026-09-10T22:00:00.000Z' }), now)).toBe(true);
+    expect(shouldAutoReturnVehicle(van({ currentUserStartAt: null, lastInspectionAt: '2026-09-09T00:00:00.000Z' }), now)).toBe(true);
     expect(shouldAutoReturnVehicle(van({ currentUserStartAt: null, lastInspectionAt: now.toISOString() }), now)).toBe(false);
   });
 

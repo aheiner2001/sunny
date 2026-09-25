@@ -110,8 +110,10 @@ export function VehicleDamagePanel({ vehicleId }: Props) {
             </button>
           )}
         </div>
+      </div>
 
-        <div className="rounded-2xl border border-line bg-[var(--surface-alt,#f4f4f5)] overflow-hidden">
+      <div className="sticky top-0 z-10 rounded-2xl border border-line bg-surface p-2 shadow-panel">
+        <div className="rounded-xl border border-line bg-[var(--surface-alt,#f4f4f5)] overflow-hidden">
           <div className="spread px-3 py-2 border-b border-line">
             <span className="text-xs font-bold text-ink">{previewLabel}</span>
             {previewLogged ? (
@@ -122,12 +124,12 @@ export function VehicleDamagePanel({ vehicleId }: Props) {
               <span className="text-[10px] font-bold uppercase tracking-wider text-ink-faint">No entry yet</span>
             ) : null}
           </div>
-          <div className="flex items-center justify-center min-h-[180px] sm:min-h-[220px] p-4 sm:p-6">
+          <div className="flex items-center justify-center p-2 sm:p-4">
             {diagramSide === 'all' ? (
               <img
                 src={OVERVIEW_IMAGE}
                 alt="Overview vehicle diagram"
-                className="max-h-52 sm:max-h-64 w-auto max-w-full object-contain drop-shadow-sm"
+                className="max-h-[min(40dvh,16rem)] w-auto max-w-full object-contain drop-shadow-sm"
               />
             ) : (
               <DamageRegionOverlay
@@ -145,30 +147,30 @@ export function VehicleDamagePanel({ vehicleId }: Props) {
             )}
           </div>
         </div>
+      </div>
 
-        <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-          {VEHICLE_SIDES.map((s) => {
-            const has = Boolean(latest[s]);
-            const active = selectedSide === s;
-            return (
-              <button
-                key={s}
-                type="button"
-                onClick={() => toggle(s)}
-                className={`px-2.5 py-1.5 rounded-full text-[11px] font-bold border transition-colors ${
-                  active
-                    ? 'bg-ink text-white border-ink'
-                    : has
-                      ? 'bg-amber-50 border-amber-300 text-amber-900'
-                      : 'bg-surface border-line text-ink-muted hover:border-ink/40'
-                }`}
-              >
-                {SIDE_LABEL[s]}
-                {has ? ' ·' : ''}
-              </button>
-            );
-          })}
-        </div>
+      <div className="flex flex-wrap justify-center gap-1.5">
+        {VEHICLE_SIDES.map((s) => {
+          const has = Boolean(latest[s]);
+          const active = selectedSide === s;
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => toggle(s)}
+              className={`px-2.5 py-1.5 rounded-full text-[11px] font-bold border transition-colors ${
+                active
+                  ? 'bg-ink text-white border-ink'
+                  : has
+                    ? 'bg-amber-50 border-amber-300 text-amber-900'
+                    : 'bg-surface border-line text-ink-muted hover:border-ink/40'
+              }`}
+            >
+              {SIDE_LABEL[s]}
+              {has ? ' ·' : ''}
+            </button>
+          );
+        })}
       </div>
 
       <div className="card card-pad stack">
