@@ -30,19 +30,11 @@ import { InspectionCalendar } from '@/components/InspectionCalendar';
 import { EmptyState } from '@/components/EmptyState';
 import { LifespanActionModal } from '@/components/LifespanActionModal';
 import { useAuth } from '@/context/AuthContext';
-import { DashboardSwapGrid } from '@/components/DashboardSwapGrid';
+import { DashboardGrid } from '@/components/DashboardGrid';
+import { defaultDashboardGrid, loadDashboardGrid, resetDashboardGrid, saveDashboardGrid, type DashboardGridState, type GridWidgetId } from '@/lib/dashboardGridLayout';
 import { loadDashboardColor } from '@/lib/dashboardAppearance';
 import {
   filterTodaysIssues,
-  loadDashboardLayout,
-  saveDashboardLayout,
-  resetDashboardLayout,
-  moveDashboardWidget,
-  reorderVisibleDashboardWidgets,
-  setDashboardWidgetSize,
-  type DashboardWidgetLayout,
-  type DashboardWidgetId,
-  type DashboardWidgetSize,
 } from '@/lib/dashboardLayout';
 
 const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
@@ -86,9 +78,10 @@ export default function DashboardPage() {
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [safetyAlertDismissed, setSafetyAlertDismissed] = useState(false);
 
-  const [dashboardLayout, setDashboardLayout] = useState<DashboardWidgetLayout[]>([]);
+  const [dashboardLayout, setDashboardLayout] = useState<DashboardGridState>(defaultDashboardGrid);
   const [customizeLayout, setCustomizeLayout] = useState(false);
   const [dashboardColor, setDashboardColor] = useState(false);
+  const [layoutSaveError, setLayoutSaveError] = useState(false);
 
   const loadData = () => {
     setVehicles(dbService.getVehicles());
@@ -100,7 +93,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadData();
-    setDashboardLayout(loadDashboardLayout(user?.id));
+    setDashboardLayout(loadDashboardGrid(user?.id || ''));
+    setLayoutSaveError(false);
     setDashboardColor(isTrueManager && loadDashboardColor(user?.id));
     window.addEventListener('sunny_db_update', loadData);
     return () => window.removeEventListener('sunny_db_update', loadData);
@@ -202,18 +196,14 @@ export default function DashboardPage() {
   ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
 
-  const persistLayout = (next: DashboardWidgetLayout[]) => {
-    setDashboardLayout(saveDashboardLayout(next, user?.id));
+  const persistLayout = (next: DashboardGridState) => {
+    setDashboardLayout(next);
+    setLayoutSaveError(!saveDashboardGrid(user?.id || '', next));
   };
 
-  const onWidgetSize = (id: DashboardWidgetId, size: DashboardWidgetSize) => {
-    persistLayout(setDashboardWidgetSize(dashboardLayout, id, size));
-  };
-
-  const widgetShell = (id: DashboardWidgetId, children: React.ReactNode) => (
+  const widgetShell = (id: GridWidgetId, children: React.ReactNode) => (
     <div key={id} data-dashboard-widget={id}>{children}</div>
   );
-
 
   return (
     <div className="page max-w-full overflow-x-clip stack gap-6">
@@ -338,8 +328,9 @@ export default function DashboardPage() {
             type="button"
             className="btn btn-secondary btn-sm"
             onClick={() => {
-              const next = resetDashboardLayout(user?.id);
+              const next = resetDashboardGrid(user?.id || '');
               setDashboardLayout(next);
+              setLayoutSaveError(!saveDashboardGrid(user?.id || '', next));
             }}
           >
             <RotateCcw className="w-3.5 h-3.5" /> Reset layout
@@ -347,17 +338,17 @@ export default function DashboardPage() {
         )}
         {customizeLayout && (
           <p className="text-[11px] text-ink-faint m-0">
-          Drag sections to reorder, or use ↑ ↓ buttons. Size presets save for your account.
+          Drag cards by their handles. Resize their edges or use width and height controls; changes save for your account.
           </p>
         )}
       </div>
-      <DashboardSwapGrid
-        layout={dashboardLayout}
+      {layoutSaveError && <p role="alert" className="text-critical text-sm">Layout could not be saved on this device. Your changes remain visible until you leave this page.</p>}
+      <DashboardGrid
+        userId={user?.id || ''}
+        state={dashboardLayout}
         colorful={dashboardColor}
         customize={customizeLayout}
-        onReorder={ids => persistLayout(reorderVisibleDashboardWidgets(dashboardLayout, ids, ids))}
-        onMove={(id, direction) => persistLayout(moveDashboardWidget(dashboardLayout, id, direction))}
-        onSize={onWidgetSize}
+        onChange={persistLayout}
       >
       {/* Equipment Due for Review Section with 2.2 Batch Actions */}
       {dueForReviewEquipment.length > 0 &&
@@ -475,9 +466,7 @@ export default function DashboardPage() {
 
 
       {widgetShell(
-        'stats',
-        <div className="overflow-x-auto">
-        <div className="grid-auto lg:grid-cols-5 lg:min-w-[60rem]" style={{ '--min': '15rem' } as React.CSSProperties}>
+        'total_vehicles',
         <div className="card card-pad flex flex-col">
           <div className="spread items-start">
             <span className="icon-tile icon-tile-lg" data-status="idle">
@@ -495,7 +484,10 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+      )}
 
+      {widgetShell(
+        'inspections_today',
         <div className={`card card-pad flex flex-col ${todayInspectionsCount === 0 ? 'opacity-60' : ''}`}>
           <div className="spread items-start">
             <span className="icon-tile icon-tile-lg" data-status={todayInspectionsCount === 0 ? 'idle' : 'ok'}>
@@ -513,7 +505,10 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+      )}
 
+      {widgetShell(
+        'open_issue_count',
         <div
           className={`card card-pad flex flex-col ${openIssuesCount === 0 ? 'opacity-60' : ''}`}
           data-status={openIssuesCount > 0 ? 'flagged' : undefined}
@@ -534,7 +529,10 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+      )}
 
+      {widgetShell(
+        'vehicles_in_use_count',
         <div className={`card card-pad flex flex-col ${vehiclesInUse.length === 0 ? 'opacity-60' : ''}`}>
           <div className="spread items-start">
             <span className="icon-tile icon-tile-lg" data-status={vehiclesInUse.length === 0 ? 'idle' : 'info'}>
@@ -552,7 +550,10 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+      )}
 
+      {widgetShell(
+        'equipment_due_count',
         <Link
           href="/equipment?lifespan=due"
           className={`card card-pad flex flex-col ${dueForReviewEquipment.length === 0 ? 'opacity-60' : ''}`}
@@ -574,8 +575,6 @@ export default function DashboardPage() {
             </span>
           </div>
         </Link>
-      </div>
-      </div>
       )}
 
       {widgetShell(
@@ -1007,7 +1006,7 @@ export default function DashboardPage() {
       </div>
       )}
 
-      </DashboardSwapGrid>
+      </DashboardGrid>
 
       {/* Lifespan Action Modal */}
       <LifespanActionModal

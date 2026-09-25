@@ -1,0 +1,124 @@
+import { dashboardLayoutStorageKey, normalizeDashboardLayout, type DashboardWidgetLayout } from './dashboardLayout';
+
+export const GRID_COLUMNS = { desktop: 3, tablet: 2, phone: 1 } as const;
+export type GridBreakpoint = keyof typeof GRID_COLUMNS;
+export const GRID_WIDGET_META = {
+  total_vehicles: { label: 'Total vehicles', minH: 2, defaultH: 3 },
+  inspections_today: { label: 'Inspections today', minH: 2, defaultH: 3 },
+  open_issue_count: { label: 'Open issues', minH: 2, defaultH: 3 },
+  vehicles_in_use_count: { label: 'Vehicles in use count', minH: 2, defaultH: 3 },
+  equipment_due_count: { label: 'Equipment due', minH: 2, defaultH: 3 },
+  today_issues: { label: "Today's issues", minH: 3, defaultH: 6 },
+  open_issues: { label: 'Open issues list', minH: 3, defaultH: 6 },
+  in_use: { label: 'Vehicles in use', minH: 4, defaultH: 8 },
+  activity: { label: "Today's activity", minH: 3, defaultH: 6 },
+  calendar: { label: 'Calendar', minH: 5, defaultH: 7 },
+  lifespan: { label: 'Equipment due for review', minH: 3, defaultH: 6 },
+  safety: { label: 'Van needs', minH: 3, defaultH: 6 },
+} as const;
+export type GridWidgetId = keyof typeof GRID_WIDGET_META;
+export type GridWidgetPosition = { i: GridWidgetId; x: number; y: number; w: number; h: number };
+export type DashboardGridState = { version: 2; layouts: Record<GridBreakpoint, GridWidgetPosition[]> };
+export const DASHBOARD_GRID_KEY_PREFIX = 'sunny_dashboard_grid_v2_';
+const METRICS: GridWidgetId[] = ['total_vehicles','inspections_today','open_issue_count','vehicles_in_use_count','equipment_due_count'];
+const ORDER = Object.keys(GRID_WIDGET_META) as GridWidgetId[];
+const legacyToIds = (id: string): GridWidgetId[] => id === 'stats' ? METRICS : id in GRID_WIDGET_META ? [id as GridWidgetId] : [];
+const intersects = (a: GridWidgetPosition,b: GridWidgetPosition) => a.x < b.x+b.w && b.x < a.x+a.w && a.y < b.y+b.h && b.y < a.y+a.h;
+function pack(list: GridWidgetPosition[], columns: number): GridWidgetPosition[] {
+  const placed: GridWidgetPosition[]=[];
+  for (const item of list) {
+    let next={...item};
+    while (placed.some(other=>intersects(other,next))) {
+      next.y++;
+      if (next.y > 10000) break;
+    }
+    placed.push(next);
+  }
+  return placed;
+}
+function validNumber(value: unknown, fallback: number) {
+  return typeof value==='number' && Number.isFinite(value) ? Math.floor(value) : fallback;
+}
+export function normalizeGridLayout(value: unknown, breakpoint: GridBreakpoint): GridWidgetPosition[] {
+  const columns=GRID_COLUMNS[breakpoint];
+  const seen=new Set<string>();
+  const entries: GridWidgetPosition[]=[];
+  if (Array.isArray(value)) for (const raw of value) {
+    if (!raw || typeof raw.i!=='string' || !(raw.i in GRID_WIDGET_META) || seen.has(raw.i)) continue;
+    const i=raw.i as GridWidgetId, meta=GRID_WIDGET_META[i];
+    const w=Math.max(1,Math.min(columns,validNumber(raw.w,1)));
+    const h=Math.max(meta.minH,Math.min(30,validNumber(raw.h,meta.defaultH)));
+    entries.push({i,x:Math.max(0,Math.min(columns-w,validNumber(raw.x,0))),y:Math.max(0,validNumber(raw.y,0)),w,h});
+    seen.add(i);
+  }
+  let lastY=entries.reduce((max,item)=>Math.max(max,item.y+item.h),0);
+  for (const i of ORDER) if (!seen.has(i)) {
+    entries.push({i,x:0,y:lastY,w:1,h:GRID_WIDGET_META[i].defaultH});
+    lastY+=GRID_WIDGET_META[i].defaultH;
+  }
+  return pack(entries,columns);
+}
+export function migrateDashboardLayout(legacy: unknown): DashboardGridState {
+  const old=normalizeDashboardLayout(legacy as DashboardWidgetLayout[]);
+  const ordered=old.flatMap(entry=>legacyToIds(entry.id).map(i=>({i,wide:entry.size==='wide' && entry.id!=='stats'})));
+  const layouts={} as DashboardGridState['layouts'];
+  for (const bp of Object.keys(GRID_COLUMNS) as GridBreakpoint[]) {
+    const columns=GRID_COLUMNS[bp];
+    let x=0,y=0,rowH=0;
+    const entries=ordered.map(({i,wide})=>{
+      const w=wide?columns:1;
+      if (x+w>columns) {y+=rowH;x=0;rowH=0;}
+      const entry={i,x,y,w,h:GRID_WIDGET_META[i].defaultH};
+      x+=w;rowH=Math.max(rowH,entry.h);
+      if (x===columns) {x=0;y+=rowH;rowH=0;}
+      return entry;
+    });
+    layouts[bp]=normalizeGridLayout(entries,bp);
+  }
+  return {version:2,layouts};
+}
+export function defaultDashboardGrid(): DashboardGridState {
+  return migrateDashboardLayout(null);
+}
+function normalizedState(raw: unknown): DashboardGridState | null {
+  if (!raw || typeof raw!=='object' || (raw as any).version!==2 || !(raw as any).layouts || typeof (raw as any).layouts!=='object') return null;
+  const layouts=(raw as any).layouts;
+  return {version:2,layouts:{desktop:normalizeGridLayout(layouts.desktop,'desktop'),tablet:normalizeGridLayout(layouts.tablet,'tablet'),phone:normalizeGridLayout(layouts.phone,'phone')}};
+}
+export function loadDashboardGrid(userId: string): DashboardGridState {
+  if (!userId || typeof localStorage==='undefined') return defaultDashboardGrid();
+  try {
+    const saved=localStorage.getItem(DASHBOARD_GRID_KEY_PREFIX+userId);
+    if (saved) return normalizedState(JSON.parse(saved)) ?? defaultDashboardGrid();
+    const legacy=localStorage.getItem(dashboardLayoutStorageKey(userId));
+    return legacy ? migrateDashboardLayout(JSON.parse(legacy)) : defaultDashboardGrid();
+  } catch {return defaultDashboardGrid();}
+}
+export function saveDashboardGrid(userId: string,state: DashboardGridState): boolean {
+  if (!userId || typeof localStorage==='undefined') return false;
+  try {
+    const normalized=normalizedState(state);
+    if (!normalized) return false;
+    localStorage.setItem(DASHBOARD_GRID_KEY_PREFIX+userId,JSON.stringify(normalized));
+    return true;
+  } catch {return false;}
+}
+export function resetDashboardGrid(userId: string): DashboardGridState {
+  const state=defaultDashboardGrid();
+  saveDashboardGrid(userId,state);
+  return state;
+}
+export function mergeVisibleGridLayout(state: DashboardGridState,bp: GridBreakpoint,visible: GridWidgetPosition[]): DashboardGridState {
+  const visibleIds=new Set(visible.map(entry=>entry.i));
+  const hidden=state.layouts[bp].filter(entry=>!visibleIds.has(entry.i));
+  const merged=normalizeGridLayout([...hidden,...visible],bp);
+  return {version:2,layouts:{...state.layouts,[bp]:merged}};
+}
+export function moveGridWidget(state: DashboardGridState,bp: GridBreakpoint,id: GridWidgetId,field: 'x'|'y',value: number): DashboardGridState {
+  const current=state.layouts[bp].find(item=>item.i===id);
+  if (!current) return state;
+  const destination={...current,[field]:value};
+  const occupant=state.layouts[bp].find(item=>item.i!==id && intersects(item,destination));
+  const next=state.layouts[bp].map(item=>item.i===id?destination:item.i===occupant?.i?{...item,x:current.x,y:current.y}:item);
+  return {version:2,layouts:{...state.layouts,[bp]:normalizeGridLayout(next,bp)}};
+}

@@ -1,5 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Figtree:wght@500..800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
+@import "react-grid-layout/css/styles.css";
+@import "react-resizable/css/styles.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -673,9 +676,18 @@
     to { background-position: -200% 0; }
   }
 }
-/* Let a manager's palette show through the existing dashboard card surfaces. */
-.dashboard-colorful > [data-swapy-no-drag] > .card,
-.dashboard-colorful > [data-swapy-no-drag] > .grid-auto > .card {
-  background: transparent;
-  box-shadow: none;
-}
+/* Personal dashboard color mode uses its own tokens to preserve fleet status semantics. */
+.dashboard-grid-colorful { background: #faf7eb; padding: 1rem; border-radius: 1rem; color: #0f1724; }
+.dashboard-grid-colorful .dashboard-grid-card { color: #0f1724; border-color: #b7c8e1; }
+.dashboard-grid-colorful .dashboard-card-body > .card { background: transparent; box-shadow: none; border-color: transparent; }
+.dashboard-grid .dashboard-grid-card { overflow: hidden; }
+.dashboard-grid .dashboard-card-header { flex: none; }
+.dashboard-grid .dashboard-card-body { scrollbar-width: thin; }
+.dashboard-grid .react-grid-item.react-grid-placeholder { background: #cdf4fe; border: 2px dashed #037996; opacity: .65; border-radius: 1rem; }
+.dashboard-grid .react-grid-item.react-draggable-dragging { z-index: 10; box-shadow: 0 14px 35px rgba(15,23,36,.24); }
+.dashboard-grid .react-grid-item > .react-resizable-handle { width: 22px; height: 22px; z-index: 2; opacity: .7; }
+.dashboard-grid .react-grid-item > .react-resizable-handle-e { right: 0; top: 25%; height: 50%; width: 14px; cursor: ew-resize; background: #037996; opacity: .65; border-radius: 4px; }
+.dashboard-grid .react-grid-item > .react-resizable-handle-s { left: 25%; bottom: 0; width: 50%; height: 14px; cursor: ns-resize; background: #037996; opacity: .65; border-radius: 4px; }
+.dashboard-grid .react-grid-item > .react-resizable-handle-se { background: #037996; border-radius: 4px; opacity: .85; }
+.dashboard-grid .dashboard-drag-handle:focus-visible, .dashboard-grid .dashboard-card-controls :focus-visible { outline: 2px solid #037996; outline-offset: 2px; }
+.dashboard-grid-colorful .dashboard-card-body .stat, .dashboard-grid-colorful .dashboard-card-body .card-title { color: #0f1724; }
