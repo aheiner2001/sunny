@@ -22,8 +22,9 @@ describe('versioned dashboard layouts', () => {
     const state=migrateDashboardLayout(old);
     expect(state.layouts.desktop.slice(0,5).map(w=>w.i)).toEqual(['total_vehicles','inspections_today','open_issue_count','vehicles_in_use_count','equipment_due_count']);
     for (const bp of ['desktop','tablet','phone'] as const) {
-      expect(state.layouts[bp].length).toBe(12);
-      expect(new Set(state.layouts[bp].map(w=>w.i)).size).toBe(12);
+      expect(state.layouts[bp].length).toBe(13);
+      expect(new Set(state.layouts[bp].map(w=>w.i)).size).toBe(13);
+      expect(state.layouts[bp].map(w=>w.i)).toContain('recent_inspections');
       expect(state.layouts[bp].every(w=>Number.isInteger(w.x)&&Number.isInteger(w.y)&&w.x>=0&&w.y>=0&&w.w>=1&&w.x+w.w<=GRID_COLUMNS[bp])).toBe(true);
       noOverlaps(state.layouts[bp]);
     }
@@ -36,7 +37,7 @@ describe('versioned dashboard layouts', () => {
       {i:'activity',x:NaN,y:Infinity,w:2,h:3},
       {i:'unknown',x:0,y:0,w:1,h:3}
     ], 'tablet');
-    expect(normalized.length).toBe(12);
+    expect(normalized.length).toBe(13);
     expect(normalized.find(w=>w.i==='today_issues')?.w).toBe(2);
     expect(normalized.find(w=>w.i==='calendar')?.h).toBeGreaterThanOrEqual(5);
     noOverlaps(normalized);
@@ -61,6 +62,16 @@ describe('versioned dashboard layouts', () => {
     const next=mergeVisibleGridLayout(state,'desktop',state.layouts.desktop.filter(w=>w.i!=='lifespan').map(w=>w.i==='activity'?{...w,x:0,y:99}:w));
     expect(next.layouts.desktop.find(w=>w.i==='lifespan')).toEqual(hidden);
     expect(next.layouts.tablet).toEqual(state.layouts.tablet);
+  });
+  it('keeps a visible dragged card in place when it lands on a hidden card', () => {
+    const state=defaultDashboardGrid();
+    const hidden=state.layouts.desktop.find(w=>w.i==='lifespan')!;
+    const visible=state.layouts.desktop.filter(w=>w.i!=='lifespan');
+    const target=visible.find(w=>w.i==='total_vehicles')!;
+    const next=mergeVisibleGridLayout(state,'desktop',visible.map(w=>w.i===target.i?{...w,x:hidden.x,y:hidden.y,w:hidden.w,h:hidden.h}:w));
+    expect(next.layouts.desktop.find(w=>w.i===target.i)).toMatchObject({x:hidden.x,y:hidden.y});
+    expect(next.layouts.desktop.find(w=>w.i==='lifespan')).toBeDefined();
+    noOverlaps(next.layouts.desktop);
   });
   it('falls back for malformed or unavailable storage and reports failed writes', () => {
     store.set('sunny_dashboard_grid_v2_a','{broken');

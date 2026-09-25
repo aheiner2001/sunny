@@ -829,9 +829,7 @@ export default function DashboardPage() {
 
       {widgetShell(
         'in_use',
-      <div className="overflow-x-auto">
-      <div className="grid grid-cols-1 lg:grid-cols-3 lg:min-w-[46rem] gap-[var(--gutter)]">
-        <div className="card lg:col-span-2">
+        <div className="card min-w-0">
           <div className="card-head">
             <h2 className="card-title">Vehicles in use</h2>
             <Link href="/vehicles" className="link-action">
@@ -943,7 +941,10 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Recent Inspections Card */}
+      )}
+
+      {widgetShell(
+        'recent_inspections',
         <div className="card flex flex-col">
           <div className="card-head">
             <h2 className="card-title">Recent inspections</h2>
@@ -1002,8 +1003,6 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
-      </div>
-      </div>
       )}
 
       </DashboardGrid>

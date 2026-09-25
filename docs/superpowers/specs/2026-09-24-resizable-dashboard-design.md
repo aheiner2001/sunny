@@ -18,12 +18,12 @@ Scope: deliver to the `preview` branch and Vercel preview. Production main and i
 
 Use `react-grid-layout` (the inspected current package is 2.2.4 and accepts React 18) for layout, dragging, collision handling, and resizing. Remove Swapy from the dashboard and remove the dependency if no other source file uses it. Keep layout data in a pure TypeScript module and React interaction code in a focused dashboard grid component. The dashboard page continues to own fleet data and existing action callbacks.
 
-Render a stable widget registry with individual IDs for total vehicles, inspections today, open issue count, vehicles in use count, and equipment due count. Keep the existing activity, calendar, issue lists, van needs, equipment review, and vehicles in use sections. Urgent safety notices and pending deletion approvals remain above the grid.
+Render a stable widget registry with individual IDs for total vehicles, inspections today, open issue count, vehicles in use count, and equipment due count. Keep the existing activity, calendar, issue lists, van needs, equipment review, vehicles in use, and recent inspections sections as separate cards. Urgent safety notices and pending deletion approvals remain above the grid.
 
 ## Interaction
 
 - A visible header grip has a generous pointer and touch target and a descriptive accessible label. Drag remains enabled in normal viewing mode.
-- Customize layout shows right-edge and bottom/corner resize affordances. Width snaps to available whole columns; height snaps to grid rows. The existing reset control remains available.
+- Customize layout shows right-edge and bottom/corner resize affordances with 44px touch targets. Width snaps to available whole columns; height snaps to grid rows. The existing reset control remains available.
 - Buttons, links, inputs, tables, and scrollable content never start dragging. Keyboard move and size controls remain available as alternatives.
 - Show a destination outline while dragging or resizing. Resolve collisions through the grid library so cards never overlap after a completed operation.
 - Minimum dimensions keep titles and controls reachable. Card bodies scroll when their content exceeds the selected height. Metric cards adapt text and spacing to their width instead of enforcing a large horizontal minimum width.
@@ -37,7 +37,7 @@ On first load, read the previous order and size preferences without modifying th
 
 Validate saved data: reject unknown IDs, duplicate IDs, non-finite coordinates, negative positions, and invalid spans. Add newly introduced widgets once using defaults. Clamp sizes to the current column count and widget minimums. Corrupt or inaccessible storage falls back to a usable default layout. If a layout cannot be saved, retain the in-memory arrangement and show a concise save error rather than implying persistence succeeded.
 
-Conditional widgets retain saved placements when temporarily hidden. When they become visible again, reconcile collisions without discarding other widgets. Reset clears only the new layout for the current manager and leaves personal color preferences intact.
+Conditional widgets retain saved placements when temporarily hidden. When they become visible again, reconcile collisions without discarding other widgets. A visible card dropped on a hidden card’s saved position keeps its drop position; move the hidden card to the next free space. Reset clears only the new layout for the current manager and leaves personal color preferences intact.
 
 ## Appearance
 

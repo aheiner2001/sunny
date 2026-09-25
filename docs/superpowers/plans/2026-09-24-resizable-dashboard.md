@@ -47,7 +47,7 @@
 type GridBreakpoint = 'desktop' | 'tablet' | 'phone';
 type GridWidgetId = 'total_vehicles' | 'inspections_today' | 'open_issue_count'
   | 'vehicles_in_use_count' | 'equipment_due_count' | 'today_issues'
-  | 'open_issues' | 'in_use' | 'activity' | 'calendar' | 'lifespan' | 'safety';
+  | 'open_issues' | 'in_use' | 'recent_inspections' | 'activity' | 'calendar' | 'lifespan' | 'safety';
 type GridWidgetPosition = { i: GridWidgetId; x: number; y: number; w: number; h: number };
 type DashboardGridState = { version: 2; layouts: Record<GridBreakpoint, GridWidgetPosition[]> };
 // Export from dashboardGridLayout.ts:
@@ -64,7 +64,7 @@ type DashboardGridState = { version: 2; layouts: Record<GridBreakpoint, GridWidg
 - [ ] Write failing tests using legacy defaults: expand `stats` into five unique metric IDs, preserve all other IDs and order, map legacy wide to three desktop columns, and leave the old storage key unchanged. Assert every card fits its breakpoint, cards have finite integer positions, and no rectangles overlap.
 - [ ] Add tests for a duplicate/unknown ID, NaN coordinates, missing layouts, malformed JSON, unavailable localStorage, isolation between managers, preservation of other breakpoints, and a temporarily hidden lifespan widget retaining its saved position.
 - [ ] Run `npx vitest run src/lib/__tests__/dashboardGridLayout.test.ts` and confirm the missing behavior fails.
-- [ ] Implement defaults with metric height 3 rows/minimum 2, list sections height 6/minimum 3, calendar height 7/minimum 5, and vehicles in use height 8/minimum 4. Normalize integer coordinates; clamp widths to the breakpoint and heights to 2–30 rows with widget minimums. Place missing or colliding cards at the next free row using rectangle intersection, retaining valid non-overlapping positions. Keep hidden entries in saved state.
+- [ ] Implement defaults with metric height 3 rows/minimum 2, list sections height 6/minimum 3, calendar height 7/minimum 5, and vehicles in use height 8/minimum 4. Normalize integer coordinates; clamp widths to the breakpoint and heights to 2–30 rows with widget minimums. Place missing or colliding cards at the next free row using rectangle intersection, retaining valid non-overlapping positions. Keep hidden entries in saved state; put visible cards first when reconciling collisions so hidden cards never displace a completed drag.
 - [ ] Use `sunny_dashboard_grid_v2_<userId>` as the new key. Read legacy `sunny_dashboard_layout_<userId>` only if no valid version-2 state exists. Catch read errors and return defaults; catch write errors and return false. Reset the new key to defaults so it does not remigrate the old order on reload.
 - [ ] Run the focused tests and commit the data module and tests.
 
@@ -85,7 +85,7 @@ type DashboardGridProps = {
 
 - [ ] Install `react-grid-layout@2.2.4` with a lockfile. Inspect its shipped types and official v2 documentation before connecting callbacks: https://github.com/react-grid-layout/react-grid-layout. Use React-controlled layout state and `useContainerWidth` to wait for a measured container before rendering the interactive grid.
 - [ ] Configure desktop at available width 1000px or more, tablet at 640–999px, phone below 640px; choose `GRID_COLUMNS[breakpoint]`. Use 56px row height and 16px gaps. Supply each visible widget's saved rectangle and widget minimum height; allow one through the available number of columns.
-- [ ] Always enable dragging from `.dashboard-drag-handle`, with a minimum 44px touch target. Cancel dragging on links, buttons outside the handle, inputs, selects, textareas, and card content. Enable right, bottom, and bottom-right resize handles only in Customize mode. Use the library's collision handling and a visible destination outline.
+- [ ] Always enable dragging from `.dashboard-drag-handle`, with a minimum 44px touch target. Cancel dragging on links, buttons outside the handle, inputs, selects, textareas, and card content. Enable right, bottom, and bottom-right resize handles with 44px hit areas only in Customize mode. Use the library's collision handling and a visible destination outline.
 - [ ] Update the active in-memory layout during movement as required by the library; persist via `onChange` only when a drag or resize finishes. Merge visible positions with saved hidden widgets; reconcile a returning widget without deleting others. Do not remount the grid on every order change or content refresh. Key its account lifecycle by userId so changing accounts cannot write the old manager's state into the new account.
 - [ ] Add keyboard alternatives in Customize mode: move controls and numeric width/height controls bounded by the same grid rules. Keep a fixed card header and an independently scrollable content body. Preserve semantic colors and focus indicators.
 - [ ] Verify component updates preserve all cards through a mocked live-data rerender and hide/show of lifespan content. Test movement/resizing of visible rectangles leaves other breakpoint arrays unchanged. Run the focused layout tests and Next build, then commit the component.
@@ -93,7 +93,7 @@ type DashboardGridProps = {
 ## Task 3: Dashboard integration and preview verification
 
 - [ ] Replace the page's Swapy layout state with `DashboardGridState`, loaded for the current manager. Save complete layout state through the new helper; show an inline save error when it returns false, and keep the in-memory arrangement. Retain the existing colorful preference load and Settings switch.
-- [ ] Extract the five metric JSX bodies from the grouped `stats` section into the five new IDs. Preserve their counts, links, status indicators, and empty states. Keep other sections and callbacks intact. Register widgets as data passed to `DashboardGrid`; keep safety banners, deletion approvals, and modal overlays outside the grid.
+- [ ] Extract the five metric JSX bodies from the grouped `stats` section into the five new IDs. Preserve their counts, links, status indicators, and empty states. Split Recent inspections from Vehicles in use to remove the forced 46rem grouped minimum width; keep other sections and callbacks intact. Register widgets as data passed to `DashboardGrid`; keep safety banners, deletion approvals, and modal overlays outside the grid.
 - [ ] Remove the forced 60rem metric strip and legacy size dropdown. Let each metric occupy its own rectangle. Retain table horizontal scrolling for data that cannot fit its card; apply vertical content scrolling according to the chosen card height. Keep Reset layout and Customize controls above the grid.
 - [ ] Add the five exact palette ramps to Tailwind. Apply the spec's ivory backdrop, pastel card surfaces, dark blue typography, and blue focus accents only inside personal colorful mode. Verify text contrast, visible focus, and that disabling the setting restores the standard dashboard. Keep status badge colors semantic.
 - [ ] Search for Swapy imports. Remove `DashboardSwapGrid.tsx` and uninstall `swapy` only when the new component is the sole dashboard implementation. Keep the legacy persistence module for migration.

@@ -11,6 +11,7 @@ export const GRID_WIDGET_META = {
   today_issues: { label: "Today's issues", minH: 3, defaultH: 6 },
   open_issues: { label: 'Open issues list', minH: 3, defaultH: 6 },
   in_use: { label: 'Vehicles in use', minH: 4, defaultH: 8 },
+  recent_inspections: { label: 'Recent inspections', minH: 3, defaultH: 6 },
   activity: { label: "Today's activity", minH: 3, defaultH: 6 },
   calendar: { label: 'Calendar', minH: 5, defaultH: 7 },
   lifespan: { label: 'Equipment due for review', minH: 3, defaultH: 6 },
@@ -22,7 +23,7 @@ export type DashboardGridState = { version: 2; layouts: Record<GridBreakpoint, G
 export const DASHBOARD_GRID_KEY_PREFIX = 'sunny_dashboard_grid_v2_';
 const METRICS: GridWidgetId[] = ['total_vehicles','inspections_today','open_issue_count','vehicles_in_use_count','equipment_due_count'];
 const ORDER = Object.keys(GRID_WIDGET_META) as GridWidgetId[];
-const legacyToIds = (id: string): GridWidgetId[] => id === 'stats' ? METRICS : id in GRID_WIDGET_META ? [id as GridWidgetId] : [];
+const legacyToIds = (id: string): GridWidgetId[] => id === 'stats' ? METRICS : id === 'in_use' ? ['in_use','recent_inspections'] : id in GRID_WIDGET_META ? [id as GridWidgetId] : [];
 const intersects = (a: GridWidgetPosition,b: GridWidgetPosition) => a.x < b.x+b.w && b.x < a.x+a.w && a.y < b.y+b.h && b.y < a.y+a.h;
 function pack(list: GridWidgetPosition[], columns: number): GridWidgetPosition[] {
   const placed: GridWidgetPosition[]=[];
@@ -111,7 +112,7 @@ export function resetDashboardGrid(userId: string): DashboardGridState {
 export function mergeVisibleGridLayout(state: DashboardGridState,bp: GridBreakpoint,visible: GridWidgetPosition[]): DashboardGridState {
   const visibleIds=new Set(visible.map(entry=>entry.i));
   const hidden=state.layouts[bp].filter(entry=>!visibleIds.has(entry.i));
-  const merged=normalizeGridLayout([...hidden,...visible],bp);
+  const merged=normalizeGridLayout([...visible,...hidden],bp);
   return {version:2,layouts:{...state.layouts,[bp]:merged}};
 }
 export function moveGridWidget(state: DashboardGridState,bp: GridBreakpoint,id: GridWidgetId,field: 'x'|'y',value: number): DashboardGridState {

@@ -8,7 +8,7 @@ import { GRID_COLUMNS, GRID_WIDGET_META, mergeVisibleGridLayout, moveGridWidget,
 const CARD_COLORS: Record<GridWidgetId, string> = {
   total_vehicles: 'bg-sky-surge-100', inspections_today: 'bg-ivory-mist-100', open_issue_count: 'bg-light-coral-100',
   vehicles_in_use_count: 'bg-charcoal-blue-100', equipment_due_count: 'bg-prussian-blue-100',
-  today_issues: 'bg-ivory-mist-100', open_issues: 'bg-light-coral-100', in_use: 'bg-charcoal-blue-100',
+  today_issues: 'bg-ivory-mist-100', open_issues: 'bg-light-coral-100', in_use: 'bg-charcoal-blue-100', recent_inspections: 'bg-prussian-blue-100',
   activity: 'bg-sky-surge-100', calendar: 'bg-prussian-blue-100', lifespan: 'bg-ivory-mist-100', safety: 'bg-light-coral-100',
 };
 
