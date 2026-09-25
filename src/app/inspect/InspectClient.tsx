@@ -63,6 +63,7 @@ export default function InspectClient() {
   const [collectFuelLevel, setCollectFuelLevel] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedInspection, setSubmittedInspection] = useState<any | null>(null);
+  const [draftSaveError, setDraftSaveError] = useState(false);
   const [tasks, setTasks] = useState<FleetTask[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState('');
   const [managerSubjectId, setManagerSubjectId] = useState('');
@@ -262,7 +263,7 @@ export default function InspectClient() {
 
   // Auto-save every 30 seconds
   useEffect(() => {
-    if (!vehicleId) return;
+    if (!vehicleId || submittedInspection) return;
 
     const interval = setInterval(() => {
       const draftKey = `sunny_inspection_draft_${vehicleId}`;
@@ -276,14 +277,20 @@ export default function InspectClient() {
         signatureBase64,
         lastSaved: new Date().toISOString()
       };
-      localStorage.setItem(draftKey, JSON.stringify(draft));
-      setIsSaved(true);
-      setLastSaveTime(new Date());
-      setTimeout(() => setIsSaved(false), 2000);
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(draft));
+        setDraftSaveError(false);
+        setIsSaved(true);
+        setLastSaveTime(new Date());
+        setTimeout(() => setIsSaved(false), 2000);
+      } catch {
+        setIsSaved(false);
+        setDraftSaveError(true);
+      }
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [vehicleId, responses, flagIssues, generalNotes, generalPhotos, odometer, fuelLevel, signatureBase64]);
+  }, [vehicleId, responses, flagIssues, generalNotes, generalPhotos, odometer, fuelLevel, signatureBase64, submittedInspection]);
 
   if (isLoading || (vehicle && occupancyKind(vehicle, user?.id) === 'pending')) {
     return (
@@ -612,7 +619,7 @@ export default function InspectClient() {
         const draftKey = `sunny_inspection_draft_${vehicleId}`;
         localStorage.removeItem(draftKey);
       } else {
-        const result = dbService.submitInspection(payload);
+        const result = await dbService.submitInspection(payload);
 
         setSubmittedInspection(result);
         
@@ -621,7 +628,12 @@ export default function InspectClient() {
         localStorage.removeItem(draftKey);
       }
     } catch (err: any) {
-      alert(err.message || 'Error submitting inspection');
+      const message = err?.name === 'QuotaExceededError'
+        ? 'This phone is out of browser storage. Keep this page open; your draft may not be saved. Try a different browser or device and tell your manager.'
+        : err?.code === 'resource-exhausted'
+          ? 'Firebase could not accept this inspection because its quota was reached. Keep this page open and tell your manager; the inspection was not submitted.'
+          : err?.message || 'Error submitting inspection';
+      alert(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -682,6 +694,11 @@ export default function InspectClient() {
           <p className="text-xs text-ink-muted mb-6">
             Permanent record logged on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.
           </p>
+          {submittedInspection.localCacheWarning && (
+            <p role="status" className="mb-6 rounded-lg bg-amber-50 p-3 text-left text-sm text-amber-900">
+              This inspection was saved to Firebase, but this browser could not update its local copy. Check the vehicle from another device before doing more work on this phone.
+            </p>
+          )}
 
           <div className="card card-pad mb-6 text-left text-xs space-y-2 bg-[var(--surface)]">
             <div className="flex justify-between">
@@ -807,6 +824,11 @@ export default function InspectClient() {
       )}
 
       {/* Auto-save Indicator */}
+      {draftSaveError && (
+        <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          This phone could not save your draft. Keep this page open until you submit; do not clear browser data. Your answers will not be available if this tab closes.
+        </div>
+      )}
       {isSaved && lastSaveTime && (
         <div className="text-xs text-emerald-600 flex items-center gap-1 px-3 py-2 bg-emerald-50 rounded-lg border border-emerald-200">
           <CheckCheck className="w-3.5 h-3.5" />
