@@ -713,10 +713,11 @@
 .dashboard-grid-colorful .dashboard-card-custom { background: var(--dashboard-card-background); color: var(--dashboard-card-foreground); }
 .sunny-friendly-theme .dashboard-grid-colorful .dashboard-card-custom :is(.text-ink,.text-ink-muted,.text-ink-faint,.card-title,.stat-label,.stat-value) { color: var(--dashboard-card-foreground); }
 .dashboard-grid-colorful .dashboard-card-custom .dashboard-drag-handle { color: var(--dashboard-card-foreground); }
-.dashboard-grid-colorful .dashboard-card-body > .card { background: transparent; box-shadow: none; border-color: transparent; }
+.dashboard-grid-colorful .dashboard-card-body > div > .card { background: transparent; box-shadow: none; border-color: transparent; }
 .dashboard-grid .dashboard-grid-card { overflow: hidden; }
 .dashboard-grid .dashboard-card-header { flex: none; }
-.dashboard-grid .dashboard-card-body { scrollbar-width: thin; }
+.dashboard-grid .dashboard-card-body { overflow: clip; scrollbar-width: thin; }
+.dashboard-grid .dashboard-card-body.dashboard-card-scroll-enabled { overflow: auto; overscroll-behavior: auto; }
 .dashboard-grid .react-grid-item.react-grid-placeholder { background: #cdf4fe; border: 2px dashed #037996; opacity: .65; border-radius: 1rem; }
 .dashboard-grid .react-grid-item.react-draggable-dragging { z-index: 10; box-shadow: 0 14px 35px rgba(15,23,36,.24); }
 /* Forty-four pixel hit areas make resize edges usable on touch screens. */

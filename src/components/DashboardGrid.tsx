@@ -23,6 +23,43 @@ type Props = {
   canEditColors: boolean;
 };
 
+function DashboardCardContent({ children, label, header }: { children: React.ReactNode; label: string; header: React.ReactNode }) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [hasOverflow, setHasOverflow] = useState(false);
+  const [scrollCard, setScrollCard] = useState(false);
+
+  useEffect(() => {
+    const body = bodyRef.current;
+    const content = contentRef.current;
+    if (!body || !content) return;
+    const measure = () => {
+      const overflowing = body.scrollHeight > body.clientHeight + 2;
+      setHasOverflow(overflowing);
+      if (!overflowing) setScrollCard(false);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(body);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [children]);
+
+  return <>
+    <header className="dashboard-card-header flex flex-wrap items-center justify-between gap-2 px-2 py-1">
+      {header}
+      {hasOverflow && <button type="button" className="dashboard-card-scroll-toggle shrink-0 rounded-lg px-2 text-xs underline underline-offset-2" aria-label={`${scrollCard ? 'Scroll page over' : 'Scroll inside'} ${label}`} aria-pressed={scrollCard} onClick={() => {
+        setScrollCard(value => !value);
+        if (!scrollCard) requestAnimationFrame(() => bodyRef.current?.focus());
+      }}>{scrollCard ? 'Scroll page' : 'Scroll card'}</button>}
+    </header>
+    <div ref={bodyRef} className={`dashboard-card-body min-h-0 min-w-0 flex-1 ${scrollCard ? 'dashboard-card-scroll-enabled' : ''}`} tabIndex={scrollCard ? 0 : undefined} aria-label={scrollCard ? `${label} content` : undefined}>
+      <div ref={contentRef}>{children}</div>
+    </div>
+  </>;
+}
+
 export function DashboardGrid({ children, userId, state, colorful, customize, onChange, onColorChange, canEditColors }: Props) {
   const { width, mounted, containerRef } = useContainerWidth({ measureBeforeMount: true });
   const breakpoint: GridBreakpoint = width >= 1000 ? 'desktop' : width >= 640 ? 'tablet' : 'phone';
@@ -59,14 +96,13 @@ export function DashboardGrid({ children, userId, state, colorful, customize, on
         const cardColor=state.colors[widget.id] ?? DEFAULT_CARD_COLORS[widget.id];
         const hex=dashboardCardHex(cardColor);
         return <section key={widget.id} className={`dashboard-grid-card min-w-0 flex flex-col rounded-2xl border border-line shadow-sm ${colorful?'dashboard-card-custom':'bg-surface'}`} style={colorful ? {'--dashboard-card-background':hex,'--dashboard-card-foreground':dashboardCardForeground(cardColor)} as React.CSSProperties : undefined} data-dashboard-widget={widget.id}>
-          <header className="dashboard-card-header flex flex-wrap items-center justify-between gap-2 px-2 py-1">
+          <DashboardCardContent label={meta.label} header={<>
             <button type="button" className="dashboard-drag-handle shrink-0 inline-flex items-center gap-1 min-h-[44px] min-w-[44px] rounded-lg px-2 text-left text-xs font-bold cursor-grab active:cursor-grabbing touch-none select-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-surge-700" aria-label={`Drag ${meta.label}`}><GripVertical className="w-4 h-4 shrink-0" aria-hidden="true"/>{meta.label}</button>
             {customize && canEditColors && <label className="dashboard-color-control shrink-0 inline-flex items-center gap-2 rounded-lg px-2 text-xs cursor-pointer" style={colorful ? {color:'var(--dashboard-card-foreground)'} : undefined}>
               <span>Color</span>
               <input type="color" className="h-9 w-10 cursor-pointer rounded border border-line bg-white p-0.5" aria-label={`Background color for ${meta.label}`} value={hex} onChange={event=>onColorChange(widget.id,event.target.value as DashboardCardColor)} />
             </label>}
-          </header>
-          <div className="dashboard-card-body min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain">{widget.content}</div>
+          </>}>{widget.content}</DashboardCardContent>
         </section>;
       })}
     </GridLayout>}
