@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { defaultDashboardGrid, loadDashboardGrid, migrateDashboardLayout, normalizeGridLayout, saveDashboardGrid, resetDashboardGrid, GRID_COLUMNS, mergeVisibleGridLayout, setDashboardWidgetVisibility } from '@/lib/dashboardGridLayout';
+import { defaultDashboardGrid, loadDashboardGrid, migrateDashboardLayout, normalizeGridLayout, saveDashboardGrid, resetDashboardGrid, GRID_COLUMNS, mergeVisibleGridLayout, setDashboardWidgetVisibility, setDashboardCardColor } from '@/lib/dashboardGridLayout';
 
 const store = new Map<string, string>();
 beforeEach(() => {
@@ -100,5 +100,21 @@ describe('versioned dashboard layouts', () => {
     store.set('sunny_dashboard_grid_v2_a', JSON.stringify({ ...state, hidden: ['calendar','calendar','unknown',7] }));
     expect(loadDashboardGrid('a').hidden).toEqual(['calendar']);
     expect(resetDashboardGrid('a').hidden).toEqual([]);
+  });
+  it('saves an individual card color per account without changing its position', () => {
+    const initial=defaultDashboardGrid();
+    expect(initial.colors.calendar).toBeUndefined();
+    const changed=setDashboardCardColor(initial,'calendar','slate');
+    expect(changed.colors.calendar).toBe('slate');
+    expect(changed.layouts).toEqual(initial.layouts);
+    expect(saveDashboardGrid('manager-a',changed)).toBe(true);
+    expect(loadDashboardGrid('manager-a').colors.calendar).toBe('slate');
+    expect(loadDashboardGrid('manager-b').colors.calendar).toBeUndefined();
+    expect(resetDashboardGrid('manager-a').colors).toEqual({});
+  });
+  it('drops unknown card colors and widget IDs from older or malformed settings', () => {
+    const initial=defaultDashboardGrid();
+    store.set('sunny_dashboard_grid_v2_a',JSON.stringify({...initial,colors:{calendar:'neon',activity:'mist',bogus:'coral'}}));
+    expect(loadDashboardGrid('a').colors).toEqual({activity:'mist'});
   });
 });

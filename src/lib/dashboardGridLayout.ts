@@ -19,7 +19,9 @@ export const GRID_WIDGET_META = {
 } as const;
 export type GridWidgetId = keyof typeof GRID_WIDGET_META;
 export type GridWidgetPosition = { i: GridWidgetId; x: number; y: number; w: number; h: number };
-export type DashboardGridState = { version: 2; layouts: Record<GridBreakpoint, GridWidgetPosition[]>; hidden: GridWidgetId[] };
+export const DASHBOARD_CARD_COLORS = ['white','mist','ivory','slate','coral'] as const;
+export type DashboardCardColor = typeof DASHBOARD_CARD_COLORS[number];
+export type DashboardGridState = { version: 2; layouts: Record<GridBreakpoint, GridWidgetPosition[]>; hidden: GridWidgetId[]; colors: Partial<Record<GridWidgetId,DashboardCardColor>> };
 export const DASHBOARD_GRID_KEY_PREFIX = 'sunny_dashboard_grid_v2_';
 const METRICS: GridWidgetId[] = ['total_vehicles','inspections_today','open_issue_count','vehicles_in_use_count','equipment_due_count'];
 const ORDER = Object.keys(GRID_WIDGET_META) as GridWidgetId[];
@@ -76,7 +78,7 @@ export function migrateDashboardLayout(legacy: unknown): DashboardGridState {
     });
     layouts[bp]=normalizeGridLayout(entries,bp);
   }
-  return {version:2,layouts,hidden:[]};
+  return {version:2,layouts,hidden:[],colors:{}};
 }
 export function defaultDashboardGrid(): DashboardGridState {
   return migrateDashboardLayout(null);
@@ -87,7 +89,14 @@ function normalizedState(raw: unknown): DashboardGridState | null {
   const hidden = Array.isArray((raw as any).hidden)
     ? Array.from(new Set<GridWidgetId>((raw as any).hidden.filter((id: unknown): id is GridWidgetId => typeof id === 'string' && id in GRID_WIDGET_META)))
     : [];
-  return {version:2,layouts:{desktop:normalizeGridLayout(layouts.desktop,'desktop'),tablet:normalizeGridLayout(layouts.tablet,'tablet'),phone:normalizeGridLayout(layouts.phone,'phone')},hidden};
+  const rawColors=(raw as any).colors;
+  const colors={} as DashboardGridState['colors'];
+  if (rawColors && typeof rawColors==='object' && !Array.isArray(rawColors)) {
+    for (const id of Object.keys(GRID_WIDGET_META) as GridWidgetId[]) {
+      if (DASHBOARD_CARD_COLORS.includes(rawColors[id])) colors[id]=rawColors[id];
+    }
+  }
+  return {version:2,layouts:{desktop:normalizeGridLayout(layouts.desktop,'desktop'),tablet:normalizeGridLayout(layouts.tablet,'tablet'),phone:normalizeGridLayout(layouts.phone,'phone')},hidden,colors};
 }
 export function loadDashboardGrid(userId: string): DashboardGridState {
   if (!userId || typeof localStorage==='undefined') return defaultDashboardGrid();
@@ -120,4 +129,7 @@ export function mergeVisibleGridLayout(state: DashboardGridState,bp: GridBreakpo
 }
 export function setDashboardWidgetVisibility(state: DashboardGridState,id: GridWidgetId,visible: boolean): DashboardGridState {
   return {...state,hidden:visible ? state.hidden.filter(item=>item!==id) : Array.from(new Set([...state.hidden,id]))};
+}
+export function setDashboardCardColor(state: DashboardGridState,id: GridWidgetId,color: DashboardCardColor): DashboardGridState {
+  return {...state,colors:{...state.colors,[id]:color}};
 }

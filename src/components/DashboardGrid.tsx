@@ -3,13 +3,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GridLayout, useContainerWidth, type Layout } from 'react-grid-layout';
 import { GripVertical } from 'lucide-react';
-import { GRID_COLUMNS, GRID_WIDGET_META, mergeVisibleGridLayout, type DashboardGridState, type GridBreakpoint, type GridWidgetId, type GridWidgetPosition } from '@/lib/dashboardGridLayout';
+import { GRID_COLUMNS, GRID_WIDGET_META, mergeVisibleGridLayout, type DashboardCardColor, type DashboardGridState, type GridBreakpoint, type GridWidgetId, type GridWidgetPosition } from '@/lib/dashboardGridLayout';
 
-const CARD_COLORS: Record<GridWidgetId, string> = {
-  total_vehicles: 'bg-sky-surge-100', inspections_today: 'bg-ivory-mist-100', open_issue_count: 'bg-light-coral-100',
-  vehicles_in_use_count: 'bg-charcoal-blue-100', equipment_due_count: 'bg-prussian-blue-100',
-  today_issues: 'bg-ivory-mist-100', open_issues: 'bg-light-coral-100', in_use: 'bg-charcoal-blue-100', recent_inspections: 'bg-prussian-blue-100',
-  activity: 'bg-sky-surge-100', calendar: 'bg-prussian-blue-100', lifespan: 'bg-ivory-mist-100', safety: 'bg-light-coral-100',
+const DEFAULT_CARD_COLORS: Record<GridWidgetId, DashboardCardColor> = {
+  total_vehicles: 'white', inspections_today: 'mist', open_issue_count: 'white',
+  vehicles_in_use_count: 'slate', equipment_due_count: 'ivory',
+  today_issues: 'white', open_issues: 'white', in_use: 'white', recent_inspections: 'white',
+  activity: 'mist', calendar: 'white', lifespan: 'ivory', safety: 'white',
 };
 
 type Props = {
@@ -19,9 +19,11 @@ type Props = {
   colorful: boolean;
   customize: boolean;
   onChange: (next: DashboardGridState) => void;
+  onColorChange: (id: GridWidgetId, color: DashboardCardColor) => void;
+  canEditColors: boolean;
 };
 
-export function DashboardGrid({ children, userId, state, colorful, customize, onChange }: Props) {
+export function DashboardGrid({ children, userId, state, colorful, customize, onChange, onColorChange, canEditColors }: Props) {
   const { width, mounted, containerRef } = useContainerWidth({ measureBeforeMount: true });
   const breakpoint: GridBreakpoint = width >= 1000 ? 'desktop' : width >= 640 ? 'tablet' : 'phone';
   const columns = GRID_COLUMNS[breakpoint];
@@ -54,9 +56,13 @@ export function DashboardGrid({ children, userId, state, colorful, customize, on
       onDragStop={commit} onResizeStop={commit}>
       {widgets.map(widget=>{
         const meta=GRID_WIDGET_META[widget.id];
-        return <section key={widget.id} className={`dashboard-grid-card min-w-0 flex flex-col rounded-2xl border border-line shadow-sm ${colorful?CARD_COLORS[widget.id]:'bg-surface'}`} data-dashboard-widget={widget.id}>
-          <header className="dashboard-card-header flex items-center gap-1 px-2 py-1">
+        const cardColor=state.colors[widget.id] ?? DEFAULT_CARD_COLORS[widget.id];
+        return <section key={widget.id} className={`dashboard-grid-card min-w-0 flex flex-col rounded-2xl border border-line shadow-sm ${colorful?`dashboard-card-${cardColor}`:'bg-surface'}`} data-dashboard-widget={widget.id}>
+          <header className="dashboard-card-header flex flex-wrap items-center justify-between gap-2 px-2 py-1">
             <button type="button" className="dashboard-drag-handle shrink-0 inline-flex items-center gap-1 min-h-[44px] min-w-[44px] rounded-lg px-2 text-left text-xs font-bold cursor-grab active:cursor-grabbing touch-none select-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-surge-700" aria-label={`Drag ${meta.label}`}><GripVertical className="w-4 h-4 shrink-0" aria-hidden="true"/>{meta.label}</button>
+            {customize && canEditColors && <select className="select text-xs w-auto max-w-[7rem] shrink-0" aria-label={`Background color for ${meta.label}`} value={cardColor} onChange={event=>onColorChange(widget.id,event.target.value as DashboardCardColor)}>
+              <option value="white">White</option><option value="mist">Cool mist</option><option value="ivory">Soft ivory</option><option value="slate">Blue gray</option><option value="coral">Soft coral</option>
+            </select>}
           </header>
           <div className="dashboard-card-body min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain">{widget.content}</div>
         </section>;

@@ -676,40 +676,45 @@
     to { background-position: -200% 0; }
   }
 }
-/* Personal dashboard color mode uses its own tokens to preserve fleet status semantics. */
+/* Quiet personal palette: white work area, navy navigation, muted optional cards. */
 .sunny-friendly-theme {
-  --bg: #faf7eb;
-  --bg-sunk: #f5efd6;
-  --surface: #e6fafe;
-  --surface-alt: #edf1f7;
-  --surface-ink: #0f1724;
-  --ink: #0f1724;
+  --bg: #ffffff;
+  --bg-sunk: #f1f5f9;
+  --surface: #ffffff;
+  --surface-alt: #f8fafb;
+  --surface-ink: #1e2f48;
+  --ink: #1e2f48;
   --ink-muted: #354e64;
   --ink-faint: #466886;
-  --line: #b7c8e1;
-  --line-strong: #93acd2;
+  --line: #e3e7ec;
+  --line-strong: #bccddc;
   --focus: #037996;
 }
-/* Tailwind's static color classes need the same personal override as token-based cards. */
-.sunny-friendly-theme .bg-concrete { background-color: #faf7eb; }
-.sunny-friendly-theme .bg-surface { background-color: #e6fafe; }
-.sunny-friendly-theme .bg-surface-alt { background-color: #edf1f7; }
-.sunny-friendly-theme .bg-surface-sunk { background-color: #dee6ed; }
-.sunny-friendly-theme .text-ink { color: #0f1724; }
+.sunny-friendly-theme .bg-ink { background-color: #1e2f48; }
+.sunny-friendly-theme .text-ink { color: #1e2f48; }
 .sunny-friendly-theme .text-ink-muted { color: #354e64; }
 .sunny-friendly-theme .text-ink-faint { color: #466886; }
-.sunny-friendly-theme .border-line { border-color: #b7c8e1; }
-.sunny-friendly-theme .border-line-strong { border-color: #93acd2; }
-.sunny-friendly-theme .bg-ink { background-color: #2d466c; }
-.sunny-friendly-theme .hover\:bg-surface-alt:hover { background-color: #dbe3f0; }
-.sunny-friendly-theme .hover\:bg-surface-sunk:hover { background-color: #bccddc; }
-.sunny-friendly-theme .hover\:text-ink:hover { color: #0f1724; }
-.sunny-friendly-theme .hover\:text-ink-muted:hover { color: #354e64; }
-.sunny-friendly-theme .card { border-color: var(--line); }
-.sunny-friendly-theme .page-head { border-left: 3px solid #f76e7a; padding-left: 1rem; }
-
-.dashboard-grid-colorful { background: #faf7eb; padding: 1rem; border-radius: 1rem; color: #0f1724; }
-.dashboard-grid-colorful .dashboard-grid-card { color: #0f1724; border-color: #b7c8e1; }
+.sunny-friendly-theme .sunny-sidebar { background: #1e2f48; border-color: #354e64; }
+.sunny-friendly-theme .sunny-mobile-drawer { background: #1e2f48; }
+.sunny-friendly-theme .sunny-mobile-drawer button[aria-label='Close menu'] { color: #dbe3f0; }
+.sunny-friendly-theme .sunny-sidebar > div > div:first-child { border-color: #354e64; }
+.sunny-friendly-theme .sunny-sidebar img { background: white; padding: .5rem; border-radius: .75rem; }
+.sunny-friendly-theme .sunny-sidebar .text-ink,
+.sunny-friendly-theme .sunny-sidebar .text-ink-muted,
+.sunny-friendly-theme .sunny-sidebar .text-ink-faint { color: #dbe3f0; }
+.sunny-friendly-theme .sunny-sidebar [aria-current='page'] { background: #354e64; color: white; }
+.sunny-friendly-theme .sunny-sidebar [aria-current='page'] .text-ink { color: white; }
+.sunny-friendly-theme .sunny-sidebar .bg-surface-sunk { background: #354e64; }
+.sunny-friendly-theme .sunny-sidebar .before\:bg-ink::before { background: #69dffc; }
+.sunny-friendly-theme .sunny-sidebar .hover\:bg-surface-alt:hover { background: #2d466c; }
+.sunny-friendly-theme .sunny-sidebar .hover\:text-ink:hover { color: white; }
+.dashboard-grid-colorful { background: white; color: #1e2f48; }
+.dashboard-grid-colorful .dashboard-grid-card { color: #1e2f48; border-color: #dbe3f0; }
+.dashboard-grid-colorful .dashboard-card-white { background: #ffffff; }
+.dashboard-grid-colorful .dashboard-card-mist { background: #e6fafe; }
+.dashboard-grid-colorful .dashboard-card-ivory { background: #faf7eb; }
+.dashboard-grid-colorful .dashboard-card-slate { background: #edf1f7; }
+.dashboard-grid-colorful .dashboard-card-coral { background: #fee7e9; }
 .dashboard-grid-colorful .dashboard-card-body > .card { background: transparent; box-shadow: none; border-color: transparent; }
 .dashboard-grid .dashboard-grid-card { overflow: hidden; }
 .dashboard-grid .dashboard-card-header { flex: none; }

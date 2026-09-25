@@ -31,7 +31,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { LifespanActionModal } from '@/components/LifespanActionModal';
 import { useAuth } from '@/context/AuthContext';
 import { DashboardGrid } from '@/components/DashboardGrid';
-import { defaultDashboardGrid, loadDashboardGrid, resetDashboardGrid, saveDashboardGrid, setDashboardWidgetVisibility, GRID_WIDGET_META, type DashboardGridState, type GridWidgetId } from '@/lib/dashboardGridLayout';
+import { defaultDashboardGrid, loadDashboardGrid, resetDashboardGrid, saveDashboardGrid, setDashboardCardColor, setDashboardWidgetVisibility, GRID_WIDGET_META, type DashboardCardColor, type DashboardGridState, type GridWidgetId } from '@/lib/dashboardGridLayout';
 import { loadDashboardColor, saveDashboardColor } from '@/lib/dashboardAppearance';
 import {
   filterTodaysIssues,
@@ -344,13 +344,6 @@ export default function DashboardPage() {
               if (user?.id) saveDashboardColor(user.id, enabled);
             }} />
             Color palette
-            <span className="flex gap-0.5" aria-hidden="true">
-              <span className="w-3 h-3 rounded-full bg-sky-surge-500" />
-              <span className="w-3 h-3 rounded-full bg-ivory-mist-500" />
-              <span className="w-3 h-3 rounded-full bg-prussian-blue-500" />
-              <span className="w-3 h-3 rounded-full bg-charcoal-blue-500" />
-              <span className="w-3 h-3 rounded-full bg-light-coral-500" />
-            </span>
           </label>
         )}
         {customizeLayout && (
@@ -383,6 +376,14 @@ export default function DashboardPage() {
         colorful={dashboardColor}
         customize={customizeLayout}
         onChange={persistLayout}
+        canEditColors={isTrueManager}
+        onColorChange={(id: GridWidgetId, color: DashboardCardColor) => {
+          persistLayout(setDashboardCardColor(dashboardLayout, id, color));
+          if (!dashboardColor && user?.id) {
+            setDashboardColor(true);
+            saveDashboardColor(user.id, true);
+          }
+        }}
       >
       {/* Equipment Due for Review Section with 2.2 Batch Actions */}
       {dueForReviewEquipment.length > 0 &&

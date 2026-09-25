@@ -49,7 +49,7 @@ export default function RootLayout({
                     className="fixed inset-0 bg-ink/60 backdrop-blur-sm"
                     onClick={() => setMobileMenuOpen(false)}
                   />
-                  <div className="relative bg-surface w-72 h-full shadow-lg flex flex-col justify-between z-10 animate-in slide-in-from-left duration-200">
+                  <div className="sunny-mobile-drawer relative bg-surface w-72 h-full shadow-lg flex flex-col justify-between z-10 animate-in slide-in-from-left duration-200">
                     <div className="absolute top-4 right-4">
                       <button
                         type="button"

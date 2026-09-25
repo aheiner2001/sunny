@@ -12,14 +12,14 @@ export function Sidebar() {
   const { role } = useAuth();
 
   return (
-    <aside className="w-64 h-full bg-surface border-r border-line flex flex-col shrink-0 select-none z-30 overflow-y-auto">
+    <aside className="sunny-sidebar w-64 h-full bg-surface border-r border-line flex flex-col shrink-0 select-none z-30 overflow-y-auto">
       <div>
         {/* Brand Header */}
         <div className="px-6 py-5 border-b border-line">
           <img
             src={asset('/sunny-logo.png')}
             alt="Sunny logo"
-            className="h-12 w-36 object-contain object-left"
+            className="h-12 w-36 object-cover object-center"
           />
         </div>
 

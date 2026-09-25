@@ -1061,8 +1061,8 @@ function SettingsPageContent() {
           {isTrueManager && (
             <section className="card card-pad stack">
               <div>
-                <h2 className="card-title">Color palette across the app</h2>
-                <p className="hint">Show your chosen colors on every page in this browser. This affects only your manager account.</p>
+                <h2 className="card-title">Refined colors</h2>
+                <p className="hint">Keep pages white with navy navigation and your chosen dashboard card colors. This affects only your manager account in this browser.</p>
               </div>
               <label className="cluster gap-3 cursor-pointer text-sm font-semibold">
                 <input

@@ -65,3 +65,7 @@ Publish the reviewed implementation to `preview`, verify its Vercel deployment a
 The manager's saved color choice now applies the five-ramp palette to the shared app surfaces on every page. It stays scoped to that manager in the current browser; other accounts retain their own settings. A visible dashboard switch mirrors Settings → Appearance. Fleet status colors keep their safety meanings.
 
 Customize layout now shows a named switch for every dashboard section. Turning one off hides the card without deleting its position; turning it back on restores it. The switch list disappears on Done customizing, and reset restores all sections. Card headers retain drag grips, and resizing uses the card edges. The arrow controls and typed width/height controls have been removed; metric values remain visible inside their cards.
+
+## Calm palette refinement
+
+Manager feedback replaced the all-over pastel treatment with white pages and header, a dark navy sidebar with readable light navigation text and a white plate behind the original logo, and mostly white dashboard cards. Existing colorful preferences stay optional and per manager. The default Calendar card is white. Customize layout offers each visible card five restrained backgrounds: White, Cool mist, Soft ivory, Blue gray, and Soft coral. Selecting a card color enables the manager's palette immediately and persists that card's choice within the existing version-2 layout key; malformed stored colors are ignored. Reset layout restores the default muted card choices. Status and safety colors keep their meanings.
