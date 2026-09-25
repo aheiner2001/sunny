@@ -20,7 +20,26 @@ export const GRID_WIDGET_META = {
 export type GridWidgetId = keyof typeof GRID_WIDGET_META;
 export type GridWidgetPosition = { i: GridWidgetId; x: number; y: number; w: number; h: number };
 export const DASHBOARD_CARD_COLORS = ['white','mist','ivory','slate','coral'] as const;
-export type DashboardCardColor = typeof DASHBOARD_CARD_COLORS[number];
+export type DashboardCardColor = typeof DASHBOARD_CARD_COLORS[number] | `#${string}`;
+const CARD_HEX: Record<typeof DASHBOARD_CARD_COLORS[number], string> = {
+  white: '#ffffff', mist: '#e6fafe', ivory: '#faf7eb', slate: '#edf1f7', coral: '#fee7e9',
+};
+export function dashboardCardHex(color: DashboardCardColor): string {
+  return color.startsWith('#') ? color : CARD_HEX[color as keyof typeof CARD_HEX];
+}
+export function dashboardCardForeground(color: DashboardCardColor): '#ffffff' | '#0f1724' {
+  const hex = dashboardCardHex(color);
+  const channels = [1,3,5].map(start => {
+    const v = parseInt(hex.slice(start,start+2),16)/255;
+    return v <= 0.04045 ? v/12.92 : ((v+0.055)/1.055)**2.4;
+  });
+  const luminance = channels[0]*0.2126 + channels[1]*0.7152 + channels[2]*0.0722;
+  return luminance > 0.179 ? '#0f1724' : '#ffffff';
+}
+function validCardColor(value: unknown): value is DashboardCardColor {
+  return typeof value === 'string' &&
+    (DASHBOARD_CARD_COLORS.some(color => color === value) || /^#[0-9a-fA-F]{6}$/.test(value));
+}
 export type DashboardGridState = { version: 2; layouts: Record<GridBreakpoint, GridWidgetPosition[]>; hidden: GridWidgetId[]; colors: Partial<Record<GridWidgetId,DashboardCardColor>> };
 export const DASHBOARD_GRID_KEY_PREFIX = 'sunny_dashboard_grid_v2_';
 const METRICS: GridWidgetId[] = ['total_vehicles','inspections_today','open_issue_count','vehicles_in_use_count','equipment_due_count'];
@@ -93,7 +112,7 @@ function normalizedState(raw: unknown): DashboardGridState | null {
   const colors={} as DashboardGridState['colors'];
   if (rawColors && typeof rawColors==='object' && !Array.isArray(rawColors)) {
     for (const id of Object.keys(GRID_WIDGET_META) as GridWidgetId[]) {
-      if (DASHBOARD_CARD_COLORS.includes(rawColors[id])) colors[id]=rawColors[id];
+      if (validCardColor(rawColors[id])) colors[id]=rawColors[id].startsWith('#') ? rawColors[id].toLowerCase() as DashboardCardColor : rawColors[id];
     }
   }
   return {version:2,layouts:{desktop:normalizeGridLayout(layouts.desktop,'desktop'),tablet:normalizeGridLayout(layouts.tablet,'tablet'),phone:normalizeGridLayout(layouts.phone,'phone')},hidden,colors};

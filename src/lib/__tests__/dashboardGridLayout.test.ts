@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { defaultDashboardGrid, loadDashboardGrid, migrateDashboardLayout, normalizeGridLayout, saveDashboardGrid, resetDashboardGrid, GRID_COLUMNS, mergeVisibleGridLayout, setDashboardWidgetVisibility, setDashboardCardColor } from '@/lib/dashboardGridLayout';
+import { defaultDashboardGrid, loadDashboardGrid, migrateDashboardLayout, normalizeGridLayout, saveDashboardGrid, resetDashboardGrid, GRID_COLUMNS, mergeVisibleGridLayout, setDashboardWidgetVisibility, setDashboardCardColor, dashboardCardHex, dashboardCardForeground } from '@/lib/dashboardGridLayout';
 
 const store = new Map<string, string>();
 beforeEach(() => {
@@ -116,5 +116,21 @@ describe('versioned dashboard layouts', () => {
     const initial=defaultDashboardGrid();
     store.set('sunny_dashboard_grid_v2_a',JSON.stringify({...initial,colors:{calendar:'neon',activity:'mist',bogus:'coral'}}));
     expect(loadDashboardGrid('a').colors).toEqual({activity:'mist'});
+  });
+  it('persists a picked hex color per manager and discards malformed values', () => {
+    const changed = setDashboardCardColor(defaultDashboardGrid(), 'calendar', '#123abc');
+    expect(saveDashboardGrid('manager-a', changed)).toBe(true);
+    expect(loadDashboardGrid('manager-a').colors.calendar).toBe('#123abc');
+    expect(loadDashboardGrid('manager-b').colors.calendar).toBeUndefined();
+    store.set('sunny_dashboard_grid_v2_manager-a', JSON.stringify({
+      ...changed, colors: { calendar: 'red; background: url(x)', activity: '#12345g', safety: '#abcdef' },
+    }));
+    expect(loadDashboardGrid('manager-a').colors).toEqual({ safety: '#abcdef' });
+  });
+  it('resolves old presets and chooses readable text for picked colors', () => {
+    expect(dashboardCardHex('mist')).toBe('#e6fafe');
+    expect(dashboardCardHex('#123abc')).toBe('#123abc');
+    expect(dashboardCardForeground('#101019')).toBe('#ffffff');
+    expect(dashboardCardForeground('#faf7eb')).toBe('#0f1724');
   });
 });

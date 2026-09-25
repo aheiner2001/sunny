@@ -709,12 +709,10 @@
 .sunny-friendly-theme .sunny-sidebar .hover\:bg-surface-alt:hover { background: #2d466c; }
 .sunny-friendly-theme .sunny-sidebar .hover\:text-ink:hover { color: white; }
 .dashboard-grid-colorful { background: white; color: #1e2f48; }
-.dashboard-grid-colorful .dashboard-grid-card { color: #1e2f48; border-color: #dbe3f0; }
-.dashboard-grid-colorful .dashboard-card-white { background: #ffffff; }
-.dashboard-grid-colorful .dashboard-card-mist { background: #e6fafe; }
-.dashboard-grid-colorful .dashboard-card-ivory { background: #faf7eb; }
-.dashboard-grid-colorful .dashboard-card-slate { background: #edf1f7; }
-.dashboard-grid-colorful .dashboard-card-coral { background: #fee7e9; }
+.dashboard-grid-colorful .dashboard-grid-card { border-color: #dbe3f0; }
+.dashboard-grid-colorful .dashboard-card-custom { background: var(--dashboard-card-background); color: var(--dashboard-card-foreground); }
+.sunny-friendly-theme .dashboard-grid-colorful .dashboard-card-custom :is(.text-ink,.text-ink-muted,.text-ink-faint,.card-title,.stat-label,.stat-value) { color: var(--dashboard-card-foreground); }
+.dashboard-grid-colorful .dashboard-card-custom .dashboard-drag-handle { color: var(--dashboard-card-foreground); }
 .dashboard-grid-colorful .dashboard-card-body > .card { background: transparent; box-shadow: none; border-color: transparent; }
 .dashboard-grid .dashboard-grid-card { overflow: hidden; }
 .dashboard-grid .dashboard-card-header { flex: none; }
@@ -731,4 +729,4 @@
 .dashboard-grid .react-grid-item > .react-resizable-handle-s::after { bottom: 0; right: 15px; }
 .dashboard-grid .react-grid-item > .react-resizable-handle-se::after { right: 4px; bottom: 4px; }
 .dashboard-grid .dashboard-drag-handle:focus-visible { outline: 2px solid #037996; outline-offset: 2px; }
-.dashboard-grid-colorful .dashboard-card-body .stat, .dashboard-grid-colorful .dashboard-card-body .card-title { color: #0f1724; }
+.dashboard-grid-colorful .dashboard-card-body .stat { color: inherit; }

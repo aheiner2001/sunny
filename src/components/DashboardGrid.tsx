@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GridLayout, useContainerWidth, type Layout } from 'react-grid-layout';
 import { GripVertical } from 'lucide-react';
-import { GRID_COLUMNS, GRID_WIDGET_META, mergeVisibleGridLayout, type DashboardCardColor, type DashboardGridState, type GridBreakpoint, type GridWidgetId, type GridWidgetPosition } from '@/lib/dashboardGridLayout';
+import { dashboardCardForeground, dashboardCardHex, GRID_COLUMNS, GRID_WIDGET_META, mergeVisibleGridLayout, type DashboardCardColor, type DashboardGridState, type GridBreakpoint, type GridWidgetId, type GridWidgetPosition } from '@/lib/dashboardGridLayout';
 
 const DEFAULT_CARD_COLORS: Record<GridWidgetId, DashboardCardColor> = {
   total_vehicles: 'white', inspections_today: 'mist', open_issue_count: 'white',
@@ -57,12 +57,14 @@ export function DashboardGrid({ children, userId, state, colorful, customize, on
       {widgets.map(widget=>{
         const meta=GRID_WIDGET_META[widget.id];
         const cardColor=state.colors[widget.id] ?? DEFAULT_CARD_COLORS[widget.id];
-        return <section key={widget.id} className={`dashboard-grid-card min-w-0 flex flex-col rounded-2xl border border-line shadow-sm ${colorful?`dashboard-card-${cardColor}`:'bg-surface'}`} data-dashboard-widget={widget.id}>
+        const hex=dashboardCardHex(cardColor);
+        return <section key={widget.id} className={`dashboard-grid-card min-w-0 flex flex-col rounded-2xl border border-line shadow-sm ${colorful?'dashboard-card-custom':'bg-surface'}`} style={colorful ? {'--dashboard-card-background':hex,'--dashboard-card-foreground':dashboardCardForeground(cardColor)} as React.CSSProperties : undefined} data-dashboard-widget={widget.id}>
           <header className="dashboard-card-header flex flex-wrap items-center justify-between gap-2 px-2 py-1">
             <button type="button" className="dashboard-drag-handle shrink-0 inline-flex items-center gap-1 min-h-[44px] min-w-[44px] rounded-lg px-2 text-left text-xs font-bold cursor-grab active:cursor-grabbing touch-none select-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-surge-700" aria-label={`Drag ${meta.label}`}><GripVertical className="w-4 h-4 shrink-0" aria-hidden="true"/>{meta.label}</button>
-            {customize && canEditColors && <select className="select text-xs w-auto max-w-[7rem] shrink-0" aria-label={`Background color for ${meta.label}`} value={cardColor} onChange={event=>onColorChange(widget.id,event.target.value as DashboardCardColor)}>
-              <option value="white">White</option><option value="mist">Cool mist</option><option value="ivory">Soft ivory</option><option value="slate">Blue gray</option><option value="coral">Soft coral</option>
-            </select>}
+            {customize && canEditColors && <label className="dashboard-color-control shrink-0 inline-flex items-center gap-2 rounded-lg px-2 text-xs cursor-pointer" style={colorful ? {color:'var(--dashboard-card-foreground)'} : undefined}>
+              <span>Color</span>
+              <input type="color" className="h-9 w-10 cursor-pointer rounded border border-line bg-white p-0.5" aria-label={`Background color for ${meta.label}`} value={hex} onChange={event=>onColorChange(widget.id,event.target.value as DashboardCardColor)} />
+            </label>}
           </header>
           <div className="dashboard-card-body min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain">{widget.content}</div>
         </section>;
