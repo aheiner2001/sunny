@@ -41,6 +41,7 @@ import { AiImportModal } from '@/components/AiImportModal';
 import { ReturnChecklistEditor } from '@/components/ReturnChecklistEditor';
 import { ShopExitQRCode } from '@/components/ShopExitQRCode';
 import { mintCategoryId, planDeleteCategory } from '@/lib/checklistCategories';
+import { loadDashboardColor, saveDashboardColor } from '@/lib/dashboardAppearance';
 
 type SettingsTab = 'checklist' | 'equipment' | 'tasks' | 'appearance' | 'danger';
 
@@ -82,6 +83,7 @@ function SettingsPageContent() {
   const [tasks, setTasks] = useState<FleetTask[]>([]);
   const [taskForm, setTaskForm] = useState({ title: '', description: '', vehicleId: '', dueAt: '', scheduleLabel: '' });
   const [recentInspectorsDepth, setRecentInspectorsDepth] = useState<1 | 3>(3);
+  const [dashboardColor, setDashboardColor] = useState(false);
   const [collectOdometer, setCollectOdometer] = useState(true);
   const [collectFuelLevel, setCollectFuelLevel] = useState(true);
 
@@ -159,6 +161,10 @@ function SettingsPageContent() {
     setCollectOdometer(config.collectOdometer !== false);
     setCollectFuelLevel(config.collectFuelLevel !== false);
   };
+
+  useEffect(() => {
+    setDashboardColor(loadDashboardColor(currentUser?.id));
+  }, [currentUser?.id]);
 
   const updateVehicleReading = async (field: 'collectOdometer' | 'collectFuelLevel', value: boolean) => {
     if (field === 'collectOdometer') setCollectOdometer(value);
@@ -1052,6 +1058,26 @@ function SettingsPageContent() {
 
       {activeTab === 'appearance' && (
         <div className="stack">
+          {isTrueManager && (
+            <section className="card card-pad stack">
+              <div>
+                <h2 className="card-title">Colorful dashboard</h2>
+                <p className="hint">Show colorful fleet cards on your dashboard in this browser. This affects only your account.</p>
+              </div>
+              <label className="cluster gap-3 cursor-pointer text-sm font-semibold">
+                <input
+                  type="checkbox"
+                  checked={dashboardColor}
+                  onChange={event => {
+                    const enabled = event.target.checked;
+                    setDashboardColor(enabled);
+                    if (currentUser?.id) saveDashboardColor(currentUser.id, enabled);
+                  }}
+                />
+                {dashboardColor ? 'Colorful cards on' : 'Standard cards'}
+              </label>
+            </section>
+          )}
           <section className="card card-pad stack">
             <div>
               <h2 className="card-title cluster gap-2">

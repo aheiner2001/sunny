@@ -148,7 +148,7 @@ describe('lifespan calculation helpers', () => {
       const extended = extendLifespan(tool, 6);
       expect(extended.expectedMonths).toBe(18);
       const newDue = new Date(extended.dueDate!);
-      expect(newDue.getUTCMonth()).toBe(6); // July 2026
+      expect(newDue.getMonth()).toBe(6); // July 2026 in the local calendar used by extendLifespan
     });
 
     it('replaces usage-mode tool (resets carsUsed to 0)', () => {

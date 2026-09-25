@@ -21,8 +21,6 @@ import {
   CheckSquare,
   Square,
   Trash2,
-  ChevronUp,
-  ChevronDown,
   X,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
@@ -32,16 +30,16 @@ import { InspectionCalendar } from '@/components/InspectionCalendar';
 import { EmptyState } from '@/components/EmptyState';
 import { LifespanActionModal } from '@/components/LifespanActionModal';
 import { useAuth } from '@/context/AuthContext';
+import { DashboardSwapGrid } from '@/components/DashboardSwapGrid';
+import { loadDashboardColor } from '@/lib/dashboardAppearance';
 import {
   filterTodaysIssues,
   loadDashboardLayout,
   saveDashboardLayout,
   resetDashboardLayout,
   moveDashboardWidget,
-  reorderDashboardLayout,
+  reorderVisibleDashboardWidgets,
   setDashboardWidgetSize,
-  sizeToColSpan,
-  DASHBOARD_WIDGET_LABELS,
   type DashboardWidgetLayout,
   type DashboardWidgetId,
   type DashboardWidgetSize,
@@ -67,7 +65,7 @@ function issueTypeLabel(issue: Issue): string {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { role, user } = useAuth();
+  const { role, user, isTrueManager } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -90,8 +88,7 @@ export default function DashboardPage() {
 
   const [dashboardLayout, setDashboardLayout] = useState<DashboardWidgetLayout[]>([]);
   const [customizeLayout, setCustomizeLayout] = useState(false);
-  const [dragId, setDragId] = useState<DashboardWidgetId | null>(null);
-  const [dragOverId, setDragOverId] = useState<DashboardWidgetId | null>(null);
+  const [dashboardColor, setDashboardColor] = useState(false);
 
   const loadData = () => {
     setVehicles(dbService.getVehicles());
@@ -104,9 +101,10 @@ export default function DashboardPage() {
   useEffect(() => {
     loadData();
     setDashboardLayout(loadDashboardLayout(user?.id));
+    setDashboardColor(isTrueManager && loadDashboardColor(user?.id));
     window.addEventListener('sunny_db_update', loadData);
     return () => window.removeEventListener('sunny_db_update', loadData);
-  }, [user?.id]);
+  }, [user?.id, role, isTrueManager]);
 
   const today = new Date();
   const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -212,78 +210,13 @@ export default function DashboardPage() {
     persistLayout(setDashboardWidgetSize(dashboardLayout, id, size));
   };
 
-  const layoutOrder = (id: DashboardWidgetId) => {
-    const idx = dashboardLayout.findIndex(w => w.id === id);
-    return idx < 0 ? 99 : idx;
-  };
-
-  const widgetShell = (id: DashboardWidgetId, children: React.ReactNode) => {
-    const entry = dashboardLayout.find(w => w.id === id) || { id, size: 'medium' as DashboardWidgetSize };
-    const isDragOver = customizeLayout && dragOverId === id;
-    const isDragging = customizeLayout && dragId === id;
-    return (
-      <div
-        className={[
-          sizeToColSpan(entry.size),
-          customizeLayout ? 'outline outline-1 outline-dashed outline-line rounded-2xl' : '',
-          isDragOver ? 'ring-2 ring-primary ring-offset-2' : '',
-          isDragging ? 'opacity-40' : '',
-          customizeLayout ? 'cursor-grab' : '',
-          'transition-all',
-        ].filter(Boolean).join(' ')}
-        style={{ order: layoutOrder(id) }}
-        draggable={customizeLayout}
-        onDragStart={() => customizeLayout && setDragId(id)}
-        onDragEnd={() => { setDragId(null); setDragOverId(null); }}
-        onDragOver={(e) => {
-          if (customizeLayout && dragId && dragId !== id) {
-            e.preventDefault();
-            setDragOverId(id);
-          }
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          if (customizeLayout && dragId && dragId !== id) {
-            persistLayout(reorderDashboardLayout(dashboardLayout, dragId, id));
-          }
-          setDragId(null);
-          setDragOverId(null);
-        }}
-      >
-        {customizeLayout && (
-          <div className="flex items-center gap-1 px-2 pt-2 flex-wrap">
-            <span className="text-[10px] font-bold uppercase text-ink-faint mr-1">
-              {DASHBOARD_WIDGET_LABELS[id]}
-            </span>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              disabled={layoutOrder(id) <= 0}
-              aria-label={`Move ${DASHBOARD_WIDGET_LABELS[id]} up`}
-              onClick={() => persistLayout(moveDashboardWidget(dashboardLayout, id, -1))}
-            >
-              <ChevronUp className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              disabled={layoutOrder(id) >= dashboardLayout.length - 1}
-              aria-label={`Move ${DASHBOARD_WIDGET_LABELS[id]} down`}
-              onClick={() => persistLayout(moveDashboardWidget(dashboardLayout, id, 1))}
-            >
-              <ChevronDown className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-        {children}
-      </div>
-    );
-  };
-
+  const widgetShell = (id: DashboardWidgetId, children: React.ReactNode) => (
+    <div key={id} data-dashboard-widget={id}>{children}</div>
+  );
 
 
   return (
-    <div className="page max-w-full overflow-x-hidden stack gap-6">
+    <div className="page max-w-full overflow-x-clip stack gap-6">
       {/* 1.2 Urgent Vehicle Safety Banner */}
       {urgentSafetyVehicles.length > 0 && !safetyAlertDismissed && (
         <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400 flex items-center justify-between flex-wrap gap-3" role="status" aria-live="polite">
@@ -390,6 +323,42 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Metric Tiles */}
+
+      <div className="spread items-center gap-2 flex-wrap mb-3">
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={() => setCustomizeLayout(v => !v)}
+        >
+          {customizeLayout ? 'Done customizing' : 'Customize layout'}
+        </button>
+        {customizeLayout && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              const next = resetDashboardLayout(user?.id);
+              setDashboardLayout(next);
+            }}
+          >
+            <RotateCcw className="w-3.5 h-3.5" /> Reset layout
+          </button>
+        )}
+        {customizeLayout && (
+          <p className="text-[11px] text-ink-faint m-0">
+          Drag sections to reorder, or use ↑ ↓ buttons. Size presets save for your account.
+          </p>
+        )}
+      </div>
+      <DashboardSwapGrid
+        layout={dashboardLayout}
+        colorful={dashboardColor}
+        customize={customizeLayout}
+        onReorder={ids => persistLayout(reorderVisibleDashboardWidgets(dashboardLayout, ids, ids))}
+        onMove={(id, direction) => persistLayout(moveDashboardWidget(dashboardLayout, id, direction))}
+        onSize={onWidgetSize}
+      >
       {/* Equipment Due for Review Section with 2.2 Batch Actions */}
       {dueForReviewEquipment.length > 0 &&
         widgetShell(
@@ -505,34 +474,6 @@ export default function DashboardPage() {
         )}
 
 
-      {/* Metric Tiles */}
-
-      <div className="spread items-center gap-2 flex-wrap mb-3">
-        <button
-          type="button"
-          className="btn btn-secondary btn-sm"
-          onClick={() => setCustomizeLayout(v => !v)}
-        >
-          {customizeLayout ? 'Done customizing' : 'Customize layout'}
-        </button>
-        {customizeLayout && (
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => {
-              const next = resetDashboardLayout(user?.id);
-              setDashboardLayout(next);
-            }}
-          >
-            <RotateCcw className="w-3.5 h-3.5" /> Reset layout
-          </button>
-        )}
-        {customizeLayout && (
-          <p className="text-[11px] text-ink-faint m-0">
-          Drag sections to reorder, or use ↑ ↓ buttons. Size presets save for your account.
-          </p>
-        )}
-      </div>
       {widgetShell(
         'stats',
         <div className="grid-auto" style={{ '--min': '15rem' } as React.CSSProperties}>
@@ -887,7 +828,7 @@ export default function DashboardPage() {
 
       {widgetShell(
         'in_use',
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-[var(--gutter)]">
+      <div className="grid grid-cols-1 gap-[var(--gutter)]">
         <div className="card lg:col-span-2">
           <div className="card-head">
             <h2 className="card-title">Vehicles in use</h2>
@@ -1062,6 +1003,8 @@ export default function DashboardPage() {
       </div>
       )}
 
+      </DashboardSwapGrid>
+
       {/* Lifespan Action Modal */}
       <LifespanActionModal
         item={lifespanAction?.item || null}
@@ -1137,4 +1080,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

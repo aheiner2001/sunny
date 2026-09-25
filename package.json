@@ -2,7 +2,7 @@
   "name": "sunny-fleet-accountability",
   "version": "0.1.0",
   "private": true,
-    "scripts": {
+  "scripts": {
     "dev": "next dev",
     "build": "next build && node -e \"require('fs').copyFileSync('public/404.html', 'out/404.html')\"",
     "start": "next start",
@@ -23,6 +23,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^3.10.1",
+    "swapy": "^1.0.3",
     "tailwind-merge": "^2.5.2"
   },
   "devDependencies": {

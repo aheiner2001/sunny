@@ -673,3 +673,9 @@
     to { background-position: -200% 0; }
   }
 }
+/* Let a manager's palette show through the existing dashboard card surfaces. */
+.dashboard-colorful > [data-swapy-no-drag] > .card,
+.dashboard-colorful > [data-swapy-no-drag] > .grid-auto > .card {
+  background: transparent;
+  box-shadow: none;
+}

@@ -208,7 +208,7 @@ describe('dbService lifespan and vehicle daily job log tracking', () => {
     expect(family.map(item => item.name)).toEqual([
       'Pressure Washer #1', 'Pressure Washer #2', 'Pressure Washer #3'
     ]);
-    expect(family.map(item => item.carsUsed).sort((a, b) => a - b)).toEqual([0, 0, 40]);
+    expect(family.map(item => item.carsUsed).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([0, 0, 40]);
     expect(family.every(item => item.expectedCars === 300 && item.available === 1)).toBe(true);
   });
 

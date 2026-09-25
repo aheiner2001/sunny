@@ -7,6 +7,7 @@ import {
   moveDashboardWidget,
   normalizeDashboardLayout,
   reorderDashboardLayout,
+  reorderVisibleDashboardWidgets,
   resetDashboardLayout,
   saveDashboardLayout,
   setDashboardWidgetSize,
@@ -101,5 +102,17 @@ describe('dashboard layout persistence', () => {
     const moved = moveDashboardWidget(layout, 'stats', 1);
     expect(moved[0].id).toBe('today_issues');
     expect(moved[1].id).toBe('stats');
+  });
+
+  it('swaps visible widgets while retaining the hidden lifespan widget and its size', () => {
+    const layout = setDashboardWidgetSize(DEFAULT_DASHBOARD_LAYOUT, 'lifespan', 'small');
+    const visible = layout.map(item => item.id).filter(id => id !== 'lifespan');
+    const swapped = [visible[1], visible[0], ...visible.slice(2)];
+    const updated = reorderVisibleDashboardWidgets(layout, visible, swapped);
+    expect(updated.filter(item => item.id === 'lifespan')).toEqual([{ id: 'lifespan', size: 'small' }]);
+    expect(updated.filter(item => item.id !== 'lifespan').map(item => item.id)).toEqual(swapped);
+    expect(new Set(updated.map(item => item.id)).size).toBe(DEFAULT_DASHBOARD_LAYOUT.length);
+    saveDashboardLayout(updated, 'manager-a');
+    expect(loadDashboardLayout('manager-a').filter(item => item.id !== 'lifespan').map(item => item.id)).toEqual(swapped);
   });
 });
