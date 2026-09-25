@@ -31,8 +31,8 @@ import { EmptyState } from '@/components/EmptyState';
 import { LifespanActionModal } from '@/components/LifespanActionModal';
 import { useAuth } from '@/context/AuthContext';
 import { DashboardGrid } from '@/components/DashboardGrid';
-import { defaultDashboardGrid, loadDashboardGrid, resetDashboardGrid, saveDashboardGrid, type DashboardGridState, type GridWidgetId } from '@/lib/dashboardGridLayout';
-import { loadDashboardColor } from '@/lib/dashboardAppearance';
+import { defaultDashboardGrid, loadDashboardGrid, resetDashboardGrid, saveDashboardGrid, setDashboardWidgetVisibility, GRID_WIDGET_META, type DashboardGridState, type GridWidgetId } from '@/lib/dashboardGridLayout';
+import { loadDashboardColor, saveDashboardColor } from '@/lib/dashboardAppearance';
 import {
   filterTodaysIssues,
 } from '@/lib/dashboardLayout';
@@ -336,12 +336,46 @@ export default function DashboardPage() {
             <RotateCcw className="w-3.5 h-3.5" /> Reset layout
           </button>
         )}
+        {isTrueManager && (
+          <label className="cluster gap-2 cursor-pointer text-sm font-semibold">
+            <input type="checkbox" checked={dashboardColor} onChange={event => {
+              const enabled = event.target.checked;
+              setDashboardColor(enabled);
+              if (user?.id) saveDashboardColor(user.id, enabled);
+            }} />
+            Color palette
+            <span className="flex gap-0.5" aria-hidden="true">
+              <span className="w-3 h-3 rounded-full bg-sky-surge-500" />
+              <span className="w-3 h-3 rounded-full bg-ivory-mist-500" />
+              <span className="w-3 h-3 rounded-full bg-prussian-blue-500" />
+              <span className="w-3 h-3 rounded-full bg-charcoal-blue-500" />
+              <span className="w-3 h-3 rounded-full bg-light-coral-500" />
+            </span>
+          </label>
+        )}
         {customizeLayout && (
           <p className="text-[11px] text-ink-faint m-0">
-          Drag cards by their handles. Resize their edges or use width and height controls; changes save for your account.
+            Drag cards by their handles. Resize by dragging the right or bottom edge.
           </p>
         )}
       </div>
+      {customizeLayout && (
+        <fieldset className="rounded-2xl border border-line bg-surface p-4">
+          <legend className="px-2 font-semibold text-sm">Dashboard sections</legend>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {(Object.entries(GRID_WIDGET_META) as [GridWidgetId, (typeof GRID_WIDGET_META)[GridWidgetId]][]).map(([id, meta]) => (
+              <label key={id} className="flex items-center gap-2 min-h-10 cursor-pointer text-sm">
+                <input type="checkbox" checked={!dashboardLayout.hidden.includes(id)} onChange={event =>
+                  persistLayout(setDashboardWidgetVisibility(dashboardLayout, id, event.target.checked))
+                } />
+                {meta.label}
+                {id === 'lifespan' && dueForReviewEquipment.length === 0 &&
+                  <span className="text-ink-faint text-xs">(appears when equipment is due)</span>}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
       {layoutSaveError && <p role="alert" className="text-critical text-sm">Layout could not be saved on this device. Your changes remain visible until you leave this page.</p>}
       <DashboardGrid
         userId={user?.id || ''}

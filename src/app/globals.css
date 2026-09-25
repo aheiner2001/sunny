@@ -677,6 +677,37 @@
   }
 }
 /* Personal dashboard color mode uses its own tokens to preserve fleet status semantics. */
+.sunny-friendly-theme {
+  --bg: #faf7eb;
+  --bg-sunk: #f5efd6;
+  --surface: #e6fafe;
+  --surface-alt: #edf1f7;
+  --surface-ink: #0f1724;
+  --ink: #0f1724;
+  --ink-muted: #354e64;
+  --ink-faint: #466886;
+  --line: #b7c8e1;
+  --line-strong: #93acd2;
+  --focus: #037996;
+}
+/* Tailwind's static color classes need the same personal override as token-based cards. */
+.sunny-friendly-theme .bg-concrete { background-color: #faf7eb; }
+.sunny-friendly-theme .bg-surface { background-color: #e6fafe; }
+.sunny-friendly-theme .bg-surface-alt { background-color: #edf1f7; }
+.sunny-friendly-theme .bg-surface-sunk { background-color: #dee6ed; }
+.sunny-friendly-theme .text-ink { color: #0f1724; }
+.sunny-friendly-theme .text-ink-muted { color: #354e64; }
+.sunny-friendly-theme .text-ink-faint { color: #466886; }
+.sunny-friendly-theme .border-line { border-color: #b7c8e1; }
+.sunny-friendly-theme .border-line-strong { border-color: #93acd2; }
+.sunny-friendly-theme .bg-ink { background-color: #2d466c; }
+.sunny-friendly-theme .hover\:bg-surface-alt:hover { background-color: #dbe3f0; }
+.sunny-friendly-theme .hover\:bg-surface-sunk:hover { background-color: #bccddc; }
+.sunny-friendly-theme .hover\:text-ink:hover { color: #0f1724; }
+.sunny-friendly-theme .hover\:text-ink-muted:hover { color: #354e64; }
+.sunny-friendly-theme .card { border-color: var(--line); }
+.sunny-friendly-theme .page-head { border-left: 3px solid #f76e7a; padding-left: 1rem; }
+
 .dashboard-grid-colorful { background: #faf7eb; padding: 1rem; border-radius: 1rem; color: #0f1724; }
 .dashboard-grid-colorful .dashboard-grid-card { color: #0f1724; border-color: #b7c8e1; }
 .dashboard-grid-colorful .dashboard-card-body > .card { background: transparent; box-shadow: none; border-color: transparent; }
@@ -694,5 +725,5 @@
 .dashboard-grid .react-grid-item > .react-resizable-handle-e::after { right: 0; top: 15px; bottom: auto; }
 .dashboard-grid .react-grid-item > .react-resizable-handle-s::after { bottom: 0; right: 15px; }
 .dashboard-grid .react-grid-item > .react-resizable-handle-se::after { right: 4px; bottom: 4px; }
-.dashboard-grid .dashboard-drag-handle:focus-visible, .dashboard-grid .dashboard-card-controls :focus-visible { outline: 2px solid #037996; outline-offset: 2px; }
+.dashboard-grid .dashboard-drag-handle:focus-visible { outline: 2px solid #037996; outline-offset: 2px; }
 .dashboard-grid-colorful .dashboard-card-body .stat, .dashboard-grid-colorful .dashboard-card-body .card-title { color: #0f1724; }

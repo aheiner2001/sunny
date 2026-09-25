@@ -19,7 +19,7 @@ export const GRID_WIDGET_META = {
 } as const;
 export type GridWidgetId = keyof typeof GRID_WIDGET_META;
 export type GridWidgetPosition = { i: GridWidgetId; x: number; y: number; w: number; h: number };
-export type DashboardGridState = { version: 2; layouts: Record<GridBreakpoint, GridWidgetPosition[]> };
+export type DashboardGridState = { version: 2; layouts: Record<GridBreakpoint, GridWidgetPosition[]>; hidden: GridWidgetId[] };
 export const DASHBOARD_GRID_KEY_PREFIX = 'sunny_dashboard_grid_v2_';
 const METRICS: GridWidgetId[] = ['total_vehicles','inspections_today','open_issue_count','vehicles_in_use_count','equipment_due_count'];
 const ORDER = Object.keys(GRID_WIDGET_META) as GridWidgetId[];
@@ -76,7 +76,7 @@ export function migrateDashboardLayout(legacy: unknown): DashboardGridState {
     });
     layouts[bp]=normalizeGridLayout(entries,bp);
   }
-  return {version:2,layouts};
+  return {version:2,layouts,hidden:[]};
 }
 export function defaultDashboardGrid(): DashboardGridState {
   return migrateDashboardLayout(null);
@@ -84,7 +84,10 @@ export function defaultDashboardGrid(): DashboardGridState {
 function normalizedState(raw: unknown): DashboardGridState | null {
   if (!raw || typeof raw!=='object' || (raw as any).version!==2 || !(raw as any).layouts || typeof (raw as any).layouts!=='object') return null;
   const layouts=(raw as any).layouts;
-  return {version:2,layouts:{desktop:normalizeGridLayout(layouts.desktop,'desktop'),tablet:normalizeGridLayout(layouts.tablet,'tablet'),phone:normalizeGridLayout(layouts.phone,'phone')}};
+  const hidden = Array.isArray((raw as any).hidden)
+    ? Array.from(new Set<GridWidgetId>((raw as any).hidden.filter((id: unknown): id is GridWidgetId => typeof id === 'string' && id in GRID_WIDGET_META)))
+    : [];
+  return {version:2,layouts:{desktop:normalizeGridLayout(layouts.desktop,'desktop'),tablet:normalizeGridLayout(layouts.tablet,'tablet'),phone:normalizeGridLayout(layouts.phone,'phone')},hidden};
 }
 export function loadDashboardGrid(userId: string): DashboardGridState {
   if (!userId || typeof localStorage==='undefined') return defaultDashboardGrid();
@@ -113,13 +116,8 @@ export function mergeVisibleGridLayout(state: DashboardGridState,bp: GridBreakpo
   const visibleIds=new Set(visible.map(entry=>entry.i));
   const hidden=state.layouts[bp].filter(entry=>!visibleIds.has(entry.i));
   const merged=normalizeGridLayout([...visible,...hidden],bp);
-  return {version:2,layouts:{...state.layouts,[bp]:merged}};
+  return {...state,layouts:{...state.layouts,[bp]:merged}};
 }
-export function moveGridWidget(state: DashboardGridState,bp: GridBreakpoint,id: GridWidgetId,field: 'x'|'y',value: number): DashboardGridState {
-  const current=state.layouts[bp].find(item=>item.i===id);
-  if (!current) return state;
-  const destination={...current,[field]:value};
-  const occupant=state.layouts[bp].find(item=>item.i!==id && intersects(item,destination));
-  const next=state.layouts[bp].map(item=>item.i===id?destination:item.i===occupant?.i?{...item,x:current.x,y:current.y}:item);
-  return {version:2,layouts:{...state.layouts,[bp]:normalizeGridLayout(next,bp)}};
+export function setDashboardWidgetVisibility(state: DashboardGridState,id: GridWidgetId,visible: boolean): DashboardGridState {
+  return {...state,hidden:visible ? state.hidden.filter(item=>item!==id) : Array.from(new Set([...state.hidden,id]))};
 }

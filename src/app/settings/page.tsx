@@ -1061,8 +1061,8 @@ function SettingsPageContent() {
           {isTrueManager && (
             <section className="card card-pad stack">
               <div>
-                <h2 className="card-title">Colorful dashboard</h2>
-                <p className="hint">Show colorful fleet cards on your dashboard in this browser. This affects only your account.</p>
+                <h2 className="card-title">Color palette across the app</h2>
+                <p className="hint">Show your chosen colors on every page in this browser. This affects only your manager account.</p>
               </div>
               <label className="cluster gap-3 cursor-pointer text-sm font-semibold">
                 <input
@@ -1074,7 +1074,7 @@ function SettingsPageContent() {
                     if (currentUser?.id) saveDashboardColor(currentUser.id, enabled);
                   }}
                 />
-                {dashboardColor ? 'Colorful cards on' : 'Standard cards'}
+                {dashboardColor ? 'Color palette on' : 'Standard colors'}
               </label>
             </section>
           )}

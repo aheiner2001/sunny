@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { defaultDashboardGrid, loadDashboardGrid, migrateDashboardLayout, normalizeGridLayout, saveDashboardGrid, resetDashboardGrid, GRID_COLUMNS, mergeVisibleGridLayout, moveGridWidget } from '@/lib/dashboardGridLayout';
+import { defaultDashboardGrid, loadDashboardGrid, migrateDashboardLayout, normalizeGridLayout, saveDashboardGrid, resetDashboardGrid, GRID_COLUMNS, mergeVisibleGridLayout, setDashboardWidgetVisibility } from '@/lib/dashboardGridLayout';
 
 const store = new Map<string, string>();
 beforeEach(() => {
@@ -80,12 +80,25 @@ describe('versioned dashboard layouts', () => {
     expect(loadDashboardGrid('a')).toEqual(defaultDashboardGrid());
     expect(saveDashboardGrid('a',defaultDashboardGrid())).toBe(false);
   });
-  it('moves a card into an occupied cell and shifts the previous occupant', () => {
-    const state=defaultDashboardGrid();
-    const first=state.layouts.desktop[0], second=state.layouts.desktop[1];
-    const moved=moveGridWidget(state,'desktop',second.i,'x',first.x);
-    expect(moved.layouts.desktop.find(w=>w.i===second.i)?.x).toBe(first.x);
-    expect(moved.layouts.desktop.find(w=>w.i===first.i)?.x).toBe(second.x);
-    noOverlaps(moved.layouts.desktop);
+
+  it('hides a section without losing its placement or changing other accounts', () => {
+    const original = defaultDashboardGrid();
+    const position = original.layouts.desktop.find(w => w.i === 'recent_inspections');
+    const hidden = setDashboardWidgetVisibility(original, 'recent_inspections', false);
+    expect(hidden.hidden).toEqual(['recent_inspections']);
+    expect(hidden.layouts.desktop.find(w => w.i === 'recent_inspections')).toEqual(position);
+    expect(saveDashboardGrid('manager-a', hidden)).toBe(true);
+    expect(loadDashboardGrid('manager-a').hidden).toEqual(['recent_inspections']);
+    expect(loadDashboardGrid('manager-b').hidden).toEqual([]);
+    const shown = setDashboardWidgetVisibility(loadDashboardGrid('manager-a'), 'recent_inspections', true);
+    expect(shown.hidden).toEqual([]);
+    expect(shown.layouts.desktop.find(w => w.i === 'recent_inspections')).toEqual(position);
+  });
+
+  it('ignores unknown or duplicate hidden section names from storage', () => {
+    const state = defaultDashboardGrid();
+    store.set('sunny_dashboard_grid_v2_a', JSON.stringify({ ...state, hidden: ['calendar','calendar','unknown',7] }));
+    expect(loadDashboardGrid('a').hidden).toEqual(['calendar']);
+    expect(resetDashboardGrid('a').hidden).toEqual([]);
   });
 });

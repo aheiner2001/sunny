@@ -59,3 +59,9 @@ Use the user's exact five color ramps in the personal colorful dashboard mode: s
 ## Delivery
 
 Publish the reviewed implementation to `preview`, verify its Vercel deployment and both hosting jobs, and provide the preview link. The feature is ready for production review only after interactive drag and resize checks succeed.
+
+## Later manager refinements
+
+The manager's saved color choice now applies the five-ramp palette to the shared app surfaces on every page. It stays scoped to that manager in the current browser; other accounts retain their own settings. A visible dashboard switch mirrors Settings → Appearance. Fleet status colors keep their safety meanings.
+
+Customize layout now shows a named switch for every dashboard section. Turning one off hides the card without deleting its position; turning it back on restores it. The switch list disappears on Done customizing, and reset restores all sections. Card headers retain drag grips, and resizing uses the card edges. The arrow controls and typed width/height controls have been removed; metric values remain visible inside their cards.
