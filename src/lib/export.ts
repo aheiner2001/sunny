@@ -1,4 +1,4 @@
-import { Inspection, Issue } from '@/types';
+import { Inspection, Issue, InspectionAlert } from '@/types';
 
 /**
  * Export inspections as CSV format
@@ -401,4 +401,25 @@ export const printInspection = (inspection: Inspection) => {
 
   printWindow.document.write(html);
   printWindow.document.close();
+};
+
+/** Download the persistent inspection report log, including acknowledged reports. */
+export const exportInspectionAlertsAsCSV = (alerts: InspectionAlert[], filename?: string) => {
+  const header = ['Reported At', 'Inspection', 'Truck', 'Equipment', 'Question', 'Description', 'Reporter', 'Status', 'Reviewed At', 'Reviewed By', 'Manager Notes', 'Issue ID'];
+  const rows = alerts.map(a => [a.reportedAt, a.inspectionKind, a.vehicleNumber, a.equipmentName,
+    a.title, a.description, a.reportedByName, a.status, a.reviewedAt || '', a.reviewedByName || '', a.reviewNotes || '', a.issueId || '']);
+  const cell = (value: string) => {
+    const text = String(value);
+    const safe = /^[=+@-]/.test(text) ? `'${text}` : text;
+    return `"${safe.replace(/"/g, '""')}"`;
+  };
+  const csv = '\uFEFF' + [header, ...rows].map(row => row.map(cell).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename || `inspection-reports-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 };

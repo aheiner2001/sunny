@@ -523,6 +523,7 @@ export default function InspectClient() {
         const quantities = issueData.description.match(/\d+(?:\.\d+)?/g)?.map(Number) || [];
         const linked = linkedByQuestion.get(qId) || null;
         return {
+          questionId: qId,
           equipmentId: linked?.equipmentId || question?.equipmentId || null,
           equipmentName:
             linked?.equipmentName ||
@@ -712,7 +713,7 @@ export default function InspectClient() {
             <div className="flex justify-between">
               <span className="text-ink-muted">Overall Result:</span>
               <span className={`font-bold ${isPassed ? 'text-emerald-600' : 'text-amber-600'}`}>
-                {isPassed ? 'PASSED — All Green' : `ISSUES FOUND (${submittedInspection.newIssues.length} Flagged)`}
+                {isPassed ? 'PASSED — All Green' : `FLAGS SENT FOR REVIEW (${submittedInspection.inspection.responses.filter((r: InspectionResponse) => r.isFlagged).length})`}
               </span>
             </div>
           </div>

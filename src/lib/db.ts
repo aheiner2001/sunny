@@ -10,6 +10,7 @@ import {
   Issue, 
   IssueStatusLog,
   InspectionResponse,
+  InspectionAlert,
   IssueStatus,
   IssueType,
   User,
@@ -86,6 +87,7 @@ const STORAGE_KEYS = {
   CHECKLIST_CONFIG: 'sunny_checklist_config',
   INSPECTIONS: 'sunny_inspections',
   ISSUES: 'sunny_issues',
+  ALERTS: 'sunny_inspection_alerts',
   SEEDED: 'sunny_seeded_v2',
   FIREBASE_SYNCED: 'sunny_firebase_synced',
   EQUIPMENT_OPTIONS: 'sunny_equipment_options',
@@ -325,6 +327,15 @@ class DataStore {
         console.warn('Firestore issues listener (using local cache):', err.message);
       });
 
+      onSnapshot(collection(db, 'inspectionAlerts'), (snapshot) => {
+        if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
+          const alerts: InspectionAlert[] = [];
+          snapshot.forEach(d => alerts.push(d.data() as InspectionAlert));
+          localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(alerts));
+          window.dispatchEvent(new Event('sunny_db_update'));
+        }
+      }, err => console.warn('Firestore inspection alerts listener:', err.message));
+
       // Listen to Inspections collection
       onSnapshot(collection(db, 'inspections'), (snapshot) => {
         if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
@@ -506,6 +517,10 @@ class DataStore {
       });
 
       // Seed Issues
+      this.getInspectionAlerts().forEach(alert => {
+        batch.set(doc(db, 'inspectionAlerts', alert.id), sanitizeForFirestore(alert));
+      });
+
       this.getIssues().forEach((iss) => {
         const ref = doc(db, 'issues', iss.id);
         batch.set(ref, sanitizeForFirestore(iss));
@@ -569,6 +584,7 @@ class DataStore {
 
     this.storeInspections(INITIAL_INSPECTIONS);
     localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(INITIAL_ISSUES));
+    localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.VEHICLE_DAY_LOGS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.VEHICLE_DAMAGE, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.VEHICLE_ASSIGNMENTS, JSON.stringify([]));
@@ -608,6 +624,7 @@ class DataStore {
     this.storeInspections([]);
     localStorage.setItem(STORAGE_KEYS.VEHICLE_ASSIGNMENTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.SEEDED, 'true');
     window.dispatchEvent(new Event('sunny_db_update'));
   }
@@ -2826,6 +2843,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     submittedByName?: string;
     responses: InspectionResponse[];
     flaggedIssues: Array<{
+      questionId?: string;
       equipmentId?: string | null;
       equipmentName: string;
       title: string;
@@ -2861,63 +2879,24 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     const now = new Date();
     const nowIso = now.toISOString();
     const dateStr = nowIso.split('T')[0];
-    const inspectionId = `insp-${Date.now()}`;
+    const inspectionId = `insp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+    const alerts: InspectionAlert[] = data.flaggedIssues.map((flag, idx) => ({
+      id: `alert-${inspectionId}-${idx}`,
+      inspectionId, inspectionKind: 'pretrip', questionId: flag.questionId || `flag-${idx}`,
+      vehicleId: vehicle.id, vehicleNumber: vehicle.vehicleNumber,
+      equipmentId: flag.equipmentId || null, equipmentName: flag.equipmentName || 'Vehicle Equipment',
+      title: flag.title || 'Flagged Inspection Item', description: flag.description || '',
+      photoUrl: flag.photoUrl || null,
+      reportedById: data.submittedById || data.userId || 'anon',
+      reportedByName: data.submittedByName || data.userName || 'Inspector',
+      reportedAt: nowIso, status: 'pending', questionType: flag.questionType || null,
+      value: flag.value || null, reportedQuantity: flag.reportedQuantity ?? null,
+      requiredQuantity: flag.requiredQuantity ?? null,
+    }));
     const newIssues: Issue[] = [];
     const issueIds: string[] = [];
-
-    // Create Issues for each flagged item
-    data.flaggedIssues.forEach((flag, idx) => {
-      const issueId = `issue-${Date.now()}-${idx}`;
-      issueIds.push(issueId);
-
-      const initialLog: IssueStatusLog = {
-        id: `log-${Date.now()}-${idx}`,
-        issueId,
-        changedById: data.submittedById || data.userId || 'anon',
-        changedByName: data.submittedByName || data.userName || 'Inspector',
-        oldStatus: 'created',
-        newStatus: 'open',
-        notes: `Flagged during inspection on ${vehicle.vehicleNumber}: ${flag.description}`,
-        timestamp: nowIso
-      };
-
-      const newIssue: Issue = {
-        id: issueId,
-        vehicleId: vehicle.id,
-        vehicleNumber: vehicle.vehicleNumber,
-        equipmentId: flag.equipmentId || null,
-        equipmentName: flag.equipmentName || 'Vehicle Equipment',
-        reportedById: data.submittedById || data.userId || 'anon',
-        reportedByName: data.submittedByName || data.userName || 'Inspector',
-        reportedAt: nowIso,
-        dateString: dateStr,
-        inspectionId,
-        title: flag.title || 'Flagged Inspection Item',
-        description: flag.description || '',
-        type: classifyIssueType({
-          title: flag.title,
-          description: flag.description,
-          questionType: flag.questionType,
-          value: flag.value,
-        }),
-        priority: flag.priority || 'moderate',
-        photoUrl: flag.photoUrl || null,
-        reportedQuantity: flag.reportedQuantity ?? null,
-        requiredQuantity: flag.requiredQuantity ?? null,
-        status: 'open',
-        resolvedAt: null,
-        resolvedById: null,
-        resolvedByName: null,
-        resolutionNotes: null,
-        statusLogs: [initialLog]
-      };
-
-      newIssues.push(newIssue);
-
-    });
-
-    const status: Inspection['status'] = newIssues.length > 0 ? 'issues_found' : 'passed';
+    const status: Inspection['status'] = alerts.length > 0 ? 'issues_found' : 'passed';
 
     // Ensure responses are fully sanitized with no undefined values
     const cleanResponses: InspectionResponse[] = (data.responses || []).map(r => ({
@@ -2942,6 +2921,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       submittedById: data.submittedById || data.userId,
       submittedByName: data.submittedByName || data.userName,
       status,
+      kind: 'pretrip',
       startedAt: new Date(now.getTime() - 8 * 60 * 1000).toISOString(),
       submittedAt: nowIso,
       dateString: dateStr,
@@ -2983,7 +2963,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       await ensureAuth();
       const batch = writeBatch(db);
       batch.set(doc(db, 'inspections', inspectionId), sanitizeForFirestore(newInspection));
-      for (const issue of newIssues) batch.set(doc(db, 'issues', issue.id), sanitizeForFirestore(issue));
+      for (const alert of alerts) batch.set(doc(db, 'inspectionAlerts', alert.id), sanitizeForFirestore(alert));
       batch.set(doc(db, 'vehicles', vehicle.id), sanitizeForFirestore(updatedVehicle), { merge: true });
       if (transition) {
         for (const item of transition.vehicles) {
@@ -3015,14 +2995,8 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     const allInspections = [newInspection, ...this.getInspections().filter(item => item.id !== inspectionId)];
     saveLocally(() => this.storeInspections(allInspections));
 
-    // Save Issues locally
-    if (newIssues.length > 0) {
-      const allIssues = [...newIssues, ...this.getIssues()];
-      saveLocally(() => localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(allIssues)));
-    }
-
-    for (const issue of newIssues) {
-      if (issue.equipmentId) saveLocally(() => this.updateEquipmentStatus(issue.equipmentId!, 'flagged', issue.id));
+    if (alerts.length > 0) {
+      saveLocally(() => localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify([...alerts, ...this.getInspectionAlerts()])));
     }
 
     if (transition) saveLocally(() => localStorage.setItem(STORAGE_KEYS.VEHICLE_ASSIGNMENTS, JSON.stringify(transition.assignments)));
@@ -3077,8 +3051,16 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     for (const item of offline) {
       try {
         if (db) {
-          await setDoc(doc(db, 'inspections', item.id), sanitizeForFirestore(item), { merge: true });
+          const batch = writeBatch(db);
+          batch.set(doc(db, 'inspections', item.id), sanitizeForFirestore(item), { merge: true });
+          item.responses.filter(r => r.isFlagged).forEach((r, idx) => {
+            const alert = this.alertFromOfflineResponse(item, r, idx);
+            batch.set(doc(db, 'inspectionAlerts', alert.id), sanitizeForFirestore(alert));
+          });
+          await batch.commit();
         }
+        const newAlerts = item.responses.filter(r => r.isFlagged).map((r, idx) => this.alertFromOfflineResponse(item, r, idx));
+        if (newAlerts.length) localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify([...newAlerts, ...this.getInspectionAlerts().filter(a => !newAlerts.some(n => n.id === a.id))]));
         syncedCount++;
       } catch (e) {
         console.warn('Sync offline inspection failed:', e);
@@ -3150,61 +3132,20 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     const now = new Date();
     const nowIso = now.toISOString();
     const dateStr = nowIso.split('T')[0];
-    const newInspectionId = `insp-${Date.now()}-resubmit`;
+    const newInspectionId = `insp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-resubmit`;
 
-    // Identify flagged items in updated responses
+    const alerts: InspectionAlert[] = updatedResponses.filter(r => r.isFlagged).map((response, idx) => ({
+      id: `alert-${newInspectionId}-${idx}`,
+      inspectionId: newInspectionId, inspectionKind: 'pretrip', questionId: response.questionId,
+      vehicleId: original.vehicleId, vehicleNumber: original.vehicleNumber,
+      equipmentId: response.equipmentId || null, equipmentName: response.equipmentName || 'Vehicle Equipment',
+      title: response.questionText, description: response.notes || '', photoUrl: response.photoUrl || null,
+      reportedById: original.userId, reportedByName: original.userName,
+      reportedAt: nowIso, status: 'pending',
+    }));
     const newIssues: Issue[] = [];
     const issueIds: string[] = [];
-
-    updatedResponses.forEach((response, idx) => {
-      if (response.isFlagged) {
-        const issueId = `issue-${Date.now()}-${idx}`;
-        issueIds.push(issueId);
-
-        const initialLog: IssueStatusLog = {
-          id: `log-${Date.now()}-${idx}`,
-          issueId,
-          changedById: original.userId || 'anon',
-          changedByName: original.userName || 'Inspector',
-          oldStatus: 'created',
-          newStatus: 'open',
-          notes: `Flagged in resubmission of inspection ${original.id}`,
-          timestamp: nowIso
-        };
-
-        const newIssue: Issue = {
-          id: issueId,
-          vehicleId: original.vehicleId,
-          vehicleNumber: original.vehicleNumber,
-          equipmentId: response.equipmentId || null,
-          equipmentName: response.equipmentName || 'Vehicle Equipment',
-          reportedById: original.userId || 'anon',
-          reportedByName: original.userName || 'Inspector',
-          reportedAt: nowIso,
-          dateString: dateStr,
-          inspectionId: newInspectionId,
-          title: response.questionText,
-          description: response.notes || '',
-          type: 'needs_repair',
-          status: 'open',
-          resolvedAt: null,
-          resolvedById: null,
-          resolvedByName: null,
-          resolutionNotes: null,
-          statusLogs: [initialLog]
-        };
-
-        newIssues.push(newIssue);
-
-        if (db) {
-          setDoc(doc(db, 'issues', issueId), sanitizeForFirestore(newIssue)).catch((e) =>
-            console.warn('Firestore issue write error:', e)
-          );
-        }
-      }
-    });
-
-    const status: Inspection['status'] = newIssues.length > 0 ? 'issues_found' : 'passed';
+    const status: Inspection['status'] = alerts.length > 0 ? 'issues_found' : 'passed';
 
     const cleanResponses: InspectionResponse[] = updatedResponses.map(r => ({
       questionId: r.questionId || '',
@@ -3214,7 +3155,8 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       isFlagged: Boolean(r.isFlagged),
       notes: r.notes || null as any,
       equipmentId: r.equipmentId || null as any,
-      equipmentName: r.equipmentName || null as any
+      equipmentName: r.equipmentName || null as any,
+      photoUrl: r.photoUrl || null as any
     }));
 
     const resubmittedInspection: Inspection = {
@@ -3225,6 +3167,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       userName: original.userName,
       userEmail: original.userEmail,
       status,
+      kind: 'pretrip',
       startedAt: original.startedAt,
       submittedAt: nowIso,
       dateString: dateStr,
@@ -3237,21 +3180,16 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       previousSubmissionId: originalInspectionId
     };
 
-    // Save new inspection locally
-    const allInspections = [resubmittedInspection, ...this.getInspections()];
-    this.storeInspections(allInspections);
-
-    // Save new issues locally
-    if (newIssues.length > 0) {
-      const allIssues = [...newIssues, ...this.getIssues()];
-      localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(allIssues));
-    }
-
-    // Sync to Firestore
     if (db) {
-      setDoc(doc(db, 'inspections', newInspectionId), sanitizeForFirestore(resubmittedInspection)).catch((e) =>
-        console.warn('Firestore inspection write error:', e)
-      );
+      await ensureAuth();
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'inspections', newInspectionId), sanitizeForFirestore(resubmittedInspection));
+      for (const alert of alerts) batch.set(doc(db, 'inspectionAlerts', alert.id), sanitizeForFirestore(alert));
+      await batch.commit();
+    }
+    this.storeInspections([resubmittedInspection, ...this.getInspections()]);
+    if (alerts.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify([...alerts, ...this.getInspectionAlerts()]));
     }
 
     window.dispatchEvent(new Event('sunny_db_update'));
@@ -3347,7 +3285,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     await this.deleteInspection(inspectionId);
   }
 
-  public submitReturnInspection(data: {
+  public async submitReturnInspection(data: {
     vehicleId: string;
     userId: string;
     userName: string;
@@ -3356,7 +3294,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     generalNotes?: string | null;
     photoUrls?: string[] | null;
     missedReturnId?: string | null;
-  }): { inspection: Inspection } {
+  }): Promise<{ inspection: Inspection }> {
     if (!this.isClient()) throw new Error('Client only');
     this.init();
     const vehicle = this.getVehicle(data.vehicleId);
@@ -3365,7 +3303,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     const now = new Date();
     const nowIso = now.toISOString();
     const dateStr = localDateString(now);
-    const inspectionId = `return-${Date.now()}`;
+    const inspectionId = `return-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     const cleanResponses: InspectionResponse[] = (data.responses || []).map(r => ({
       questionId: r.questionId || '',
@@ -3379,6 +3317,16 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       photoUrl: r.photoUrl || (null as any),
     }));
 
+    const alerts: InspectionAlert[] = cleanResponses.filter(r => r.isFlagged).map((response, idx) => ({
+      id: `alert-${inspectionId}-${idx}`,
+      inspectionId, inspectionKind: 'return', questionId: response.questionId,
+      vehicleId: vehicle.id, vehicleNumber: vehicle.vehicleNumber,
+      equipmentId: response.equipmentId || null, equipmentName: response.equipmentName || response.category || 'Vehicle',
+      title: response.questionText, description: response.notes || '', photoUrl: response.photoUrl || null,
+      reportedById: data.userId || 'anon', reportedByName: data.userName || 'Driver',
+      reportedAt: nowIso, status: 'pending', value: response.value || null,
+    }));
+
     const newInspection: Inspection = {
       id: inspectionId,
       vehicleId: vehicle.id,
@@ -3386,7 +3334,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       userId: data.userId || 'anon',
       userName: data.userName || 'Driver',
       userEmail: data.userEmail || '',
-      status: 'passed',
+      status: alerts.length > 0 ? 'issues_found' : 'passed',
       kind: 'return',
       startedAt: nowIso,
       submittedAt: nowIso,
@@ -3397,24 +3345,96 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       photoUrls: data.photoUrls || (null as any),
     };
 
-    const allInspections = [newInspection, ...this.getInspections()];
-    this.storeInspections(allInspections);
-
-    // checkInVehicle updates local occupancy and closes the interval before its first await.
-    void this.checkInVehicle(vehicle.id);
-
-    if (data.missedReturnId) {
-      void this.completeMissedReturn(data.missedReturnId, inspectionId);
-    }
-
     if (db) {
-      setDoc(doc(db, 'inspections', inspectionId), sanitizeForFirestore(newInspection)).catch((e) =>
-        console.warn('Firestore return inspection write error:', e)
-      );
+      await ensureAuth();
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'inspections', inspectionId), sanitizeForFirestore(newInspection));
+      for (const alert of alerts) batch.set(doc(db, 'inspectionAlerts', alert.id), sanitizeForFirestore(alert));
+      await batch.commit();
     }
+    this.storeInspections([newInspection, ...this.getInspections()]);
+    if (alerts.length > 0) localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify([...alerts, ...this.getInspectionAlerts()]));
+    await this.checkInVehicle(vehicle.id);
+    if (data.missedReturnId) await this.completeMissedReturn(data.missedReturnId, inspectionId);
 
     window.dispatchEvent(new Event('sunny_db_update'));
     return { inspection: newInspection };
+  }
+
+  private alertFromOfflineResponse(item: Inspection, response: InspectionResponse, index: number): InspectionAlert {
+    return {
+      id: `alert-${item.id}-${index}`, inspectionId: item.id, inspectionKind: item.kind || 'pretrip',
+      questionId: response.questionId, vehicleId: item.vehicleId, vehicleNumber: item.vehicleNumber,
+      equipmentId: response.equipmentId || null, equipmentName: response.equipmentName || response.category || 'Vehicle',
+      title: response.questionText, description: response.notes || '', photoUrl: response.photoUrl || null,
+      reportedById: item.submittedById || item.userId, reportedByName: item.submittedByName || item.userName,
+      reportedAt: item.submittedAt, status: 'pending', value: response.value || null,
+    };
+  }
+
+  public getInspectionAlerts(): InspectionAlert[] {
+    if (!this.isClient()) return [];
+    this.init();
+    const raw = localStorage.getItem(STORAGE_KEYS.ALERTS);
+    return raw ? JSON.parse(raw) : [];
+  }
+
+  public async reviewInspectionAlert(
+    alertId: string,
+    action: 'acknowledged' | 'converted',
+    reviewer: { id: string; name: string },
+    notes = ''
+  ): Promise<InspectionAlert> {
+    const manager = this.getUsers().find(u => u.id === reviewer.id && u.status === 'active');
+    if (!manager || this.getEffectiveRole(manager) !== 'manager') throw new Error('Manager access required.');
+    const alerts = this.getInspectionAlerts();
+    const alert = alerts.find(a => a.id === alertId);
+    if (!alert || alert.status !== 'pending') throw new Error('This report has already been reviewed.');
+    const now = new Date().toISOString();
+    const trimmed = notes.trim();
+    const issueId = action === 'converted' ? `issue-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` : null;
+    const issue: Issue | null = issueId ? {
+      id: issueId, vehicleId: alert.vehicleId, vehicleNumber: alert.vehicleNumber,
+      equipmentId: alert.equipmentId || null, equipmentName: alert.equipmentName,
+      reportedById: alert.reportedById, reportedByName: alert.reportedByName,
+      reportedAt: alert.reportedAt, dateString: localDateString(new Date(alert.reportedAt)),
+      inspectionId: alert.inspectionId, title: alert.title,
+      description: [alert.description, trimmed].filter(Boolean).join('\nManager notes: '),
+      photoUrl: alert.photoUrl || null,
+      type: classifyIssueType({ title: alert.title, description: alert.description, questionType: alert.questionType || '', value: String(alert.value ?? '') }),
+      reportedQuantity: alert.reportedQuantity ?? null, requiredQuantity: alert.requiredQuantity ?? null,
+      status: 'open', statusLogs: [{
+        id: `log-${issueId}`, issueId, changedById: reviewer.id, changedByName: reviewer.name,
+        oldStatus: 'created', newStatus: 'open', notes: trimmed || 'Promoted from inspection report', timestamp: now,
+      }],
+    } : null;
+    const reviewed: InspectionAlert = {
+      ...alert, status: action, reviewedAt: now, reviewedById: reviewer.id,
+      reviewedByName: reviewer.name, reviewNotes: trimmed || null, issueId,
+    };
+    const inspection = issue ? this.getInspections().find(i => i.id === alert.inspectionId) : null;
+    const updatedInspection = inspection && issue ? { ...inspection, issueIds: [...(inspection.issueIds || []), issue.id] } : null;
+    if (db) {
+      await ensureAuth();
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'inspectionAlerts', reviewed.id), sanitizeForFirestore(reviewed));
+      if (issue) batch.set(doc(db, 'issues', issue.id), sanitizeForFirestore(issue));
+      if (updatedInspection) batch.set(doc(db, 'inspections', inspection!.id), sanitizeForFirestore(updatedInspection));
+      await batch.commit();
+    }
+    localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(alerts.map(a => a.id === alertId ? reviewed : a)));
+    if (issue) {
+      localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify([issue, ...this.getIssues()]));
+      if (updatedInspection) this.storeInspections(this.getInspections().map(i => i.id === updatedInspection.id ? updatedInspection : i));
+      if (issue.equipmentId) {
+        const equipment = this.getEquipmentItem(issue.equipmentId);
+        if (equipment && (!equipment.activeIssueId || !this.getIssues().some(i => i.id === equipment.activeIssueId && i.status !== 'fixed'))) {
+          await this.updateEquipmentStatus(issue.equipmentId, 'flagged', issue.id);
+        }
+      }
+    }
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return reviewed;
   }
 
   // ==========================================

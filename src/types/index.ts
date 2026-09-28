@@ -328,6 +328,33 @@ export interface ReportSettings {
   updatedAt?: string;
 }
 
+export interface InspectionAlert {
+  id: string;
+  inspectionId: string;
+  inspectionKind: InspectionKind;
+  questionId: string;
+  vehicleId: string;
+  vehicleNumber: string;
+  equipmentId?: string | null;
+  equipmentName: string;
+  title: string;
+  description: string;
+  photoUrl?: string | null;
+  reportedById: string;
+  reportedByName: string;
+  reportedAt: string;
+  status: 'pending' | 'acknowledged' | 'converted';
+  reviewedAt?: string | null;
+  reviewedById?: string | null;
+  reviewedByName?: string | null;
+  reviewNotes?: string | null;
+  issueId?: string | null;
+  questionType?: string | null;
+  value?: string | boolean | null;
+  reportedQuantity?: number | null;
+  requiredQuantity?: number | null;
+}
+
 export type IssueStatus = 'open' | 'needs_repair' | 'being_repaired' | 'fixed';
 export type IssuePriority = 'critical' | 'moderate' | 'low';
 

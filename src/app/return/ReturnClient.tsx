@@ -185,9 +185,11 @@ export default function ReturnClient() {
           isFlagged: Boolean(resp?.isFlagged),
           notes: resp?.notes,
           photoUrl: resp?.photoUrl,
+          equipmentId: q.equipmentId,
+          equipmentName: q.equipmentName,
         };
       });
-      dbService.submitReturnInspection({
+      await dbService.submitReturnInspection({
         vehicleId: vehicle.id,
         userId: user.id,
         userName: user.name,
