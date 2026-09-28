@@ -32,7 +32,7 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
   const currentAvatarUrl = getResolvedAvatarUrl(user);
 
   useEffect(() => {
-    const loadNotifications = () => setIssues(dbService.getIssues().filter(issue => issue.status !== 'fixed'));
+    const loadNotifications = () => setIssues(dbService.getIssues().filter(issue => issue.status !== 'fixed' && !issue.pendingReviewAt));
     loadNotifications();
     window.addEventListener('sunny_db_update', loadNotifications);
     function handleClickOutside(e: MouseEvent) {

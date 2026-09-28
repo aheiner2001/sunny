@@ -44,13 +44,19 @@ function PendingContent() {
     {error && <p role="alert" className="text-red-700 text-sm">{error}</p>}
     {shown.length === 0 && <div className="card card-pad text-sm text-ink-muted">{tab === 'pending' ? 'No reports waiting for review.' : 'No reviewed reports yet.'}</div>}
     <div className="space-y-3">{shown.map(alert => {
+      const original = alert.sourceIssueId ? dbService.getIssue(alert.sourceIssueId) : null;
       const related = dbService.getOpenIssues().filter(issue => issue.vehicleId === alert.vehicleId &&
         (alert.equipmentId ? issue.equipmentId === alert.equipmentId : issue.equipmentName === alert.equipmentName));
       return <article className="card card-pad space-y-3" key={alert.id} data-status={alert.status === 'pending' ? 'flagged' : 'ok'}>
         <div className="flex flex-wrap justify-between gap-2"><div><h2 className="font-bold text-ink">{alert.title}</h2>
-          <p className="text-sm text-ink-muted">Truck {alert.vehicleNumber} · {alert.equipmentName} · {alert.inspectionKind === 'return' ? 'Return' : 'Pretrip'}</p></div>
+          <p className="text-sm text-ink-muted">Truck {alert.vehicleNumber} · {alert.equipmentName} · {alert.sourceIssueId ? 'Existing issue' : alert.inspectionKind === 'return' ? 'Return' : 'Pretrip'}</p></div>
           <span className="text-xs text-ink-muted">{new Date(alert.reportedAt).toLocaleString()}</span></div>
         <p className="text-sm">Reported by {alert.reportedByName}{alert.description ? `: ${alert.description}` : ''}</p>
+        {original && <details className="text-xs text-ink-muted">
+          <summary className="cursor-pointer font-semibold">Original issue and repair history</summary>
+          <p className="mt-2">Original status: {original.status.replace('_', ' ')} · Priority: {original.priority || 'moderate'}{original.priority === 'critical' ? ' · Safety warning remains until reviewed' : ''}</p>
+          <ul className="mt-2 space-y-1">{(original.statusLogs || []).map(log => <li key={log.id}>{new Date(log.timestamp).toLocaleString()} · {log.changedByName}: {log.notes}</li>)}</ul>
+        </details>}
         {alert.photoUrl && <a href={alert.photoUrl} target="_blank" rel="noreferrer" className="text-sm underline">View photo</a>}
         {related.length > 0 && <p className="text-xs text-amber-700">{related.length} open issue{related.length === 1 ? '' : 's'} for this truck and equipment. <Link className="underline" href={`/issues?issue=${encodeURIComponent(related[0].id)}`}>View existing issue</Link></p>}
         {alert.status === 'pending' ? <div className="space-y-2">

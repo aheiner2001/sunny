@@ -63,6 +63,7 @@ function IssuesPageContent() {
   // 7.4 Batch Selection State
   const [selectedIssueIds, setSelectedIssueIds] = useState<string[]>([]);
   const [showBatchResolveModal, setShowBatchResolveModal] = useState(false);
+  const [showMoveModal, setShowMoveModal] = useState(false);
   const [batchNotes, setBatchNotes] = useState('');
   const [batchRepairCost, setBatchRepairCost] = useState('');
   const [batchPartNumber, setBatchPartNumber] = useState('');
@@ -99,8 +100,8 @@ function IssuesPageContent() {
     name: user?.name || 'Manager',
   };
 
-  const openIssuesCount = issues.filter(i => i.status !== 'fixed').length;
-  const criticalIssuesCount = issues.filter(i => i.status !== 'fixed' && i.priority === 'critical').length;
+  const openIssuesCount = issues.filter(i => i.status !== 'fixed' && !i.pendingReviewAt).length;
+  const criticalIssuesCount = issues.filter(i => i.status !== 'fixed' && !i.pendingReviewAt && i.priority === 'critical').length;
 
   const handleTypeChange = (issue: Issue, type: IssueType) => {
     try {
@@ -207,6 +208,22 @@ function IssuesPageContent() {
     }
   };
 
+  const handleMoveToPending = async () => {
+    setIsBatchSubmitting(true);
+    try {
+      const moved = await dbService.moveIssuesToPending(selectedIssueIds, managerIdentity);
+      setSelectedIssueIds([]);
+      setShowMoveModal(false);
+      loadData();
+      alert(`${moved} issue${moved === 1 ? '' : 's'} moved to Pending.`);
+    } catch (error) {
+      loadData();
+      alert(error instanceof Error ? error.message : 'Could not move the selected issues.');
+    } finally {
+      setIsBatchSubmitting(false);
+    }
+  };
+
   const toggleSelectIssue = (issueId: string) => {
     setSelectedIssueIds(prev =>
       prev.includes(issueId) ? prev.filter(id => id !== issueId) : [...prev, issueId]
@@ -215,7 +232,7 @@ function IssuesPageContent() {
 
   const activeIssues = (statusFilter === 'fixed'
     ? issues.filter(iss => iss.status === 'fixed')
-    : issues.filter(iss => iss.status !== 'fixed')
+    : issues.filter(iss => iss.status !== 'fixed' && !iss.pendingReviewAt)
   );
 
   const filteredIssues = activeIssues.filter(iss => {
@@ -556,6 +573,17 @@ function IssuesPageContent() {
         )}
       </div>
 
+      {showMoveModal && <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="move-title">
+        <div className="card card-pad max-w-md w-full space-y-4">
+          <h2 id="move-title" className="text-lg font-bold">Move {selectedIssueIds.length} issues to Pending?</h2>
+          <p className="text-sm text-ink-muted">They will leave the active Issues list. Their notes and repair history stay saved. A manager can acknowledge each one or restore it to active Issues.</p>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn btn-secondary" disabled={isBatchSubmitting} onClick={() => setShowMoveModal(false)}>Cancel</button>
+            <button type="button" className="btn btn-primary" disabled={isBatchSubmitting} onClick={() => void handleMoveToPending()}>{isBatchSubmitting ? 'Moving…' : 'Move to Pending'}</button>
+          </div>
+        </div>
+      </div>}
+
       {/* 7.4 Sticky Batch Action Bottom Bar */}
       {selectedIssueIds.length > 0 && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-ink text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-4 border border-line-strong animate-in fade-in slide-in-from-bottom-3 duration-200">
@@ -570,6 +598,10 @@ function IssuesPageContent() {
             >
               <CheckCheck className="w-3.5 h-3.5" />
               <span>Resolve Selected</span>
+            </button>
+            <button type="button" onClick={() => setShowMoveModal(true)}
+              className="px-3.5 py-1.5 rounded-xl bg-white text-ink text-xs font-extrabold hover:bg-surface-sunk">
+              Move to Pending
             </button>
             <button
               type="button"

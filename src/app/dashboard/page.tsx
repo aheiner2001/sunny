@@ -106,8 +106,8 @@ export default function DashboardPage() {
   const todayInspections = inspections.filter(i => i.dateString === todayString);
   const todayIssues = filterTodaysIssues(issues, todayString);
   const todayInspectionsCount = todayInspections.length;
-  const openIssuesCount = issues.filter(i => i.status !== 'fixed').length;
-  const openIssues = issues.filter(i => i.status !== 'fixed');
+  const openIssuesCount = issues.filter(i => i.status !== 'fixed' && !i.pendingReviewAt).length;
+  const openIssues = issues.filter(i => i.status !== 'fixed' && !i.pendingReviewAt);
   const vehiclesInUse = vehicles.filter(v => v.status === 'in_use');
   const dueForReviewEquipment = equipment.filter(e => e.lifespanEnabled && !e.retiredAt && e.lifespanStatus === 'due_for_review');
   const pendingInspectionDeletes = inspections
@@ -116,7 +116,7 @@ export default function DashboardPage() {
 
   // 1.2 Urgent Vehicle Safety Flag
   const urgentSafetyVehicles = vehiclesInUse.filter(
-    v => v.lastInspectionStatus === 'issues_found' || openIssues.some(i => i.vehicleId === v.id && i.priority === 'critical')
+    v => v.lastInspectionStatus === 'issues_found' || issues.some(i => i.vehicleId === v.id && i.status !== 'fixed' && i.priority === 'critical')
   );
 
   const inspectionStatusFor = (status: Inspection['status'] | null | undefined) =>

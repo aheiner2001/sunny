@@ -3379,6 +3379,66 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     return raw ? JSON.parse(raw) : [];
   }
 
+  public async moveIssuesToPending(
+    issueIds: string[],
+    reviewer: { id: string; name: string }
+  ): Promise<number> {
+    const manager = this.getUsers().find(u => u.id === reviewer.id && u.status === 'active');
+    if (!manager || this.getEffectiveRole(manager) !== 'manager') throw new Error('Manager access required.');
+    const unique = Array.from(new Set(issueIds));
+    if (unique.length === 0) return 0;
+    const issues = this.getIssues();
+    const selected = unique.map(id => issues.find(i => i.id === id));
+    if (selected.some(i => !i || i.status === 'fixed' || i.pendingReviewAt)) {
+      throw new Error('Selection contains an issue that is resolved or already pending. Refresh and try again.');
+    }
+    const now = new Date().toISOString();
+    let moved = 0;
+    // Each chunk uses issue, alert, and optional equipment writes per issue, below Firestore's batch limit.
+    for (let offset = 0; offset < selected.length; offset += 100) {
+      const group = selected.slice(offset, offset + 100) as Issue[];
+      const updated = group.map(issue => ({
+        ...issue, pendingReviewAt: now,
+        statusLogs: [...(issue.statusLogs || []), {
+          id: `log-pending-${issue.id}-${Date.now()}`, issueId: issue.id,
+          changedById: reviewer.id, changedByName: reviewer.name,
+          oldStatus: issue.status, newStatus: issue.status,
+          notes: 'Moved to pending review', timestamp: now,
+        } satisfies IssueStatusLog],
+      }));
+      const equipmentToUnlink = this.getEquipment().filter(eq => group.some(issue => eq.id === issue.equipmentId && eq.activeIssueId === issue.id))
+        .map(eq => ({ ...eq, activeIssueId: null, updatedAt: now }));
+      const alerts: InspectionAlert[] = group.map((issue, idx) => ({
+        id: `alert-moved-${issue.id}-${Date.now()}-${idx}`,
+        inspectionId: issue.inspectionId || '', inspectionKind: 'pretrip', questionId: '',
+        sourceIssueId: issue.id, vehicleId: issue.vehicleId, vehicleNumber: issue.vehicleNumber,
+        equipmentId: issue.equipmentId || null, equipmentName: issue.equipmentName,
+        title: issue.title, description: issue.description, photoUrl: issue.photoUrl || null,
+        reportedById: issue.reportedById, reportedByName: issue.reportedByName,
+        reportedAt: issue.reportedAt, status: 'pending',
+        reportedQuantity: issue.reportedQuantity ?? null, requiredQuantity: issue.requiredQuantity ?? null,
+      }));
+      if (db) {
+        await ensureAuth();
+        const batch = writeBatch(db);
+        updated.forEach(issue => batch.set(doc(db, 'issues', issue.id), sanitizeForFirestore(issue)));
+        alerts.forEach(alert => batch.set(doc(db, 'inspectionAlerts', alert.id), sanitizeForFirestore(alert)));
+        equipmentToUnlink.forEach(eq => batch.set(doc(db, 'equipment', eq.id), sanitizeForFirestore(eq)));
+        await batch.commit();
+      }
+      const replacements = new Map(updated.map(issue => [issue.id, issue]));
+      localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify(this.getIssues().map(issue => replacements.get(issue.id) || issue)));
+      localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify([...alerts, ...this.getInspectionAlerts()]));
+      if (equipmentToUnlink.length) {
+        const replacements = new Map(equipmentToUnlink.map(eq => [eq.id, eq]));
+        localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(this.getEquipment().map(eq => replacements.get(eq.id) || eq)));
+      }
+      moved += group.length;
+      window.dispatchEvent(new Event('sunny_db_update'));
+    }
+    return moved;
+  }
+
   public async reviewInspectionAlert(
     alertId: string,
     action: 'acknowledged' | 'converted',
@@ -3392,27 +3452,44 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     if (!alert || alert.status !== 'pending') throw new Error('This report has already been reviewed.');
     const now = new Date().toISOString();
     const trimmed = notes.trim();
-    const issueId = action === 'converted' ? `issue-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` : null;
-    const issue: Issue | null = issueId ? {
-      id: issueId, vehicleId: alert.vehicleId, vehicleNumber: alert.vehicleNumber,
-      equipmentId: alert.equipmentId || null, equipmentName: alert.equipmentName,
-      reportedById: alert.reportedById, reportedByName: alert.reportedByName,
-      reportedAt: alert.reportedAt, dateString: localDateString(new Date(alert.reportedAt)),
-      inspectionId: alert.inspectionId, title: alert.title,
-      description: [alert.description, trimmed].filter(Boolean).join('\nManager notes: '),
-      photoUrl: alert.photoUrl || null,
-      type: classifyIssueType({ title: alert.title, description: alert.description, questionType: alert.questionType || '', value: String(alert.value ?? '') }),
-      reportedQuantity: alert.reportedQuantity ?? null, requiredQuantity: alert.requiredQuantity ?? null,
-      status: 'open', statusLogs: [{
-        id: `log-${issueId}`, issueId, changedById: reviewer.id, changedByName: reviewer.name,
-        oldStatus: 'created', newStatus: 'open', notes: trimmed || 'Promoted from inspection report', timestamp: now,
-      }],
-    } : null;
+    const parked = alert.sourceIssueId ? this.getIssue(alert.sourceIssueId) : null;
+    if (alert.sourceIssueId && (!parked || !parked.pendingReviewAt)) {
+      throw new Error('The original issue is no longer pending review. Refresh and try again.');
+    }
+    const issueId = action === 'converted'
+      ? (parked?.id || `issue-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
+      : null;
+    const issue: Issue | null = parked
+      ? {
+          ...parked, pendingReviewAt: action === 'converted' ? null : parked.pendingReviewAt,
+          statusLogs: [...(parked.statusLogs || []), {
+            id: `log-review-${parked.id}-${Date.now()}`, issueId: parked.id,
+            changedById: reviewer.id, changedByName: reviewer.name,
+            oldStatus: parked.status, newStatus: parked.status,
+            notes: `${action === 'converted' ? 'Restored to active issues' : 'Acknowledged in pending review'}${trimmed ? `: ${trimmed}` : ''}`,
+            timestamp: now,
+          }],
+        }
+      : issueId ? {
+          id: issueId, vehicleId: alert.vehicleId, vehicleNumber: alert.vehicleNumber,
+          equipmentId: alert.equipmentId || null, equipmentName: alert.equipmentName,
+          reportedById: alert.reportedById, reportedByName: alert.reportedByName,
+          reportedAt: alert.reportedAt, dateString: localDateString(new Date(alert.reportedAt)),
+          inspectionId: alert.inspectionId, title: alert.title,
+          description: [alert.description, trimmed].filter(Boolean).join('\nManager notes: '),
+          photoUrl: alert.photoUrl || null,
+          type: classifyIssueType({ title: alert.title, description: alert.description, questionType: alert.questionType || '', value: String(alert.value ?? '') }),
+          reportedQuantity: alert.reportedQuantity ?? null, requiredQuantity: alert.requiredQuantity ?? null,
+          status: 'open', statusLogs: [{
+            id: `log-${issueId}`, issueId, changedById: reviewer.id, changedByName: reviewer.name,
+            oldStatus: 'created', newStatus: 'open', notes: trimmed || 'Promoted from inspection report', timestamp: now,
+          }],
+        } : null;
     const reviewed: InspectionAlert = {
       ...alert, status: action, reviewedAt: now, reviewedById: reviewer.id,
       reviewedByName: reviewer.name, reviewNotes: trimmed || null, issueId,
     };
-    const inspection = issue ? this.getInspections().find(i => i.id === alert.inspectionId) : null;
+    const inspection = issue && !parked ? this.getInspections().find(i => i.id === alert.inspectionId) : null;
     const updatedInspection = inspection && issue ? { ...inspection, issueIds: [...(inspection.issueIds || []), issue.id] } : null;
     if (db) {
       await ensureAuth();
@@ -3424,9 +3501,15 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     }
     localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(alerts.map(a => a.id === alertId ? reviewed : a)));
     if (issue) {
-      localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify([issue, ...this.getIssues()]));
+      localStorage.setItem(STORAGE_KEYS.ISSUES, JSON.stringify([issue, ...this.getIssues().filter(i => i.id !== issue.id)]));
       if (updatedInspection) this.storeInspections(this.getInspections().map(i => i.id === updatedInspection.id ? updatedInspection : i));
-      if (issue.equipmentId) {
+      if (issue.equipmentId && action === 'converted' && parked) {
+        const equipment = this.getEquipmentItem(issue.equipmentId);
+        if (equipment && (!equipment.activeIssueId || !this.getOpenIssues().some(i => i.id === equipment.activeIssueId))) {
+          await this.updateEquipmentStatus(issue.equipmentId, equipment.status, issue.id);
+        }
+      }
+      if (issue.equipmentId && action === 'converted' && !parked) {
         const equipment = this.getEquipmentItem(issue.equipmentId);
         if (equipment && (!equipment.activeIssueId || !this.getIssues().some(i => i.id === equipment.activeIssueId && i.status !== 'fixed'))) {
           await this.updateEquipmentStatus(issue.equipmentId, 'flagged', issue.id);
@@ -3463,7 +3546,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
 
   public getOpenIssues(): Issue[] {
     return this.getIssues()
-      .filter(i => i.status !== 'fixed')
+      .filter(i => i.status !== 'fixed' && !i.pendingReviewAt)
       .sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime());
   }
 
@@ -3521,6 +3604,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     if (targetIndex === -1) throw new Error('Issue not found');
 
     const issue = issues[targetIndex];
+    if (issue.pendingReviewAt) throw new Error('Review this issue in Pending before changing its status.');
     const nowIso = new Date().toISOString();
 
     const newLog: IssueStatusLog = {

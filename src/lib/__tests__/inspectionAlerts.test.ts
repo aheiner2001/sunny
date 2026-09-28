@@ -53,3 +53,47 @@ describe('inspection review queue', () => {
     expect(dbService.getIssues()).toEqual([]);
   });
 });
+
+describe('moving existing issues to review', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    (dbService as any).inspectionMemory = null;
+    localStorage.setItem('sunny_seeded_v2', 'true');
+    localStorage.setItem('sunny_users', JSON.stringify([{ id: 'boss', name: 'Boss', role: 'manager', status: 'active' }]));
+    localStorage.setItem('sunny_equipment', JSON.stringify([{ id: 'brush', name: 'Brush', status: 'needs_repair', activeIssueId: 'old-1' }]));
+    localStorage.setItem('sunny_issues', JSON.stringify([{
+      id: 'old-1', vehicleId: 'van-1', vehicleNumber: '1', equipmentId: 'brush', equipmentName: 'Brush',
+      reportedById: 'alex', reportedByName: 'Alex', reportedAt: '2026-09-01T10:00:00.000Z',
+      dateString: '2026-09-01', title: 'Brush worn', description: 'Bristles damaged',
+      status: 'needs_repair', priority: 'moderate',
+      statusLogs: [{ id: 'log-old', issueId: 'old-1', changedById: 'alex', changedByName: 'Alex',
+        oldStatus: 'created', newStatus: 'needs_repair', notes: 'Initial report', timestamp: '2026-09-01T10:00:00.000Z' }],
+    }]));
+  });
+
+  it('parks selected issues and restores the same issue with its history intact', async () => {
+    expect(await dbService.moveIssuesToPending(['old-1'], { id: 'boss', name: 'Boss' })).toBe(1);
+    expect(dbService.getOpenIssues()).toHaveLength(0);
+    expect(dbService.getEquipmentItem('brush')?.activeIssueId).toBeNull();
+    const [alert] = dbService.getInspectionAlerts();
+    expect(alert).toMatchObject({ status: 'pending', sourceIssueId: 'old-1', reportedByName: 'Alex' });
+    await dbService.reviewInspectionAlert(alert.id, 'converted', { id: 'boss', name: 'Boss' }, 'Still needs repair');
+    expect(dbService.getOpenIssues()).toHaveLength(1);
+    expect(dbService.getIssues()).toHaveLength(1);
+    const restored = dbService.getIssue('old-1')!;
+    expect(restored.status).toBe('needs_repair');
+    expect(restored.pendingReviewAt).toBeNull();
+    expect(dbService.getEquipmentItem('brush')?.activeIssueId).toBe('old-1');
+    expect(restored.statusLogs?.map(log => log.notes)).toContain('Initial report');
+    expect(restored.statusLogs?.at(-1)?.notes).toContain('Still needs repair');
+  });
+
+  it('acknowledges without marking a parked issue repaired or deleting its history', async () => {
+    await dbService.moveIssuesToPending(['old-1'], { id: 'boss', name: 'Boss' });
+    const [alert] = dbService.getInspectionAlerts();
+    await dbService.reviewInspectionAlert(alert.id, 'acknowledged', { id: 'boss', name: 'Boss' });
+    expect(dbService.getIssue('old-1')).toMatchObject({ status: 'needs_repair', pendingReviewAt: expect.any(String) });
+    expect(dbService.getOpenIssues()).toHaveLength(0);
+    expect(dbService.getInspectionAlerts()[0].status).toBe('acknowledged');
+  });
+});
