@@ -296,8 +296,8 @@ export default function VehicleDetailClient() {
   const selectedInventory = unassignedInventory.find(item => item.id === selectedInventoryId);
   const selectedInventoryAvailable = selectedInventory ? (selectedInventory.availableQuantity ?? 0) : 0;
 
-  const openIssuesCount = issues.filter(i => i.status !== 'fixed').length;
-  const openNeeds = issues.filter(i => i.status !== 'fixed');
+  const openIssuesCount = issues.filter(i => i.status !== 'fixed' && !i.pendingReviewAt).length;
+  const openNeeds = issues.filter(i => i.status !== 'fixed' && !i.pendingReviewAt);
   const lastInspectionLabel = vehicle.lastInspectionAt
     ? new Date(vehicle.lastInspectionAt).toLocaleDateString([], { month: 'short', day: 'numeric' })
     : null;

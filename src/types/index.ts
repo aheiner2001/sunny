@@ -349,6 +349,7 @@ export interface InspectionAlert {
   reviewedByName?: string | null;
   reviewNotes?: string | null;
   issueId?: string | null;
+  sourceIssueId?: string | null;
   questionType?: string | null;
   value?: string | boolean | null;
   reportedQuantity?: number | null;
@@ -392,6 +393,8 @@ export interface Issue {
   title: string;
   description: string;
   status: IssueStatus;
+  /** Retained for audit but hidden from active issues while a manager reviews it. */
+  pendingReviewAt?: string | null;
   priority?: IssuePriority;
   assignedTechnician?: string | null;
   estimatedCompletionDate?: string | null;
