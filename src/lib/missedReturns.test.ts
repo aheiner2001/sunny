@@ -78,7 +78,7 @@ describe('overnight missed returns + submitReturnInspection', () => {
     expect(dbService.getVehicleAssignments('van-1')[0]?.endedAt).toBeTruthy();
   });
 
-  it('submitReturnInspection clears occupancy and sets kind return', () => {
+  it('submitReturnInspection clears occupancy and sets kind return', async () => {
     localStorage.setItem('sunny_seeded_v2', 'true');
     localStorage.setItem(
       'sunny_vehicles',
@@ -98,7 +98,7 @@ describe('overnight missed returns + submitReturnInspection', () => {
     );
     localStorage.setItem('sunny_inspections', JSON.stringify([]));
 
-    const result = dbService.submitReturnInspection({
+    const result = await dbService.submitReturnInspection({
       vehicleId: 'van-2',
       userId: 'sam',
       userName: 'Sam',
