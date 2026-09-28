@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { dbService } from '@/lib/db';
+import type { InspectionAlert } from '@/types';
 import { ProfileModal } from '@/components/ProfileModal';
 import { getResolvedAvatarUrl } from '@/lib/avatarPresets';
 import { asset } from '@/lib/basePath';
@@ -23,16 +24,17 @@ import { asset } from '@/lib/basePath';
 export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void }) {
   const pathname = usePathname();
   const pageTitle = getPageTitle(pathname || '/dashboard');
-  const { user, switchUser, availableUsers, canSwitchUser, logout, managerGrantUntil } = useAuth();
+  const { user, role, switchUser, availableUsers, canSwitchUser, logout, managerGrantUntil } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notifMenuOpen, setNotifMenuOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const [issues, setIssues] = useState<any[]>([]);
+  const [pendingAlerts, setPendingAlerts] = useState<InspectionAlert[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
   const currentAvatarUrl = getResolvedAvatarUrl(user);
 
   useEffect(() => {
-    const loadNotifications = () => setIssues(dbService.getIssues().filter(issue => issue.status !== 'fixed' && !issue.pendingReviewAt));
+    const loadNotifications = () => setPendingAlerts(role === 'manager'
+      ? dbService.getInspectionAlerts().filter(alert => alert.status === 'pending') : []);
     loadNotifications();
     window.addEventListener('sunny_db_update', loadNotifications);
     function handleClickOutside(e: MouseEvent) {
@@ -46,7 +48,7 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
       document.removeEventListener('mousedown', handleClickOutside);
       window.removeEventListener('sunny_db_update', loadNotifications);
     };
-  }, []);
+  }, [role]);
 
   return (
     <header className="h-18 bg-surface border-b border-line px-4 sm:px-8 flex items-center justify-between gap-2 sm:gap-4 sticky top-0 z-20">
@@ -73,45 +75,46 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
 
       <div className="flex items-center gap-1 sm:gap-3 shrink-0" ref={menuRef}>
         {/* Notification Bell */}
-        <div className="relative shrink-0">
+        {role === 'manager' && <div className="relative shrink-0">
           <button
             onClick={() => {
               setNotifMenuOpen(!notifMenuOpen);
               setUserMenuOpen(false);
             }}
             className="relative p-2.5 rounded-full text-ink-muted hover:bg-surface-sunk hover:text-ink transition-colors"
-            aria-label={issues.length > 0 ? `Notifications, ${issues.length} unread` : 'Notifications'}
+            aria-label={pendingAlerts.length > 0 ? `Pending reports, ${pendingAlerts.length} awaiting review` : 'Pending reports'}
           >
             <Bell className="w-5 h-5" />
-            {/* The one place amber belongs in the chrome: something needs a human. */}
-            {issues.length > 0 && <span className="absolute top-1.5 right-1.5 min-w-4 h-4 px-1 rounded-full bg-hivis text-ink font-mono font-medium text-[10px] flex items-center justify-center">{issues.length}</span>}
+            {/* Count the same unreviewed reports shown beside Pending in the sidebar. */}
+            {pendingAlerts.length > 0 && <span className="absolute top-1.5 right-1.5 min-w-4 h-4 px-1 rounded-full bg-rose-600 text-white font-mono font-medium text-[10px] flex items-center justify-center">{pendingAlerts.length > 99 ? '99+' : pendingAlerts.length}</span>}
           </button>
 
           {notifMenuOpen && (
             <div className="absolute right-0 mt-2 w-80 bg-surface rounded-card shadow-panel border border-line p-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="flex items-center justify-between pb-2 mb-2 border-b border-line px-2">
-                <span className="font-display font-bold text-sm">Notifications</span>
-                <span className="badge" data-status={issues.length > 0 ? 'flagged' : 'idle'}>{issues.length} unread</span>
+                <span className="font-display font-bold text-sm">Pending review</span>
+                <span className="badge" data-status={pendingAlerts.length > 0 ? 'flagged' : 'idle'}>{pendingAlerts.length} pending</span>
               </div>
               <div className="space-y-2">
-                {issues.slice(0, 5).map(issue => <Link
-                  key={issue.id}
-                  href={`/issues?issue=${encodeURIComponent(issue.id)}`}
+                {pendingAlerts.slice(0, 5).map(alert => <Link
+                  key={alert.id}
+                  href="/pending"
                   onClick={() => setNotifMenuOpen(false)}
                   className="row rounded-lg border-b-0 text-xs"
                   data-status="flagged"
                 >
                   <span className="flex-1 min-w-0">
-                    <span className="block font-semibold truncate">Issue reported: {issue.vehicleNumber}</span>
-                    <span className="block text-ink-muted truncate">{issue.title || issue.equipmentName}</span>
-                    <time className="unit-tag block mt-1">{new Date(issue.reportedAt).toLocaleString()}</time>
+                    <span className="block font-semibold truncate">Report on truck {alert.vehicleNumber}</span>
+                    <span className="block text-ink-muted truncate">{alert.equipmentName}: {alert.title}</span>
+                    <time className="unit-tag block mt-1">{new Date(alert.reportedAt).toLocaleString()}</time>
                   </span>
                 </Link>)}
-                {issues.length === 0 && <p className="p-2 text-xs text-ink-faint">Nothing unread. New issues appear here as crews report them.</p>}
+                {pendingAlerts.length === 0 && <p className="p-2 text-xs text-ink-faint">Nothing awaiting review. New inspection flags and moved issues appear here.</p>}
+                {pendingAlerts.length > 0 && <Link href="/pending" onClick={() => setNotifMenuOpen(false)} className="block px-2 pt-2 text-xs font-semibold underline">View all pending reports</Link>}
               </div>
             </div>
           )}
-        </div>
+        </div>}
 
         {/* User profile with Role Switcher & Customize Profile */}
         <div className="relative shrink-0">
