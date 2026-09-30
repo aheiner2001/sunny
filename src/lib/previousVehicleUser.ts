@@ -1,25 +1,45 @@
 import type { Inspection, InspectionAlert, VehicleAssignment } from '@/types';
 
+export type PreviousVehicleUser = {
+  userId: string;
+  userName: string;
+  occurredAt: string;
+  source: 'assignment' | 'inspection';
+};
+
 export function findPreviousVehicleUser(
   alert: InspectionAlert,
   inspection: Inspection | undefined,
   assignments: VehicleAssignment[],
-): VehicleAssignment | null {
-  // Anchor to this inspection, never the truck's current driver. Older records
-  // used estimated starts, so cannot establish who was previous reliably.
+  inspections: Inspection[] = [],
+): PreviousVehicleUser | null {
   const linked = inspection?.id === alert.inspectionId && inspection.vehicleId === alert.vehicleId
     ? inspection : undefined;
-  if (!linked?.startedAtRecorded) return null;
-  const cutoff = Date.parse(linked.startedAt);
   const reportedAt = Date.parse(alert.reportedAt);
-  if (!Number.isFinite(cutoff) || !Number.isFinite(reportedAt) || cutoff > reportedAt) return null;
-  const inspectingUserId = linked.userId;
-  const candidates = assignments.filter(row =>
-    row.vehicleId === alert.vehicleId && row.userId && row.userName &&
-    row.userId !== inspectingUserId && Date.parse(row.startedAt) < cutoff
-  ).sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+  if (!Number.isFinite(reportedAt)) return null;
+  const actualStart = linked?.startedAtRecorded ? Date.parse(linked.startedAt) : NaN;
+  // Older inspections estimated their start. Their report time still provides
+  // a historical boundary; do not discard the truck's recorded use history.
+  const cutoff = Number.isFinite(actualStart) && actualStart <= reportedAt ? actualStart : reportedAt;
+  const inspectingUserId = linked?.userId || alert.reportedById;
+  const truckAssignments = assignments.filter(row => row.vehicleId === alert.vehicleId);
+  const currentStarts = truckAssignments.filter(row =>
+    row.userId === inspectingUserId && Date.parse(row.startedAt) < cutoff &&
+    (!row.endedAt || !Number.isFinite(Date.parse(row.endedAt)) || Date.parse(row.endedAt) >= cutoff)
+  ).map(row => Date.parse(row.startedAt));
+  const currentShiftStart = currentStarts.length ? Math.max(...currentStarts) : Infinity;
+
+  const candidates: PreviousVehicleUser[] = [
+    ...truckAssignments.filter(row => row.userId && row.userName && Date.parse(row.startedAt) < cutoff &&
+      !(row.userId === inspectingUserId && Date.parse(row.startedAt) >= currentShiftStart)
+    ).map(row => ({ userId: row.userId, userName: row.userName, occurredAt: row.startedAt, source: 'assignment' as const })),
+    ...inspections.filter(row => row.vehicleId === alert.vehicleId && row.id !== alert.inspectionId &&
+      row.userId && row.userName && row.status !== 'in_progress' && row.status !== 'rejected' &&
+      Date.parse(row.submittedAt) < cutoff &&
+      !(row.userId === inspectingUserId && Date.parse(row.submittedAt) >= currentShiftStart)
+    ).map(row => ({ userId: row.userId, userName: row.userName, occurredAt: row.submittedAt, source: 'inspection' as const })),
+  ].sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt));
   const latest = candidates[0];
-  // Conflicting records at the same time are not reliable attribution.
-  if (!latest || candidates.some(row => Date.parse(row.startedAt) === Date.parse(latest.startedAt) && row.userId !== latest.userId)) return null;
+  if (!latest || candidates.some(row => Date.parse(row.occurredAt) === Date.parse(latest.occurredAt) && row.userId !== latest.userId)) return null;
   return latest;
 }

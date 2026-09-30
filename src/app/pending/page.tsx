@@ -52,7 +52,7 @@ function PendingContent() {
     {shown.length === 0 && <div className="card card-pad text-sm text-ink-muted">{tab === 'pending' ? 'No reports waiting for review.' : 'No reviewed reports yet.'}</div>}
     <div className="space-y-3">{shown.map(alert => {
       const original = alert.sourceIssueId ? dbService.getIssue(alert.sourceIssueId) : null;
-      const previousUser = findPreviousVehicleUser(alert, inspections.find(row => row.id === alert.inspectionId), assignments);
+      const previousUser = findPreviousVehicleUser(alert, inspections.find(row => row.id === alert.inspectionId), assignments, inspections);
       const related = dbService.getOpenIssues().filter(issue => issue.vehicleId === alert.vehicleId &&
         (alert.equipmentId ? issue.equipmentId === alert.equipmentId : issue.equipmentName === alert.equipmentName));
       return <article className="card card-pad space-y-3" key={alert.id} data-status={alert.status === 'pending' ? 'flagged' : 'ok'}>
@@ -63,9 +63,9 @@ function PendingContent() {
         <div className="rounded-lg border border-line bg-surface-alt p-3 space-y-1">
           {previousUser ? <>
             <p className="text-sm text-ink"><span className="font-semibold">Previous vehicle user:</span> {previousUser.userName}</p>
-            <p className="text-xs text-ink-muted">Last assignment: {new Date(previousUser.startedAt).toLocaleString()}</p>
-            <p className="text-xs text-ink-muted">Assignment history for follow-up; this does not confirm who caused the problem.</p>
-          </> : <p className="text-sm text-ink-muted">Previous user unknown — no reliable earlier assignment found.</p>}
+            <p className="text-xs text-ink-muted">{previousUser.source === 'assignment' ? 'Last assignment' : 'Last inspection'}: {new Date(previousUser.occurredAt).toLocaleString()}</p>
+            <p className="text-xs text-ink-muted">Truck history for follow-up; this does not confirm who caused the problem.</p>
+          </> : <p className="text-sm text-ink-muted">Previous user unknown — no earlier truck use could be identified.</p>}
         </div>
         {original && <details className="text-xs text-ink-muted">
           <summary className="cursor-pointer font-semibold">Original issue and repair history</summary>
