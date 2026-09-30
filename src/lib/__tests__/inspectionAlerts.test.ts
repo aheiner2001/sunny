@@ -52,6 +52,12 @@ describe('inspection review queue', () => {
     expect(dbService.getInspectionAlerts()[0]).toMatchObject({ inspectionKind: 'return', equipmentName: 'Brakes', status: 'pending' });
     expect(dbService.getIssues()).toEqual([]);
   });
+  it('records the actual return checklist start rather than its submission time', async () => {
+    const result = await dbService.submitReturnInspection({ vehicleId: 'van-1', userId: 'alex', userName: 'Alex', userEmail: '',
+      startedAt: '2026-09-29T14:30:00.000Z', responses: [flagged] });
+    expect(result.inspection.startedAt).toBe('2026-09-29T14:30:00.000Z');
+    expect(result.inspection.startedAtRecorded).toBe(true);
+  });
 });
 
 describe('moving existing issues to review', () => {

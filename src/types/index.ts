@@ -264,6 +264,8 @@ export interface Inspection {
   submittedByName?: string;
   status: InspectionStatus;
   startedAt: string;
+  /** True when the checklist captured its actual start; legacy records may be estimates. */
+  startedAtRecorded?: boolean;
   submittedAt: string;
   dateString: string; // YYYY-MM-DD
   responses: InspectionResponse[];

@@ -2836,6 +2836,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
 
   public async submitInspection(data: {
     vehicleId: string;
+    startedAt?: string;
     userId: string;
     userName: string;
     userEmail: string;
@@ -2922,7 +2923,9 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       submittedByName: data.submittedByName || data.userName,
       status,
       kind: 'pretrip',
-      startedAt: new Date(now.getTime() - 8 * 60 * 1000).toISOString(),
+      startedAt: data.startedAt && Number.isFinite(Date.parse(data.startedAt)) && Date.parse(data.startedAt) <= now.getTime()
+        ? new Date(data.startedAt).toISOString() : nowIso,
+      startedAtRecorded: Boolean(data.startedAt && Number.isFinite(Date.parse(data.startedAt)) && Date.parse(data.startedAt) <= now.getTime()),
       submittedAt: nowIso,
       dateString: dateStr,
       responses: cleanResponses,
@@ -3169,6 +3172,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       status,
       kind: 'pretrip',
       startedAt: original.startedAt,
+      startedAtRecorded: Boolean(original.startedAtRecorded),
       submittedAt: nowIso,
       dateString: dateStr,
       responses: cleanResponses,
@@ -3287,6 +3291,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
 
   public async submitReturnInspection(data: {
     vehicleId: string;
+    startedAt?: string;
     userId: string;
     userName: string;
     userEmail: string;
@@ -3336,7 +3341,9 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       userEmail: data.userEmail || '',
       status: alerts.length > 0 ? 'issues_found' : 'passed',
       kind: 'return',
-      startedAt: nowIso,
+      startedAt: data.startedAt && Number.isFinite(Date.parse(data.startedAt)) && Date.parse(data.startedAt) <= now.getTime()
+        ? new Date(data.startedAt).toISOString() : nowIso,
+      startedAtRecorded: Boolean(data.startedAt && Number.isFinite(Date.parse(data.startedAt)) && Date.parse(data.startedAt) <= now.getTime()),
       submittedAt: nowIso,
       dateString: dateStr,
       responses: cleanResponses,
