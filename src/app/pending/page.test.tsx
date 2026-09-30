@@ -14,7 +14,7 @@ it('shows historical previous-user context in Pending and keeps it when newer as
   localStorage.clear();
   localStorage.setItem('sunny_seeded_v2', 'true');
   localStorage.setItem('sunny_inspections', JSON.stringify([{ id: 'insp', vehicleId: 'van', userId: 'jacob',
-    startedAtRecorded: true,
+    // Production legacy inspection: estimated start, but prior truck history exists.
     startedAt: '2026-09-29T14:30:00Z', submittedAt: '2026-09-29T14:37:06Z' }]));
   localStorage.setItem('sunny_inspection_alerts', JSON.stringify([
     { id: 'report', inspectionId: 'insp', vehicleId: 'van', vehicleNumber: '5', title: 'Cab needs cleaning',
@@ -27,19 +27,23 @@ it('shows historical previous-user context in Pending and keeps it when newer as
   const assignments = [{ id: 'old', vehicleId: 'van', userId: 'alex', userName: 'Alex',
     startedAt: '2026-09-28T14:00:00Z', endedAt: '2026-09-29T00:00:00Z' }];
   localStorage.setItem('sunny_vehicle_assignments', JSON.stringify(assignments));
+  const history = JSON.parse(localStorage.getItem('sunny_inspections')!);
+  history.push({ id: 'earlier', vehicleId: 'van', userId: 'sam', userName: 'Sam', status: 'passed', submittedAt: '2026-09-29T13:00:00Z' });
+  localStorage.setItem('sunny_inspections', JSON.stringify(history));
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   try {
     await act(async () => root.render(<PendingPage />));
-    expect(container.textContent).toContain('Previous vehicle user: Alex');
+    expect(container.textContent).toContain('Previous vehicle user: Sam');
+    expect(container.textContent).toContain('Last inspection:');
     expect(container.textContent).toContain('Previous user unknown');
     localStorage.setItem('sunny_vehicle_assignments', JSON.stringify([...assignments,
       { ...assignments[0], id: 'new', userId: 'later', userName: 'Later Driver', startedAt: '2026-09-30T14:00:00Z', endedAt: null },
     ]));
     await act(async () => window.dispatchEvent(new Event('sunny_db_update')));
-    expect(container.textContent).toContain('Previous vehicle user: Alex');
+    expect(container.textContent).toContain('Previous vehicle user: Sam');
     expect(container.textContent).not.toContain('Later Driver');
   } finally {
     await act(async () => root.unmount());

@@ -35,9 +35,35 @@ describe('previous vehicle user for a report', () => {
     expect(findPreviousVehicleUser({ ...alert, inspectionKind: 'return' }, inspection,
       [previous, assignment('current', 'jacob', '2026-09-29T14:20:00Z')])?.userId).toBe('alex');
   });
-  it('returns unknown when an older report has no reliably recorded inspection start', () => {
-    expect(findPreviousVehicleUser(alert, undefined, [previous])).toBeNull();
-    expect(findPreviousVehicleUser(alert, { ...inspection, startedAtRecorded: undefined }, [previous])).toBeNull();
+  it('uses the report time for older reports instead of rejecting their truck history', () => {
+    expect(findPreviousVehicleUser(alert, undefined, [previous])?.userId).toBe('alex');
+    expect(findPreviousVehicleUser(alert, { ...inspection, startedAtRecorded: undefined }, [previous])?.userId).toBe('alex');
+  });
+  it('finds previous truck use in inspection history even without assignment records', () => {
+    const older = { ...inspection, id: 'old', userId: 'alex', userName: 'Alex', status: 'passed',
+      submittedAt: '2026-09-28T14:00:00Z' } as Inspection;
+    const later = { ...older, id: 'later', userId: 'later', submittedAt: '2026-09-30T14:00:00Z' };
+    const otherVan = { ...older, id: 'other', vehicleId: 'other', submittedAt: '2026-09-29T14:00:00Z' };
+    expect(findPreviousVehicleUser(alert, { ...inspection, startedAtRecorded: undefined }, [],
+      [inspection, older, later, otherVan])).toMatchObject({ userId: 'alex', source: 'inspection' });
+  });
+  it('uses the latest prior truck history rather than an older assignment', () => {
+    const recent = { ...inspection, id: 'old', userId: 'sam', userName: 'Sam', status: 'passed',
+      submittedAt: '2026-09-29T13:00:00Z' } as Inspection;
+    expect(findPreviousVehicleUser(alert, inspection, [previous], [recent])?.userId).toBe('sam');
+  });
+  it('allows the same employee to be the previous user on an earlier completed shift', () => {
+    const earlier = assignment('yesterday', 'jacob', '2026-09-28T14:00:00Z', '2026-09-29T00:00:00Z');
+    expect(findPreviousVehicleUser(alert, inspection, [earlier, assignment('current', 'jacob', '2026-09-29T14:20:00Z')])?.userId).toBe('jacob');
+  });
+  it('keeps an earlier same-employee inspection when there is no current assignment record', () => {
+    const older = { ...inspection, id: 'yesterday', userName: 'Jacob', status: 'passed', submittedAt: '2026-09-28T14:00:00Z' } as Inspection;
+    expect(findPreviousVehicleUser(alert, inspection, [], [older])?.userId).toBe('jacob');
+  });
+  it('does not mistake the current shift morning inspection for the previous user in a return report', () => {
+    const current = assignment('current', 'jacob', '2026-09-29T12:00:00Z');
+    const morning = { ...inspection, id: 'morning', userName: 'Jacob', status: 'passed', submittedAt: '2026-09-29T12:10:00Z' } as Inspection;
+    expect(findPreviousVehicleUser({ ...alert, inspectionKind: 'return' }, inspection, [previous, current], [morning])?.userId).toBe('alex');
   });
   it('returns unknown for missing history or malformed timestamps', () => {
     expect(findPreviousVehicleUser(alert, inspection, [])).toBeNull();
