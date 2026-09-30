@@ -82,6 +82,7 @@ export default function ReturnClient() {
   const [error, setError] = useState<string | null>(null);
   const [returnedVehicle, setReturnedVehicle] = useState<string | null>(null);
   const [jobsCompleted, setJobsCompleted] = useState('0');
+  const [inspectionStartedAt, setInspectionStartedAt] = useState(() => new Date().toISOString());
   const damageRef = useRef<VehicleDamageCaptureHandle>(null);
 
   const load = () => {
@@ -118,6 +119,7 @@ export default function ReturnClient() {
   const inUse = useMemo(() => vehiclesInUse(vehicles), [vehicles]);
   const vehicle =
     resolved || vehicles.find((v) => v.id === pickedId) || null;
+  useEffect(() => { setInspectionStartedAt(new Date().toISOString()); }, [vehicle?.id]);
 
   useEffect(() => {
     if (!vehicle?.id) {
@@ -191,6 +193,7 @@ export default function ReturnClient() {
       });
       await dbService.submitReturnInspection({
         vehicleId: vehicle.id,
+        startedAt: inspectionStartedAt,
         userId: user.id,
         userName: user.name,
         userEmail: user.email || '',

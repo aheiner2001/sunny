@@ -5,18 +5,25 @@ import { ManagerOnly } from '@/components/ManagerOnly';
 import { useAuth } from '@/context/AuthContext';
 import { dbService } from '@/lib/db';
 import { exportInspectionAlertsAsCSV } from '@/lib/export';
-import { InspectionAlert } from '@/types';
+import { Inspection, InspectionAlert, VehicleAssignment } from '@/types';
+import { findPreviousVehicleUser } from '@/lib/previousVehicleUser';
 
 export default function PendingPage() { return <ManagerOnly><PendingContent /></ManagerOnly>; }
 function PendingContent() {
   const { user } = useAuth();
   const [alerts, setAlerts] = useState<InspectionAlert[]>([]);
+  const [inspections, setInspections] = useState<Inspection[]>([]);
+  const [assignments, setAssignments] = useState<VehicleAssignment[]>([]);
   const [tab, setTab] = useState<'pending' | 'history'>('pending');
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
-    const refresh = () => setAlerts(dbService.getInspectionAlerts());
+    const refresh = () => {
+      setAlerts(dbService.getInspectionAlerts());
+      setInspections(dbService.getInspections());
+      setAssignments(dbService.getVehicleAssignments());
+    };
     refresh(); window.addEventListener('sunny_db_update', refresh);
     return () => window.removeEventListener('sunny_db_update', refresh);
   }, []);
@@ -45,6 +52,7 @@ function PendingContent() {
     {shown.length === 0 && <div className="card card-pad text-sm text-ink-muted">{tab === 'pending' ? 'No reports waiting for review.' : 'No reviewed reports yet.'}</div>}
     <div className="space-y-3">{shown.map(alert => {
       const original = alert.sourceIssueId ? dbService.getIssue(alert.sourceIssueId) : null;
+      const previousUser = findPreviousVehicleUser(alert, inspections.find(row => row.id === alert.inspectionId), assignments);
       const related = dbService.getOpenIssues().filter(issue => issue.vehicleId === alert.vehicleId &&
         (alert.equipmentId ? issue.equipmentId === alert.equipmentId : issue.equipmentName === alert.equipmentName));
       return <article className="card card-pad space-y-3" key={alert.id} data-status={alert.status === 'pending' ? 'flagged' : 'ok'}>
@@ -52,6 +60,13 @@ function PendingContent() {
           <p className="text-sm text-ink-muted">Truck {alert.vehicleNumber} · {alert.equipmentName} · {alert.sourceIssueId ? 'Existing issue' : alert.inspectionKind === 'return' ? 'Return' : 'Pretrip'}</p></div>
           <span className="text-xs text-ink-muted">{new Date(alert.reportedAt).toLocaleString()}</span></div>
         <p className="text-sm">Reported by {alert.reportedByName}{alert.description ? `: ${alert.description}` : ''}</p>
+        <div className="rounded-lg border border-line bg-surface-alt p-3 space-y-1">
+          {previousUser ? <>
+            <p className="text-sm text-ink"><span className="font-semibold">Previous vehicle user:</span> {previousUser.userName}</p>
+            <p className="text-xs text-ink-muted">Last assignment: {new Date(previousUser.startedAt).toLocaleString()}</p>
+            <p className="text-xs text-ink-muted">Assignment history for follow-up; this does not confirm who caused the problem.</p>
+          </> : <p className="text-sm text-ink-muted">Previous user unknown — no reliable earlier assignment found.</p>}
+        </div>
         {original && <details className="text-xs text-ink-muted">
           <summary className="cursor-pointer font-semibold">Original issue and repair history</summary>
           <p className="mt-2">Original status: {original.status.replace('_', ' ')} · Priority: {original.priority || 'moderate'}{original.priority === 'critical' ? ' · Safety warning remains until reviewed' : ''}</p>

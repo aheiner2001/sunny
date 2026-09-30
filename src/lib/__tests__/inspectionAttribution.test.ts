@@ -31,6 +31,14 @@ describe('inspection on an employee behalf', () => {
       submittedById: 'other', submittedByName: 'Other', responses: [], flaggedIssues: [],
     })).rejects.toThrow();
   });
+  it('retains the actual checklist start time for report attribution', async () => {
+    const { inspection } = await dbService.submitInspection({
+      vehicleId: 'A', userId: 'alex', userName: 'Alex', userEmail: '',
+      startedAt: '2026-09-29T14:30:00.000Z', responses: [], flaggedIssues: [],
+    });
+    expect(inspection.startedAt).toBe('2026-09-29T14:30:00.000Z');
+    expect(inspection.startedAtRecorded).toBe(true);
+  });
   it('releases the employee previous van when inspecting a free van', async () => {
     localStorage.setItem('sunny_vehicles', JSON.stringify([
       { id: 'A', vehicleNumber: 'Van A', name: 'Van A', licensePlate: 'A', qrCodeToken: 'A', status: 'in_use', currentUserId: 'alex', currentUserName: 'Alex', currentUserStartAt: new Date(Date.now() - 60_000).toISOString() },

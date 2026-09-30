@@ -67,6 +67,8 @@ export default function InspectClient() {
   const [tasks, setTasks] = useState<FleetTask[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState('');
   const [managerSubjectId, setManagerSubjectId] = useState('');
+  const [inspectionStartedAt, setInspectionStartedAt] = useState(() => new Date().toISOString());
+  useEffect(() => { setInspectionStartedAt(new Date().toISOString()); }, [vehicleId]);
   
   // Offline sync state
   const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -233,6 +235,9 @@ export default function InspectClient() {
         setShowDraftRecovery(true);
         try {
           const draft = JSON.parse(draftData);
+          if (draft.startedAt && Number.isFinite(Date.parse(draft.startedAt)) && Date.parse(draft.startedAt) <= Date.now()) {
+            setInspectionStartedAt(draft.startedAt);
+          }
           if (draft.responses) {
             setResponses(draft.responses);
           }
@@ -268,6 +273,7 @@ export default function InspectClient() {
     const interval = setInterval(() => {
       const draftKey = `sunny_inspection_draft_${vehicleId}`;
       const draft = {
+        startedAt: inspectionStartedAt,
         responses,
         flagIssues,
         generalNotes,
@@ -290,7 +296,7 @@ export default function InspectClient() {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [vehicleId, responses, flagIssues, generalNotes, generalPhotos, odometer, fuelLevel, signatureBase64, submittedInspection]);
+  }, [vehicleId, inspectionStartedAt, responses, flagIssues, generalNotes, generalPhotos, odometer, fuelLevel, signatureBase64, submittedInspection]);
 
   if (isLoading || (vehicle && occupancyKind(vehicle, user?.id) === 'pending')) {
     return (
@@ -546,6 +552,7 @@ export default function InspectClient() {
         : null;
       const payload = {
         vehicleId: vehicle.id,
+        startedAt: inspectionStartedAt,
         userId: selectedEmployee?.id || user?.id || 'emp-anon',
         userName: selectedEmployee?.name || user?.name || 'Employee Operator',
         userEmail: selectedEmployee?.email || user?.email || 'employee@sunnyfleet.com',
@@ -576,7 +583,8 @@ export default function InspectClient() {
           submittedById: payload.submittedById,
           submittedByName: payload.submittedByName,
           status: flaggedList.length > 0 ? 'issues_found' : 'passed',
-          startedAt: nowIso,
+          startedAt: payload.startedAt,
+          startedAtRecorded: true,
           submittedAt: nowIso,
           dateString: nowIso.split('T')[0],
           responses: inspectionResponses,
@@ -859,6 +867,7 @@ export default function InspectClient() {
               onClick={() => {
                 const draftKey = `sunny_inspection_draft_${vehicleId}`;
                 localStorage.removeItem(draftKey);
+                setInspectionStartedAt(new Date().toISOString());
                 setResponses({});
                 setFlagIssues({});
                 setGeneralNotes('');
