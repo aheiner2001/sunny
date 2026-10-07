@@ -2,6 +2,7 @@ import { NAV_ITEMS } from '@/lib/navItems';
 
 export const PAGE_TITLES: Record<string, string> = {
   '/home': 'Home',
+  '/settings/analytics': 'Manager Analytics',
   '/vehicles/detail': 'Vehicle',
 };
 

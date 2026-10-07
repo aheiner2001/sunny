@@ -34,6 +34,17 @@ export type VehicleStatus = 'active' | 'in_use' | 'maintenance' | 'inactive';
 export type InspectionStatus = 'passed' | 'issues_found' | 'in_progress' | 'submitted' | 'rejected' | 'approved';
 export type InspectionKind = 'pretrip' | 'return';
 
+export interface MaintenanceReading { date: string; odometer: number; recordedBy?: string; }
+export interface MaintenanceProfile {
+  vin?: string; year?: number; make?: string; model?: string; engine?: string; drivetrain?: string;
+  operatingProfile?: string; oilIntervalMiles?: number; oilIntervalMonths?: number;
+  scheduleSource?: string; scheduleConfirmed?: boolean;
+}
+export interface VehicleServiceRecord {
+  id: string; kind: 'oil' | 'tires' | 'filters' | 'other'; title: string; date: string;
+  odometer: number; recordedBy: string; notes?: string;
+}
+
 export interface Vehicle {
   id: string;
   vehicleNumber: string; // e.g. "Van #1"
@@ -52,6 +63,9 @@ export interface Vehicle {
   imageUrl?: string | null;
   odometer?: number;
   fuelLevel?: number;
+  maintenance?: MaintenanceProfile;
+  maintenanceReadings?: MaintenanceReading[];
+  serviceHistory?: VehicleServiceRecord[];
   createdAt?: string;
 }
 

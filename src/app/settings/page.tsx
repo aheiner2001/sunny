@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { 
@@ -616,6 +617,11 @@ function SettingsPageContent() {
           Configure checklists, equipment defaults, tasks, appearance, and fleet-wide options.
         </p>
       </div>
+
+      <Link href="/settings/analytics" className="card card-pad spread hover:border-ink-muted transition-colors">
+        <div><strong>Manager Analytics</strong><p className="hint mt-1">Compare trucks, track oil services, and plan equipment reviews.</p></div>
+        <Gauge className="w-6 h-6 shrink-0" aria-hidden />
+      </Link>
 
       <div className="cluster gap-2 flex-wrap">
         {SETTINGS_TABS.map((tab) => (

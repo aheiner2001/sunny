@@ -2,6 +2,7 @@
 
 import { 
   Vehicle, 
+  MaintenanceProfile, MaintenanceReading, VehicleServiceRecord,
   Equipment, 
   ChecklistQuestion, 
   ChecklistCategoryConfig,
@@ -33,6 +34,7 @@ import {
   VehicleSide,
   VehicleAssignment
 } from '@/types';
+import { validDay, dateOnly, validateProfile, validateService } from './maintenance';
 import { transitionAssignment } from './vehicleAssignments';
 import { classifyIssueType } from './issueClassification';
 import { shouldAutoReturnVehicle, localDateString } from './occupancy';
@@ -74,6 +76,7 @@ import {
   getDoc,
   getDocs, 
   updateDoc, 
+  arrayUnion,
   onSnapshot,
   writeBatch
 } from 'firebase/firestore';
@@ -1247,6 +1250,49 @@ class DataStore {
 
     window.dispatchEvent(new Event('sunny_db_update'));
     return newVehicle;
+  }
+
+  /** Targeted maintenance writes preserve unrelated assignment fields. */
+  private async persistMaintenancePatch(vehicleId: string, remote: Record<string, unknown>, localPatch: (vehicle: Vehicle) => Vehicle): Promise<void> {
+    if (!this.isClient()) throw new Error('Client only');
+    if (!this.getVehicle(vehicleId)) throw new Error('Vehicle not found.');
+    if (db) {
+      await ensureAuth();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          updateDoc(doc(db, 'vehicles', vehicleId), remote),
+          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Could not confirm the save. Check connection and service history before retrying.')), 15000); }),
+        ]);
+      } finally { if (timer) clearTimeout(timer); }
+    }
+    const vehicles = this.getVehicles().map(v => v.id === vehicleId ? localPatch(v) : v);
+    localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(vehicles));
+    window.dispatchEvent(new Event('sunny_db_update'));
+  }
+
+  public async saveMaintenanceProfile(vehicleId: string, profile: MaintenanceProfile): Promise<void> {
+    const error = validateProfile(profile);
+    if (error) throw new Error(error);
+    const value = sanitizeForFirestore(profile);
+    await this.persistMaintenancePatch(vehicleId, { maintenance: value }, v => ({ ...v, maintenance: value }));
+  }
+
+  public async recordVehicleService(vehicleId: string, record: VehicleServiceRecord): Promise<void> {
+    const vehicle = this.getVehicle(vehicleId);
+    const error = validateService(record, vehicle?.odometer);
+    if (error) throw new Error(error);
+    const value = sanitizeForFirestore(record);
+    await this.persistMaintenancePatch(vehicleId, { serviceHistory: arrayUnion(value) }, v => ({ ...v, serviceHistory: [...(v.serviceHistory || []).filter(s => s.id !== value.id), value] }));
+  }
+
+  public async recordMaintenanceReading(vehicleId: string, reading: MaintenanceReading): Promise<void> {
+    const vehicle = this.getVehicle(vehicleId);
+    if (!validDay(reading.date) || reading.date !== dateOnly(new Date())) throw new Error('Mileage checks must use today’s date.');
+    if (!Number.isInteger(reading.odometer) || reading.odometer < 0) throw new Error('Enter a valid whole-number mileage.');
+    if (reading.odometer < (vehicle?.odometer ?? 0)) throw new Error('Mileage is less than the previous reading.');
+    const value = sanitizeForFirestore(reading);
+    await this.persistMaintenancePatch(vehicleId, { odometer: reading.odometer, maintenanceReadings: arrayUnion(value) }, v => ({ ...v, odometer: value.odometer, maintenanceReadings: [...(v.maintenanceReadings || []), value] }));
   }
 
   public async updateVehicle(updated: Vehicle): Promise<Vehicle> {
