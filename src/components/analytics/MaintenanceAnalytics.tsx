@@ -40,6 +40,7 @@ import VehicleMaintenanceForm, {
   type EditorMode,
 } from "./VehicleMaintenanceForm";
 import styles from "./analytics.module.css";
+import FleetTimeline from "./FleetTimeline";
 const MaintenanceChart = dynamic(() => import("./MaintenanceChart"), {
   ssr: false,
   loading: () => <div className={styles.chartLoading}>Loading chart…</div>,
@@ -521,7 +522,7 @@ export default function MaintenanceAnalytics() {
                         .filter(Boolean)
                         .join(" ") || v.name}
                     </p>
-                    <TruckGraphic />
+                    {v.imageUrl ? <img src={v.imageUrl} alt={`${v.vehicleNumber} vehicle`} className={styles.truckGraphic} style={{objectFit: "contain"}} /> : <TruckGraphic />}
                     <div className={styles.reading}>
                       <span>Recorded odometer</span>
                       <strong>
@@ -690,7 +691,7 @@ export default function MaintenanceAnalytics() {
                 <span className={styles.eyebrow}>THE ROAD AHEAD</span>
                 <h2>A year of better planning.</h2>
                 <p className={styles.muted}>
-                  Projected oil services across the trucks in view. Later dates
+                  Compare trucks on shared calendar or mileage scales. Later dates
                   assume earlier services are completed.
                 </p>
               </div>
@@ -699,39 +700,9 @@ export default function MaintenanceAnalytics() {
                 {format(addMonths(now, 12), "MMM yyyy")}
               </span>
             </div>
-            <div className={styles.timeline}>
-              {events.map((event, i) => (
-                <article
-                  key={event.id}
-                  className={`${styles.timelineRow} ${i % 2 ? styles.timelineRight : ""}`}
-                >
-                  <div className={styles.timelineDot} />
-                  <div className={styles.timelineCard}>
-                    <span className={styles.eyebrow}>
-                      {format(parseISO(event.date), "MMM d, yyyy")}
-                    </span>
-                    <div className={styles.cardTop}>
-                      <h3>{event.vehicleNumber}</h3>
-                      <span
-                        className={`${styles.badge} ${event.overdue ? styles.overdue : styles.scheduled}`}
-                      >
-                        {event.overdue ? "Due now" : "Projection"}
-                      </span>
-                    </div>
-                    <h4>{event.title}</h4>
-                    <p>{event.detail}</p>
-                    <button
-                      className={styles.setupLink}
-                      onClick={() =>
-                        setEditor({ id: event.vehicleId, mode: "service" })
-                      }
-                    >
-                      Record completed service <ArrowUpRight size={14} />
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
+            <FleetTimeline rows={rows} events={events} now={now}
+              onService={(id) => setEditor({id, mode: "service"})}
+              onSetup={(id) => setEditor({id, mode: "profile"})} />
             {!events.length && (
               <div className={styles.empty}>
                 <CalendarDays size={32} />

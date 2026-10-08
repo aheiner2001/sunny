@@ -1,0 +1,36 @@
+.controls { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0 10px; }
+.controls button { padding:10px 16px; border:1px solid #dce1eb; border-radius:10px; background:white; color:#475569; font-weight:600; }
+.controls button[aria-pressed=true] { color:white; background:#5260a5; border-color:#5260a5; }
+.help { color:#64748b; font-size:13px; line-height:1.6; margin:12px 0 18px; }
+.scroll { overflow:auto; max-height:75vh; border:1px solid #dce1eb; border-radius:16px; background:white; }
+.board { min-width:100%; width:max-content; }
+.grid { display:grid; }
+.headers { position:sticky; top:0; z-index:4; background:#f5f7fc; border-bottom:2px solid #dce1eb; }
+.axis { padding:20px 10px; border-right:1px solid #dce1eb; color:#64748b; font-size:12px; background:#f5f7fc; position:sticky; left:0; z-index:2; }
+.axis strong,.axis small { display:block; margin-bottom:6px; }
+.headers .axis { z-index:5; }
+.truck { display:flex; flex-direction:column; align-items:center; gap:5px; padding:18px; border-right:1px solid #dce1eb; text-align:center; }
+.truck img { width:100px; height:54px; object-fit:contain; border-radius:8px; }
+.truck small { color:#64748b; font-size:11px; }
+.truck button { color:#5260a5; font-size:12px; text-decoration:underline; }
+.placeholder { font-size:32px; height:54px; }
+.calendarLane { min-height:150px; padding:14px; border-right:1px solid #e5eaf2; border-bottom:1px solid #e5eaf2; }
+.event { width:100%; display:flex; flex-direction:column; gap:6px; padding:12px; margin-bottom:10px; background:#eef2ff; color:#334155; border:1px solid #d9dff7; border-radius:10px; text-align:left; }
+.event small { font-size:11px; line-height:1.5; color:#64748b; }
+.urgent { background:#fff1f2; border-color:#fecdd3; }
+.action { font-size:11px; color:#5260a5; }
+.list { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; }
+.mileageLane { position:relative; height:300px; border-right:1px solid #e5eaf2; border-bottom:1px solid #e5eaf2; }
+.rail { position:absolute; left:50%; top:0; bottom:0; width:4px; background:#e2e8f0; }
+.rail div { width:100%; background:#8692c8; }
+.marker { position:absolute; left:calc(50% + 12px); width:calc(50% - 20px); transform:translateY(-15%); padding:8px; border-radius:9px; text-align:left; background:#eef2ff; border:1px solid #c7d2fe; color:#334155; font-size:11px; z-index:1; }
+.marker::before { content:''; position:absolute; left:-16px; top:10px; width:10px; height:10px; border-radius:50%; background:#5260a5; border:2px solid white; }
+.marker strong,.marker span,.marker small { display:block; }
+.marker small { color:#64748b; font-size:9px; margin-top:4px; }
+.current { left:8px; background:#ecfdf5; border-color:#a7f3d0; }
+.current::before { left:auto; right:-18px; background:#059669; }
+.completed { background:#f1f5f9; border-color:#cbd5e1; }
+.due { background:#fff7ed; border-color:#fed7aa; }
+.due::before { background:#d97706; }
+.controls button:focus-visible,.marker:focus-visible,.event:focus-visible,.scroll:focus-visible { outline:3px solid #5260a5; outline-offset:2px; }
+@media(max-width:640px) { .help { font-size:12px; } .scroll { max-height:70vh; } }
