@@ -92,7 +92,7 @@ export default function ReturnClient() {
     setQuestions(activeChecklistQuestions(normalizeReturnQuestions(config.returnQuestions)));
     if (missedId) {
       const row = dbService.getMissedReturns().find((m) => m.id === missedId) || null;
-      setMissed(row && row.status === 'pending' ? row : row);
+      setMissed(row && row.status === 'pending' ? row : null);
     } else {
       setMissed(null);
     }
