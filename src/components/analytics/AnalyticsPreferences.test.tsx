@@ -1,0 +1,10 @@
+import React from 'react';
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { afterEach, expect, it, vi } from 'vitest';
+import AnalyticsPreferences from './AnalyticsPreferences';
+import { defaultAnalyticsPreferences } from '@/lib/analyticsPreferences';
+let root: ReturnType<typeof createRoot>;
+afterEach(async()=>{if(root)await act(async()=>root.unmount());document.body.innerHTML='';});
+it('offers accessible keyboard reorder and visible toggles for ordinary widgets only',async()=>{const change=vi.fn(),reset=vi.fn();const el=document.createElement('div');document.body.append(el);root=createRoot(el);await act(async()=>root.render(<AnalyticsPreferences preferences={defaultAnalyticsPreferences()} onChange={change} onReset={reset}/>));const up=el.querySelector('[aria-label="Move Service outlook up"]') as HTMLButtonElement;await act(async()=>up.click());expect(change.mock.calls[0][0].order).toEqual(['outlook','metrics','vehicles','equipment']);const toggle=el.querySelector('[aria-label="Show Equipment service"]') as HTMLInputElement;await act(async()=>toggle.click());expect(change.mock.calls[1][0].hidden).toEqual(['equipment']);expect(el.querySelector('[aria-label="Show Urgent actions"]')).toBeNull();await act(async()=>Array.from(el.querySelectorAll('button')).find(x=>x.textContent==='Reset layout')!.click());expect(reset).toHaveBeenCalledOnce();});
+it('reorders ordinary widgets by drag and preserves hidden choices',async()=>{const change=vi.fn();const el=document.createElement('div');document.body.append(el);root=createRoot(el);await act(async()=>root.render(<AnalyticsPreferences preferences={{...defaultAnalyticsPreferences(),hidden:['vehicles']}} onChange={change} onReset={()=>{}}/>));const rows=el.querySelectorAll('li');const start=new Event('dragstart',{bubbles:true});Object.defineProperty(start,'dataTransfer',{value:{setData:vi.fn()}});await act(async()=>rows[3].dispatchEvent(start));await act(async()=>rows[0].dispatchEvent(new Event('drop',{bubbles:true,cancelable:true})));expect(change.mock.calls[0][0]).toEqual({version:1,order:['equipment','metrics','outlook','vehicles'],hidden:['vehicles']});});
