@@ -58,6 +58,7 @@ export default function InspectClient() {
   const [generalPhotos, setGeneralPhotos] = useState<string[]>([]);
   const [signatureBase64, setSignatureBase64] = useState<string | null>(null);
   const [odometer, setOdometer] = useState<string>('');
+  const [odometerConfirmed, setOdometerConfirmed] = useState(false);
   const [fuelLevel, setFuelLevel] = useState<number>(100);
   const [collectOdometer, setCollectOdometer] = useState(true);
   const [collectFuelLevel, setCollectFuelLevel] = useState(true);
@@ -100,7 +101,8 @@ export default function InspectClient() {
       if (v) {
         setVehicle(v);
         if (v.currentUserId) setManagerSubjectId(v.currentUserId);
-        if (v.odometer) setOdometer(String(v.odometer));
+        setOdometer(v.odometer == null ? '' : String(v.odometer));
+        setOdometerConfirmed(false);
         if (v.fuelLevel !== undefined && v.fuelLevel !== null) setFuelLevel(v.fuelLevel);
       } else {
         setVehicle(null);
@@ -252,6 +254,7 @@ export default function InspectClient() {
           }
           if (draft.odometer) {
             setOdometer(draft.odometer);
+            setOdometerConfirmed(false);
           }
           if (draft.fuelLevel !== undefined) {
             setFuelLevel(draft.fuelLevel);
@@ -437,7 +440,10 @@ export default function InspectClient() {
     const resp = responses[q.id];
     return q.required !== false && !resp?.photoUrl;
   });
-  const canSubmit = allRequiredAnswered && !photoMissing && !isSubmitting;
+  const hasOdometer = collectOdometer && odometer.trim() !== '';
+  const validOdometer = !hasOdometer || (Number.isFinite(Number(odometer)) && Number(odometer) >= 0);
+  const readingReady = validOdometer && (!hasOdometer || odometerConfirmed);
+  const canSubmit = allRequiredAnswered && !photoMissing && readingReady && !isSubmitting;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -448,6 +454,11 @@ export default function InspectClient() {
 
     if (photoMissing) {
       alert('Please attach required photos before submitting.');
+      return;
+    }
+
+    if (!readingReady) {
+      alert('Enter a valid odometer reading and confirm it was measured, or leave optional mileage blank.');
       return;
     }
 
@@ -466,7 +477,7 @@ export default function InspectClient() {
     }
 
     const currentOdo = vehicle.odometer || 0;
-    const parsedOdo = collectOdometer && odometer ? Number(odometer) : null;
+    const parsedOdo = hasOdometer ? Number(odometer) : null;
     if (collectOdometer && parsedOdo !== null && parsedOdo < currentOdo) {
       if (!confirm(`Warning: Entered odometer (${parsedOdo} mi) is less than previous recorded mileage (${currentOdo} mi). Do you wish to proceed?`)) {
         return;
@@ -563,6 +574,7 @@ export default function InspectClient() {
         generalNotes: generalNotes.trim() || null,
         photoUrls: generalPhotos.length > 0 ? generalPhotos : null,
         odometer: collectOdometer ? parsedOdo : null,
+        odometerConfirmed: parsedOdo !== null && odometerConfirmed && parsedOdo >= currentOdo,
         fuelLevel: collectFuelLevel ? Number(fuelLevel) : null,
         signatureBase64: signatureBase64 || null,
         taskId: selectedTaskId || null,
@@ -591,6 +603,7 @@ export default function InspectClient() {
           issueIds: [],
           generalNotes: payload.generalNotes || undefined,
           odometer: payload.odometer ?? undefined,
+          odometerConfirmed: payload.odometerConfirmed,
           fuelLevel: payload.fuelLevel ?? undefined,
           signatureBase64: payload.signatureBase64 || undefined,
           photoUrls: payload.photoUrls || undefined,
@@ -873,6 +886,7 @@ export default function InspectClient() {
                 setGeneralNotes('');
                 setGeneralPhotos([]);
                 setSignatureBase64(null);
+                setOdometerConfirmed(false);
                 setShowDraftRecovery(false);
               }}
               className="px-3 py-1 bg-gray-300 text-gray-800 rounded font-bold text-xs hover:bg-gray-400"
@@ -982,7 +996,7 @@ export default function InspectClient() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {collectOdometer && (
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-ink flex items-center justify-between">
+            <label htmlFor="inspection-odometer" className="text-xs font-bold text-ink flex items-center justify-between">
               <span>Current Odometer (Miles)</span>
               {odometer && vehicle.odometer && Number(odometer) < vehicle.odometer && (
                 <span className="text-[10px] text-rose-600 font-extrabold flex items-center gap-0.5">
@@ -992,17 +1006,32 @@ export default function InspectClient() {
             </label>
             <div className="relative">
               <input
+                id="inspection-odometer"
                 type="number"
                 min="0"
                 placeholder="e.g. 45200"
                 value={odometer}
-                onChange={(e) => setOdometer(e.target.value)}
+                onChange={(e) => { setOdometer(e.target.value); setOdometerConfirmed(false); }}
                 className="w-full px-3 py-2 text-xs font-bold rounded-xl border border-line bg-surface focus:outline-none focus:ring-2 focus:ring-ink/20"
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-ink-faint pointer-events-none">
                 MI
               </span>
             </div>
+            <label className="flex items-start gap-2 text-xs text-ink">
+              <input
+                type="checkbox"
+                checked={odometerConfirmed}
+                disabled={!hasOdometer || !validOdometer}
+                onChange={(e) => setOdometerConfirmed(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>I measured this mileage from the vehicle odometer for this inspection.</span>
+            </label>
+            <p className="text-[11px] text-ink-muted">Confirm a fresh measurement, or clear optional mileage to submit without a reading. Prefilled and draft values need confirmation.</p>
+            {hasOdometer && Number(odometer) < (vehicle.odometer || 0) && (
+              <p className="text-[11px] text-rose-600">This lower reading will be saved for review and excluded from confirmed maintenance forecasts.</p>
+            )}
           </div>
           )}
 
@@ -1545,6 +1574,9 @@ export default function InspectClient() {
           <Send className="w-4 h-4" />
           <span>{isSubmitting ? 'Submitting to Fleet Log...' : 'Submit Vehicle Inspection'}</span>
         </button>
+        {!isSubmitting && !readingReady && (
+          <p role="status" className="text-center text-xs text-ink-muted">Confirm the measured odometer reading above, or clear optional mileage.</p>
+        )}
         {!isSubmitting && !allRequiredAnswered && (
           <p className="text-center text-xs text-ink-muted">
             Answer every required question before submitting.
