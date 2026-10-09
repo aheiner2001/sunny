@@ -1,0 +1,165 @@
+{
+  "vehicles": [
+    {
+      "id": "v1",
+      "vehicleNumber": "Sample van",
+      "odometer": 12000,
+      "maintenance": {
+        "rules": [
+          {
+            "id": "oil",
+            "title": "Oil service",
+            "kind": "oil",
+            "intervalMiles": 5000,
+            "intervalMonths": 6,
+            "recurrence": "after_service",
+            "source": "Synthetic training rule",
+            "confirmed": true
+          },
+          {
+            "id": "filters",
+            "title": "Cabin filter service",
+            "kind": "filters",
+            "intervalMiles": 5000,
+            "intervalMonths": 6,
+            "recurrence": "after_service",
+            "source": "Synthetic training rule; no manufacturer applicability",
+            "confirmed": true,
+            "baselineDate": "2026-07-05",
+            "baselineOdometer": 10500
+          },
+          {
+            "id": "coolant",
+            "title": "Initial coolant service",
+            "kind": "other",
+            "intervalMiles": 50000,
+            "intervalMonths": 36,
+            "initialMiles": 100000,
+            "initialMonths": 60,
+            "recurrence": "initial_then_recurring",
+            "source": "Synthetic training rule; no manufacturer applicability",
+            "confirmed": true
+          }
+        ],
+        "inServiceDate": "2026-01-01"
+      },
+      "maintenanceReadings": [
+        {
+          "date": "2026-09-08",
+          "odometer": 11000,
+          "confirmed": true
+        },
+        {
+          "date": "2026-10-08",
+          "odometer": 12000,
+          "confirmed": true
+        }
+      ],
+      "serviceHistory": [
+        {
+          "id": "s1",
+          "ruleId": "oil",
+          "kind": "oil",
+          "title": "Oil service",
+          "date": "2026-05-01",
+          "odometer": 10000,
+          "recordedBy": "Sample manager"
+        },
+        {
+          "id": "s2",
+          "ruleId": "oil",
+          "kind": "oil",
+          "title": "Oil service",
+          "date": "2026-07-01",
+          "odometer": 10500,
+          "recordedBy": "Sample manager",
+          "supersedesId": "s1",
+          "correctionReason": "Training example: corrected a transcribed date and mileage",
+          "recordedAt": "2026-10-08T12:00:00Z"
+        }
+      ],
+      "name": "Synthetic training van",
+      "maintenanceAppointments": [
+        {
+          "id": "a1",
+          "ruleId": "oil",
+          "title": "Oil appointment example",
+          "date": "2027-02-01",
+          "status": "booked"
+        }
+      ]
+    },
+    {
+      "id": "v2",
+      "vehicleNumber": "Unknown baseline van",
+      "odometer": 5000,
+      "maintenanceReadings": [
+        {
+          "date": "2026-10-08",
+          "odometer": 5000,
+          "confirmed": true,
+          "source": "Synthetic sample meter"
+        }
+      ],
+      "maintenance": {
+        "rules": [
+          {
+            "id": "oil",
+            "title": "Oil service",
+            "kind": "oil",
+            "intervalMiles": 5000,
+            "intervalMonths": 6,
+            "recurrence": "after_service",
+            "source": "Synthetic training rule",
+            "confirmed": true
+          }
+        ]
+      },
+      "serviceHistory": []
+    }
+  ],
+  "equipment": [
+    {
+      "id": "e1",
+      "name": "Synthetic pressure washer",
+      "operatingHours": 145,
+      "carsUsed": 9999,
+      "expectedCars": 100,
+      "dueDate": "2025-01-01",
+      "maintenanceRules": [
+        {
+          "id": "pump",
+          "title": "Pump service",
+          "intervalHours": 50,
+          "intervalMonths": 6,
+          "source": "Synthetic training rule; no manufacturer applicability",
+          "confirmed": true,
+          "baselineDate": "2026-09-01",
+          "baselineHours": 100
+        },
+        {
+          "id": "inspection",
+          "title": "Pump inspection",
+          "intervalMonths": 3,
+          "source": "Synthetic training rule",
+          "confirmed": true
+        }
+      ],
+      "hoursReadings": [
+        {
+          "date": "2026-09-01",
+          "hours": 100,
+          "recordedBy": "Sample manager"
+        },
+        {
+          "date": "2026-10-08",
+          "hours": 145,
+          "recordedBy": "Sample manager"
+        }
+      ],
+      "serviceHistory": []
+    }
+  ],
+  "sampleOnly": true,
+  "description": "Synthetic training data only. Intervals are made up examples, not manufacturer guidance. Do not import into a live fleet."
+}
