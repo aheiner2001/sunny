@@ -35,7 +35,7 @@ import {
 } from '@/types';
 import { transitionAssignment } from './vehicleAssignments';
 import { classifyIssueType } from './issueClassification';
-import { shouldAutoReturnVehicle, localDateString } from './occupancy';
+import { shouldAutoReturnVehicle, localDateString, checkInFields, checkOutFields } from './occupancy';
 import { DEFAULT_RETURN_QUESTIONS, hasReturnForShift, normalizeReturnQuestions, shiftDateStringForVehicle } from './returnFlow';
 import { repairDuplicateCategoryIds } from './checklistCategories';
 import { compactConfirmedInspections } from './inspectionCache';
@@ -296,6 +296,7 @@ class DataStore {
           snapshot.forEach((d) => list.push(d.data() as Vehicle));
           localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(list));
           this.vehicleSnapshotLoaded = true;
+          this.reconcileOvernightCheckins();
           if (this.assignmentSnapshotLoaded) this.getVehicleAssignments();
           window.dispatchEvent(new Event('sunny_db_update'));
         }
@@ -1001,33 +1002,47 @@ class DataStore {
     if (newMisses.length > 0) {
       const merged = [...newMisses, ...existingMisses];
       localStorage.setItem(STORAGE_KEYS.MISSED_RETURNS, JSON.stringify(merged));
-      if (db) {
-        newMisses.forEach((miss) => {
-          setDoc(doc(db, 'missedReturns', miss.id), sanitizeForFirestore(miss), { merge: true }).catch((e) =>
-            console.warn('Firestore missed-return write error:', e)
-          );
-        });
-      }
     }
 
     let state = { assignments: this.getVehicleAssignments(), vehicles: list };
     for (const v of stale) {
-      state = transitionAssignment(state.assignments, state.vehicles, {
-        vehicleId: v.id, user: null, effectiveAt: new Date().toISOString(), recordedAt: new Date().toISOString(),
-        source: 'overnight', actor: { id: 'system', name: 'Overnight return' },
-      });
+      try {
+        state = transitionAssignment(state.assignments, state.vehicles, {
+          vehicleId: v.id, user: null, effectiveAt: new Date().toISOString(), recordedAt: new Date().toISOString(),
+          source: 'overnight', actor: { id: 'system', name: 'Overnight return' },
+        });
+      } catch (err) {
+        console.warn('Overnight transition error for vehicle', v.id, err);
+        state = {
+          assignments: state.assignments,
+          vehicles: state.vehicles.map(item => item.id === v.id ? checkInFields(item) : item)
+        };
+      }
     }
     localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(state.vehicles));
     localStorage.setItem(STORAGE_KEYS.VEHICLE_ASSIGNMENTS, JSON.stringify(state.assignments));
     if (db) {
-      for (const v of stale) {
-        const updated = state.vehicles.find(item => item.id === v.id)!;
-        setDoc(doc(db, 'vehicles', updated.id), sanitizeForFirestore(updated), { merge: true }).catch(e => console.warn('Overnight vehicle sync:', e));
-      }
-      for (const item of state.assignments.filter(a => stale.some(v => v.id === a.vehicleId && a.endedAt))) {
-        setDoc(doc(db, 'vehicleAssignments', item.id), sanitizeForFirestore(item), { merge: true }).catch(e => console.warn('Overnight assignment sync:', e));
+      try {
+        const batch = writeBatch(db);
+        for (const v of stale) {
+          const updated = state.vehicles.find(item => item.id === v.id);
+          if (updated) {
+            batch.set(doc(db, 'vehicles', updated.id), sanitizeForFirestore(updated), { merge: true });
+          }
+        }
+        for (const item of state.assignments.filter(a => stale.some(v => v.id === a.vehicleId && a.endedAt))) {
+          batch.set(doc(db, 'vehicleAssignments', item.id), sanitizeForFirestore(item), { merge: true });
+        }
+        for (const miss of newMisses) {
+          batch.set(doc(db, 'missedReturns', miss.id), sanitizeForFirestore(miss), { merge: true });
+        }
+        batch.commit().catch(e => console.warn('Overnight batch sync error:', e));
+      } catch (e) {
+        console.warn('Overnight batch error:', e);
       }
     }
+    localStorage.setItem(STORAGE_KEYS.OVERNIGHT_RECONCILED, today);
+    this.overnightReconciledFor = today;
     window.dispatchEvent(new Event('sunny_db_update'));
   }
 
@@ -1344,7 +1359,7 @@ class DataStore {
     before: VehicleAssignment[], vehicles: Vehicle[], result: { assignments: VehicleAssignment[]; vehicles: Vehicle[] },
     vehicleWrittenSeparately?: string, requireSharedWrite = false
   ): Promise<void> {
-    if (result.assignments === before) return;
+    if (result.assignments === before && result.vehicles === vehicles) return;
     if (requireSharedWrite && !db) throw new Error('Shared vehicle assignments are unavailable. Try again when connected.');
     if (!requireSharedWrite) {
       localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(result.vehicles));
@@ -2941,18 +2956,28 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     };
 
     // Calculate checkout before committing so the inspection and vehicle state agree.
+    // Inspection unconditionally assigns the vehicle to the driver and sets status to 'in_use',
+    // even if issues were flagged or if the vehicle had a prior/stale occupant.
     const vehiclesBefore = this.getVehicles();
-    const assignmentsBefore = !vehicle.currentUserId ? this.getVehicleAssignments() : [];
-    const transition = !vehicle.currentUserId
-      ? transitionAssignment(assignmentsBefore, vehiclesBefore, {
-          vehicleId: vehicle.id, user: { id: data.userId || 'anon', name: data.userName || 'Inspector' },
-          effectiveAt: nowIso, recordedAt: nowIso, source: 'inspection',
-          actor: { id: data.submittedById || data.userId, name: data.submittedByName || data.userName },
-        })
-      : null;
-    const occupied = transition?.vehicles.find(item => item.id === vehicle.id) || vehicle;
+    const assignmentsBefore = this.getVehicleAssignments();
+    let transition: { assignments: VehicleAssignment[]; vehicles: Vehicle[] } | null = null;
+    try {
+      transition = transitionAssignment(assignmentsBefore, vehiclesBefore, {
+        vehicleId: vehicle.id,
+        user: { id: data.userId || 'anon', name: data.userName || 'Inspector' },
+        effectiveAt: nowIso,
+        recordedAt: nowIso,
+        source: 'inspection',
+        actor: { id: data.submittedById || data.userId, name: data.submittedByName || data.userName },
+      });
+    } catch (err) {
+      console.warn('transitionAssignment fallback in submitInspection:', err);
+    }
+    const occupied = transition?.vehicles.find(item => item.id === vehicle.id)
+      || checkOutFields(vehicle, { id: data.userId || 'anon', name: data.userName || 'Inspector' }, now);
     const updatedVehicle: Vehicle = {
       ...occupied,
+      status: 'in_use',
       lastInspectionId: inspectionId,
       lastInspectionStatus: status,
       lastInspectionAt: nowIso,

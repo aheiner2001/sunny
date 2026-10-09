@@ -22,7 +22,12 @@ export function transitionAssignment(
   const active = assignments.filter(a => !a.endedAt);
   const same = active.find(a => a.vehicleId === request.vehicleId && a.userId === request.user?.id);
   if (same && request.user) {
-    if (request.source !== 'manager' || same.startedAt === time.toISOString()) return { assignments, vehicles };
+    if (request.source !== 'manager' || same.startedAt === time.toISOString()) {
+      return {
+        assignments,
+        vehicles: vehicles.map(v => v.id === vehicle.id ? checkOutFields(v, request.user!, new Date(same.startedAt)) : v),
+      };
+    }
     for (const item of assignments.filter(a => a.endedAt && a.id !== same.id)) {
       if ((item.vehicleId === vehicle.id || item.userId === request.user.id) && time.getTime() < new Date(item.endedAt!).getTime()) {
         throw new Error('That time overlaps a previous assignment.');
@@ -39,14 +44,22 @@ export function transitionAssignment(
   const affected = active.filter(a => a.vehicleId === request.vehicleId || (request.user && a.userId === request.user.id));
   for (const item of affected) {
     if (time.getTime() < new Date(item.startedAt).getTime()) {
-      throw new Error(`Assignment time cannot be before ${item.userName}'s current start time.`);
+      if (request.source === 'manager') {
+        throw new Error(`Assignment time cannot be before ${item.userName}'s current start time.`);
+      } else {
+        time.setTime(Math.max(time.getTime(), new Date(item.startedAt).getTime() + 1000));
+      }
     }
   }
   for (const item of assignments.filter(a => a.endedAt)) {
     if (item.vehicleId === request.vehicleId || (request.user && item.userId === request.user.id)) {
       const end = new Date(item.endedAt!).getTime();
       if (request.user && time.getTime() < end) {
-        throw new Error('That time overlaps a previous assignment.');
+        if (request.source === 'manager') {
+          throw new Error('That time overlaps a previous assignment.');
+        } else {
+          time.setTime(Math.max(time.getTime(), end + 1000));
+        }
       }
     }
   }
