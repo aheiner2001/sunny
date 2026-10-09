@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { addDays, addMonths, format, parseISO } from "date-fns";
@@ -23,7 +23,7 @@ import { useAuth } from "@/context/AuthContext";
 import { dbService } from "@/lib/db";
 import { computeLifespanStatus } from "@/lib/lifespan";
 import {
-  buildOilTimeline,
+
   forecastOil,
   dateOnly,
   type OilStatus,
@@ -35,12 +35,18 @@ import type {
   MaintenanceReading,
   MaintenanceProfile,
   VehicleServiceRecord,
+  MaintenanceAppointment,
 } from "@/types";
 import VehicleMaintenanceForm, {
   type EditorMode,
+  type EditorValue,
+  type SetupValue,
 } from "./VehicleMaintenanceForm";
 import styles from "./analytics.module.css";
 import FleetTimeline from "./FleetTimeline";
+import MaintenanceActions, { issueAction } from "./MaintenanceActions";
+import { forecastMaintenance, buildMaintenanceTimeline, effectiveServices, setupIssues } from "@/lib/maintenanceRules";
+import { prepareImageUpload, imageErrorFallback } from "@/lib/imageUpload";
 const MaintenanceChart = dynamic(() => import("./MaintenanceChart"), {
   ssr: false,
   loading: () => <div className={styles.chartLoading}>Loading chart…</div>,
@@ -78,9 +84,9 @@ function sampleFleet(now: Date): Vehicle[] {
       maintenanceReadings: [
         {
           date: dateOnly(addDays(now, -30)),
-          odometer: odometer - [1200, 1800, 800][i],
+          odometer: odometer - [1200, 1800, 800][i], confirmed:true, source:"Synthetic sample measurement",
         },
-        { date: dateOnly(now), odometer },
+        { date: dateOnly(now), odometer, confirmed:true, source:"Synthetic sample measurement" },
       ],
       serviceHistory: [
         {
@@ -145,11 +151,15 @@ export default function MaintenanceAnalytics() {
     [samples, setSamples] = useState<Vehicle[]>([]),
     [query, setQuery] = useState(""),
     [tab, setTab] = useState<"overview" | "timeline" | "equipment">("overview");
-  const [editor, setEditor] = useState<{ id: string; mode: EditorMode } | null>(
+  const [editor, setEditor] = useState<{ id: string; mode: EditorMode; ruleId?:string; step?:number; original?:VehicleServiceRecord; appointment?:MaintenanceAppointment } | null>(
       null,
     ),
     [message, setMessage] = useState(""),
     [now, setNow] = useState(() => new Date());
+  const savedSetupStages=useRef(new Set<string>());
+  const savedSetupServices=useRef(new Map<string,string>());
+  const [photoError,setPhotoError]=useState(""),[photoBusy,setPhotoBusy]=useState<string|null>(null);
+  const edit=(id:string,mode:EditorMode,ruleId?:string,step?:number)=>{setMessage("");setEditor({id,mode,ruleId,step});};
   useEffect(() => {
     const load = () => {
       setVehicles(dbService.getVehicles());
@@ -182,20 +192,27 @@ export default function MaintenanceAnalytics() {
                     (i) =>
                       i.vehicleId === vehicle.id &&
                       i.odometer != null &&
-                      i.status !== "rejected",
+                      i.status !== "rejected" &&
+                      i.odometerConfirmed === true,
                   )
-                  .map((i) => ({ date: i.dateString, odometer: i.odometer! }))
+                  .map((i) => ({ date: i.dateString, odometer: i.odometer!, confirmed:true, source:"Confirmed inspection" }))
               : []),
           ];
-          const oil = forecastOil(vehicle, readings, now);
-          return { vehicle, readings, oil };
+          const forecasts=forecastMaintenance(vehicle,readings,now).map(f=>{
+            if(f.ruleId!=='oil' || f.status!=='needs_setup' || vehicle.maintenance?.rules?.some(r=>r.id==='oil'))return f;
+            const p=vehicle.maintenance;
+            const missing=[...(!p?.oilIntervalMiles?['Enter oil mileage interval.']:[]),...(!p?.oilIntervalMonths?['Enter oil month interval.']:[]),...(!p?.scheduleSource?.trim()?['Add the verified oil schedule source.']:[]),...(!p?.scheduleConfirmed?['Confirm oil intervals against configuration and operating conditions.']:[]),...(!f.lastService?['Record oil completed-service baseline date and mileage.']:[]),...(vehicle.odometer==null?['Record current measured mileage.']:[])];
+            return {...f,missing:missing.length?missing:f.missing};
+          });
+          const oil = forecasts.find(f=>f.ruleId==='oil') || forecastOil(vehicle,readings,now);
+          return { vehicle, readings, oil, forecasts };
         }),
     [source, query, demo, inspections, now],
   );
   const events = useMemo(
     () =>
       rows
-        .flatMap((r) => buildOilTimeline(r.vehicle, r.readings, now))
+        .flatMap((r) => buildMaintenanceTimeline(r.vehicle, r.readings, now))
         .sort((a, b) => a.date.localeCompare(b.date)),
     [rows, now],
   );
@@ -204,7 +221,7 @@ export default function MaintenanceAnalytics() {
       key = format(d, "yyyy-MM");
     return {
       month: format(d, "MMM yy"),
-      count: events.filter((e) => e.date.startsWith(key)).length,
+      count: events.filter((e) => e.projected && e.date.startsWith(key)).length,
     };
   });
   const items = demo
@@ -243,56 +260,46 @@ export default function MaintenanceAnalytics() {
     if (!demo) setSamples(sampleFleet(now));
     setDemo(!demo);
   }
-  async function save(
-    mode: EditorMode,
-    value: MaintenanceProfile | VehicleServiceRecord | MaintenanceReading,
-  ) {
-    if (!selected) return;
-    if (demo) {
-      setSamples((list) =>
-        list.map((v) =>
-          v.id !== selected.id
-            ? v
-            : mode === "profile"
-              ? { ...v, maintenance: value as MaintenanceProfile }
-              : mode === "service"
-                ? {
-                    ...v,
-                    serviceHistory: [
-                      ...(v.serviceHistory || []),
-                      value as VehicleServiceRecord,
-                    ],
-                  }
-                : {
-                    ...v,
-                    odometer: (value as MaintenanceReading).odometer,
-                    maintenanceReadings: [
-                      ...(v.maintenanceReadings || []),
-                      value as MaintenanceReading,
-                    ],
-                  },
-        ),
-      );
-      setMessage("Sample change saved for this session.");
-      return;
+  async function save(mode:EditorMode,value:EditorValue) {
+    if(!selected) throw new Error("Select a vehicle before saving.");
+    setMessage("");
+    const setup=mode==='profile' && 'profile' in value ? value as SetupValue : undefined;
+    if(demo) {
+      setSamples(list=>list.map(v=>{
+        if(v.id!==selected.id)return v;
+        if(setup)return {...v,maintenance:setup.profile,...(setup.reading?{odometer:setup.reading.odometer,maintenanceReadings:[...(v.maintenanceReadings || []),setup.reading]}:{}),...(setup.service?{serviceHistory:[...(v.serviceHistory || []),setup.service]}:{})};
+        if(mode==='profile')return {...v,maintenance:value as MaintenanceProfile};
+        if(mode==='reading'){const reading=value as MaintenanceReading;return {...v,odometer:reading.odometer,maintenanceReadings:[...(v.maintenanceReadings || []),reading]};}
+        if(mode==='appointment'){const a=value as MaintenanceAppointment;return {...v,maintenanceAppointments:[...(v.maintenanceAppointments || []).filter(old=>old.id!==a.id),a]};}
+        const service=value as VehicleServiceRecord;
+        const original=v.serviceHistory?.find(s=>s.id===service.supersedesId);
+        const corrected=mode==='correction'?{...service,...(original?.ruleId?{ruleId:original.ruleId}:{}),recordedBy:'synthetic-manager',recordedAt:new Date().toISOString()}:service;
+        return {...v,serviceHistory:[...(v.serviceHistory || []),corrected],maintenanceAppointments:v.maintenanceAppointments?.map(a=>(a.id===service.appointmentId || (service.supersedesId && a.serviceRecordId===service.supersedesId))?{...a,status:'completed',serviceRecordId:service.id}:a)};
+      }));
+      setMessage("Sample change saved for this session.");return;
     }
-    if (mode === "profile")
-      await dbService.saveMaintenanceProfile(
-        selected.id,
-        value as MaintenanceProfile,
-      );
-    else if (mode === "service")
-      await dbService.recordVehicleService(
-        selected.id,
-        value as VehicleServiceRecord,
-      );
-    else
-      await dbService.recordMaintenanceReading(
-        selected.id,
-        value as MaintenanceReading,
-      );
+    if(setup) {
+      // Keep acknowledged stages across retry; a later failure must not duplicate a service.
+      const key=`${selected.id}-${setup.service?.id || 'no-service'}`;
+      const readingKey=`${key}-reading-${JSON.stringify(setup.reading)}`;
+      const serviceSignature=setup.service?JSON.stringify({date:setup.service.date,odometer:setup.service.odometer,title:setup.service.title,kind:setup.service.kind,recordedBy:setup.service.recordedBy}):undefined;
+      try {
+        if(serviceSignature && savedSetupServices.current.has(key) && savedSetupServices.current.get(key)!==serviceSignature)throw new Error("This completed-service baseline is already saved; append a correction from history and reopen setup before changing it.");
+        if(setup.reading && !savedSetupStages.current.has(readingKey)){await dbService.recordMaintenanceReading(selected.id,setup.reading);savedSetupStages.current.add(readingKey);}
+        if(setup.service && !savedSetupStages.current.has(`${key}-service`)){await dbService.recordVehicleService(selected.id,setup.service);savedSetupStages.current.add(`${key}-service`);savedSetupServices.current.set(key,serviceSignature!);}
+        await dbService.saveMaintenanceProfile(selected.id,setup.profile);
+        savedSetupStages.current.clear();savedSetupServices.current.clear();
+      } catch(error) {throw new Error(`${error instanceof Error?error.message:'Save could not be confirmed.'} Setup is not fully saved. Any confirmed measurement/service remains in history; check history before retrying uncertain writes.`);}
+    } else if(mode==='profile')await dbService.saveMaintenanceProfile(selected.id,value as MaintenanceProfile);
+    else if(mode==='reading')await dbService.recordMaintenanceReading(selected.id,value as MaintenanceReading);
+    else if(mode==='appointment')await dbService.saveMaintenanceAppointment(selected.id,value as MaintenanceAppointment);
+    else if(mode==='correction'){const service=value as VehicleServiceRecord;await dbService.correctVehicleService(selected.id,service.supersedesId!,service,service.correctionReason!,{id:user?.id || '',name:user?.name || 'Manager'});}
+    else await dbService.recordVehicleService(selected.id,value as VehicleServiceRecord);
     setMessage("Maintenance record saved.");
   }
+  async function uploadPhoto(vehicle:Vehicle,file:File){setPhotoError("");setPhotoBusy(vehicle.id);try{const imageUrl=await prepareImageUpload(file);if(demo)setSamples(list=>list.map(v=>v.id===vehicle.id?{...v,imageUrl}:v));else await dbService.saveVehicleImage(vehicle.id,imageUrl);setMessage(demo?"Sample photo saved for this session.":"Vehicle photo saved.");}catch(error){setPhotoError(error instanceof Error?error.message:'Could not save photo.');}finally{setPhotoBusy(null);}}
+  function download(content:string,type:string,name:string){const url=URL.createObjectURL(new Blob([content],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+  function exportJson(){const readings=Object.fromEntries(source.map(v=>[v.id,demo?[]:inspections.filter(i=>i.vehicleId===v.id&&i.status!=='rejected'&&i.odometer!=null&&i.odometerConfirmed===true).map(i=>({date:i.dateString,odometer:i.odometer,confirmed:true,source:'Confirmed inspection'}))]));download(JSON.stringify({vehicles:source,equipment:items,readings},null,2),'application/json',`${demo?'sample-':''}maintenance-report-${dateOnly(now)}.json`);}
   function exportPlan() {
     const lines = [
       ["Vehicle", "Service", "Planning date", "Status", "Basis"],
@@ -300,7 +307,7 @@ export default function MaintenanceAnalytics() {
         e.vehicleNumber,
         e.title,
         e.date,
-        e.overdue ? "Due now" : "Projection",
+        !e.projected ? "Booked appointment" : e.overdue ? "Due now" : "Estimate",
         e.detail,
       ]),
     ];
@@ -309,7 +316,7 @@ export default function MaintenanceAnalytics() {
         r
           .map(
             (c) =>
-              `"${(/^[=+@-]/.test(c) ? "'" : "") + c.replace(/"/g, '""')}"`,
+              `"${(/^[\s]*[=+@-]/.test(c) ? "'" : "") + c.replace(/"/g, '""')}"`,
           )
           .join(","),
       )
@@ -404,6 +411,7 @@ export default function MaintenanceAnalytics() {
             <FlaskConical size={16} />
             {demo ? "Use fleet data" : "Try sample data"}
           </button>
+          <button className={styles.secondary} onClick={exportJson}><Download size={16}/>Export report JSON</button>
           <button
             className={styles.primary}
             onClick={exportPlan}
@@ -438,14 +446,14 @@ export default function MaintenanceAnalytics() {
             note: "Compare across the fleet",
           },
           {
-            label: "Oil service due now",
-            value: rows.filter((r) => r.oil.status === "overdue").length,
+            label: "Services due now",
+            value: rows.flatMap(r=>r.forecasts).filter(f=>f.status === "overdue").length,
             icon: Droplets,
             note: "Reached mileage or time limit",
           },
           {
             label: "Baselines needed",
-            value: rows.filter((r) => r.oil.status === "needs_setup").length,
+            value: rows.flatMap(r=>r.forecasts).filter(f=>f.status === "needs_setup").length,
             icon: SlidersHorizontal,
             note: "Complete setup to forecast",
           },
@@ -469,6 +477,8 @@ export default function MaintenanceAnalytics() {
       <div id="analytics-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
         {tab === "overview" && (
           <>
+            <MaintenanceActions rows={rows} onEdit={edit}/>
+            {photoError && <p role="alert" className={styles.error}>{photoError}</p>}
             <div className={styles.sectionHeader}>
               <div>
                 <span className={styles.eyebrow}>VEHICLE COMPARISON</span>
@@ -485,7 +495,7 @@ export default function MaintenanceAnalytics() {
               </label>
             </div>
             <div className={styles.trucks}>
-              {rows.map(({ vehicle: v, oil, readings }) => {
+              {rows.map(({ vehicle: v, oil, readings, forecasts }) => {
                 const latest = [...readings].sort((a, b) =>
                   b.date.localeCompare(a.date),
                 )[0];
@@ -498,7 +508,7 @@ export default function MaintenanceAnalytics() {
                         Math.min(
                           100,
                           (((v.odometer ?? 0) - oil.lastService.odometer) /
-                            v.maintenance.oilIntervalMiles) *
+                            (v.maintenance.rules?.find(r=>r.id==='oil')?.intervalMiles || v.maintenance.oilIntervalMiles)) *
                             100,
                         ),
                       )
@@ -522,7 +532,8 @@ export default function MaintenanceAnalytics() {
                         .filter(Boolean)
                         .join(" ") || v.name}
                     </p>
-                    {v.imageUrl ? <img src={v.imageUrl} alt={`${v.vehicleNumber} vehicle`} className={styles.truckGraphic} style={{objectFit: "contain"}} /> : <TruckGraphic />}
+                    {v.imageUrl ? <img src={v.imageUrl} onError={imageErrorFallback} alt={`${v.vehicleNumber} vehicle`} className={styles.truckGraphic} style={{objectFit: "contain"}} /> : <TruckGraphic />}
+                    <label className={styles.photoUpload}>Vehicle photo<input aria-label={`Upload ${v.vehicleNumber} photo`} type="file" accept="image/jpeg,image/png,image/webp" disabled={photoBusy!==null} onChange={e=>{const file=e.target.files?.[0];if(file)void uploadPhoto(v,file);e.target.value="";}}/>{photoBusy===v.id?"Saving photo…":"JPEG, PNG or WebP · up to 5MB"}</label>
                     <div className={styles.reading}>
                       <span>Recorded odometer</span>
                       <strong>
@@ -576,25 +587,28 @@ export default function MaintenanceAnalytics() {
                       </div>
                     </dl>
                     <p className={styles.cardHint}>{oil.reason}</p>
+                    {forecasts.map(f=><section key={f.ruleId} className={styles.ruleForecast} aria-label={`${f.title} forecast`}><div className={styles.cardTop}><strong>{f.title}</strong><span className={`${styles.badge} ${styles[f.status]}`}>{labels[f.status]}</span></div><p>{f.reason}</p><p>Source: {f.source.startsWith('https://')?<a href={f.source} target="_blank" rel="noreferrer">Review manual ↗</a>:f.source || 'Not verified'}</p><ul>{f.basis.map(b=><li key={b}>{b}</li>)}</ul>{f.dueDate&&<p>Estimate: {f.dueDate}{f.dueOdometer!=null?` · ${f.dueOdometer.toLocaleString()} mi limit`:''}</p>}{f.missing.map(issue=>{const action=issueAction(issue,f.ruleId,v.maintenance?.rules?.some(rule=>rule.id===f.ruleId) || f.ruleId!=='oil');return <p key={issue}>{issue} <button className={styles.setupLink} onClick={()=>edit(v.id,action.mode,f.ruleId,action.step)}>{action.label} →</button></p>;})}</section>)}
+                    {setupIssues(v).filter(issue=>/vehicle make|vehicle model|model year|engine\/configuration|operating conditions/i.test(issue)).map(issue=><p key={issue} className={styles.muted}>{issue} <button className={styles.setupLink} onClick={()=>edit(v.id,'profile',undefined,1)}>Add identity detail →</button></p>)}
                     <div className={styles.cardActions}>
                       <button
                         className={styles.primary}
-                        onClick={() => setEditor({ id: v.id, mode: "service" })}
+                        onClick={() => edit(v.id,"service")}
                       >
                         <Plus size={15} />
                         Log service
                       </button>
                       <button
                         className={styles.secondary}
-                        onClick={() => setEditor({ id: v.id, mode: "reading" })}
+                        onClick={() => edit(v.id,"reading")}
                       >
                         <Gauge size={15} />
                         Mileage
                       </button>
                     </div>
+                    <button className={styles.secondary} onClick={()=>edit(v.id,"appointment")}>Book appointment</button>
                     <button
                       className={styles.setupLink}
-                      onClick={() => setEditor({ id: v.id, mode: "profile" })}
+                      onClick={() => edit(v.id,"profile")}
                     >
                       Vehicle & schedule setup <ArrowUpRight size={14} />
                     </button>
@@ -614,12 +628,15 @@ export default function MaintenanceAnalytics() {
                               {s.recordedBy}
                               {s.notes ? ` · ${s.notes}` : ""}
                             </small>
+                            {s.supersedesId&&<small>Correction of {s.supersedesId} · {s.correctionReason} · actor {s.recordedBy} · {s.recordedAt}</small>}
+                            {effectiveServices(v.serviceHistory || []).some(active=>active.id===s.id)?<button className={styles.setupLink} onClick={()=>{setMessage('');setEditor({id:v.id,mode:'correction',original:s});}}>Append correction →</button>:<small>Superseded; retained for audit</small>}
                           </div>
                         ))}
                       {!v.serviceHistory?.length && (
                         <p>No completed services recorded.</p>
                       )}
                     </details>
+                    <details className={styles.history}><summary>Appointments ({v.maintenanceAppointments?.length || 0})</summary>{(v.maintenanceAppointments || []).map(a=><div key={a.id}><strong>{a.title}</strong><span>{a.date} · {a.status}</span>{a.serviceRecordId&&<small>Completed service: {a.serviceRecordId}</small>}<button className={styles.setupLink} onClick={()=>{setMessage('');setEditor({id:v.id,mode:'appointment',appointment:a});}}>Review booking / cancel / link completion →</button></div>)}</details>
                   </article>
                 );
               })}
@@ -642,7 +659,7 @@ export default function MaintenanceAnalytics() {
                 <div className={styles.sectionHeader}>
                   <div>
                     <span className={styles.eyebrow}>PLANNING WORKLOAD</span>
-                    <h2>Oil services by month</h2>
+                    <h2>Estimated services by month</h2>
                   </div>
                   <span className={styles.softBadge}>Projected</span>
                 </div>
@@ -701,8 +718,10 @@ export default function MaintenanceAnalytics() {
               </span>
             </div>
             <FleetTimeline rows={rows} events={events} now={now}
-              onService={(id) => setEditor({id, mode: "service"})}
-              onSetup={(id) => setEditor({id, mode: "profile"})} />
+              onService={(id,ruleId) => edit(id,"service",ruleId)}
+              onSetup={(id) => edit(id,"profile")}
+              onReading={(id)=>edit(id,"reading")}
+              onAppointment={(id,appointmentId)=>{const appointment=source.find(v=>v.id===id)?.maintenanceAppointments?.find(a=>a.id===appointmentId);setEditor({id,mode:"appointment",appointment});}} />
             {!events.length && (
               <div className={styles.empty}>
                 <CalendarDays size={32} />
@@ -813,10 +832,14 @@ export default function MaintenanceAnalytics() {
           key={`${selected.id}-${editor.mode}`}
           vehicle={selected}
           mode={editor.mode}
-          actor={user?.name || "Manager"}
+          actor={demo?"synthetic-manager":user?.id || ""}
           demo={demo}
           onClose={() => setEditor(null)}
           onSave={save}
+          initialStep={editor.step}
+          initialRuleId={editor.ruleId}
+          original={editor.original}
+          appointment={editor.appointment}
         />
       )}
     </div>

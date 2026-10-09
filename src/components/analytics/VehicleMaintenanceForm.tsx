@@ -1,459 +1,66 @@
-"use client";
-import React, { useState, useRef, useEffect } from "react";
-import { X, Search, Save } from "lucide-react";
-import type {
-  Vehicle,
-  MaintenanceProfile,
-  VehicleServiceRecord,
-  MaintenanceReading,
-} from "@/types";
-import {
-  dateOnly,
-  decodeVinResult,
-  validateProfile,
-  validateService,
-} from "@/lib/maintenance";
-import styles from "./analytics.module.css";
-export type EditorMode = "profile" | "service" | "reading";
-export default function VehicleMaintenanceForm({
-  vehicle,
-  mode,
-  actor,
-  demo,
-  onClose,
-  onSave,
-}: {
-  vehicle: Vehicle;
-  mode: EditorMode;
-  actor: string;
-  demo: boolean;
-  onClose: () => void;
-  onSave: (
-    mode: EditorMode,
-    value: MaintenanceProfile | VehicleServiceRecord | MaintenanceReading,
-  ) => Promise<void>;
+'use client';
+import React,{useEffect,useRef,useState} from 'react';
+import { X, Search } from 'lucide-react';
+import type { Vehicle,MaintenanceProfile,VehicleServiceRecord,MaintenanceReading,MaintenanceAppointment } from '@/types';
+import {dateOnly,decodeVinResult,validateProfile,validateService,validDay} from '@/lib/maintenance';
+import {validateMaintenanceRule,effectiveServices} from '@/lib/maintenanceRules';
+import MaintenanceRuleEditor from './MaintenanceRuleEditor';
+import MaintenanceServiceFields, {maintenanceServiceChoices} from './MaintenanceServiceFields';
+import MaintenanceAppointmentFields from './MaintenanceAppointmentFields';
+import styles from './analytics.module.css';
+export type EditorMode='profile'|'service'|'reading'|'correction'|'appointment';
+export type SetupValue={profile:MaintenanceProfile;reading?:MaintenanceReading;service?:VehicleServiceRecord};
+export type EditorValue=MaintenanceProfile|VehicleServiceRecord|MaintenanceReading|MaintenanceAppointment|SetupValue;
+export default function VehicleMaintenanceForm({vehicle,mode,actor,demo,onClose,onSave,original,appointment,initialStep=1,initialRuleId}: {
+  vehicle:Vehicle;mode:EditorMode;actor:string;demo:boolean;onClose:()=>void;onSave:(mode:EditorMode,value:EditorValue)=>Promise<void>;
+  original?:VehicleServiceRecord;appointment?:MaintenanceAppointment;initialStep?:number;initialRuleId?:string;
 }) {
-  const [profile, setProfile] = useState<MaintenanceProfile>({
-    ...vehicle.maintenance,
-  });
-  const [record, setRecord] = useState({
-    kind: "oil" as VehicleServiceRecord["kind"],
-    title: "Oil & filter change",
-    date: dateOnly(new Date()),
-    odometer: String(vehicle.odometer ?? ""),
-    notes: "",
-  });
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [decoding, setDecoding] = useState(false);
-  const panel = useRef<HTMLDivElement>(null);
-  const decodeController = useRef<AbortController | null>(null);
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    const first = panel.current?.querySelector<HTMLElement>("button, input");
-    first?.focus();
-    const before = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = before;
-      decodeController.current?.abort();
-      previous?.focus();
-    };
-  }, []);
-  const field = (
-    name: keyof MaintenanceProfile,
-    value: string | number | boolean | undefined,
-  ) =>
-    setProfile((p) => ({
-      ...p,
-      [name]: value,
-      ...(name === "scheduleConfirmed" ? {} : { scheduleConfirmed: false }),
-    }));
-  async function decode() {
-    const vin = profile.vin?.trim().toUpperCase() || "";
-    if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) {
-      setError("Enter a valid 17-character VIN.");
-      return;
+  const rules=maintenanceServiceChoices(vehicle.maintenance);
+  const initialRule=rules.find(r=>r.id===initialRuleId);
+  const [profile,setProfile]=useState<MaintenanceProfile>({...vehicle.maintenance});
+  const [step,setStep]=useState(initialStep),[measured,setMeasured]=useState(false),[baselineMeasured,setBaselineMeasured]=useState(false),[hasBaseline,setHasBaseline]=useState(false);
+  const [record,setRecord]=useState({kind:original?.kind || initialRule?.kind || 'oil' as VehicleServiceRecord['kind'],title:original?.title || initialRule?.title || 'Oil & filter change',date:original?.date || dateOnly(new Date()),odometer:String(original?.odometer ?? vehicle.odometer ?? ''),notes:original?.notes || '',ruleId:original?.ruleId || original?.kind || initialRuleId || 'oil',appointmentId:appointment?.id || '',reason:''});
+  const [baseline,setBaseline]=useState({date:'',odometer:''});
+  const [booking,setBooking]=useState<MaintenanceAppointment>(appointment || {id:crypto.randomUUID(),ruleId:initialRuleId || 'oil',title:initialRule?`${initialRule.title} appointment`:'Oil & filter appointment',date:dateOnly(new Date()),status:'booked'});
+  const recordId=useRef(crypto.randomUUID()),baselineId=useRef(crypto.randomUUID());
+  const [error,setError]=useState(''),[busy,setBusy]=useState(false),[decoding,setDecoding]=useState(false);
+  const panel=useRef<HTMLDivElement>(null),controller=useRef<AbortController|null>(null);
+  const field=(name:keyof MaintenanceProfile,value:string|number|boolean|undefined)=>setProfile(p=>({...p,[name]:value,...(name==='scheduleConfirmed'?{}:{scheduleConfirmed:false}),...(['vin','make','model','year','engine','drivetrain','operatingProfile'].includes(name)?{rules:p.rules?.map(r=>({...r,confirmed:false}))}:{})}));
+  useEffect(()=>{const prev=document.activeElement as HTMLElement|null;panel.current?.querySelector<HTMLElement>('button,input')?.focus();const before=document.body.style.overflow;document.body.style.overflow='hidden';return()=>{document.body.style.overflow=before;controller.current?.abort();prev?.focus();};},[]);
+  useEffect(()=>{const target=mode==='profile' && step===3 && initialRuleId?Array.from(panel.current?.querySelectorAll<HTMLElement>('[data-maintenance-rule]') || []).find(node=>node.dataset.maintenanceRule===initialRuleId):undefined;if(target){target.focus();target.scrollIntoView?.({block:'nearest'});}else panel.current?.querySelector<HTMLElement>('[data-step-heading]')?.focus();},[step,mode,initialRuleId]);
+  async function decode(){const vin=profile.vin?.trim().toUpperCase() || '';if(!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)){setError('Enter a valid 17-character VIN.');return;}setDecoding(true);setError('');controller.current=new AbortController();const timer=setTimeout(()=>controller.current?.abort(),12000);try{const response=await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`,{signal:controller.current.signal});if(!response.ok)throw new Error('VIN lookup unavailable; enter identity manually.');const identity=decodeVinResult(await response.json());setProfile(p=>({...p,...identity,vin,scheduleConfirmed:false,rules:p.rules?.map(r=>({...r,confirmed:false}))}));}catch(e){setError(e instanceof Error?e.message:'VIN lookup failed.');}finally{clearTimeout(timer);setDecoding(false);}}
+  async function submit(e:React.FormEvent,draft=false){e.preventDefault();setError('');let value:EditorValue;
+    if(!actor.trim()){setError('Manager identity is required before saving.');return;}
+    if(mode==='profile'){
+      const p={...profile,...(draft?{scheduleConfirmed:false,rules:profile.rules?.map(r=>({...r,confirmed:false}))}:{})};
+      const issue=validateProfile(p) || (p.rules || []).map(r=>validateMaintenanceRule(r)).find(Boolean);
+      if(issue){setError(issue);return;}
+      if(p.inServiceDate && (!validDay(p.inServiceDate)||p.inServiceDate>dateOnly(new Date()))){setError('Enter a valid in-service date that is not in the future.');return;}
+      value={profile:p};
+      if(measured){const n=Number(record.odometer);if(!record.odometer.trim()||!Number.isInteger(n)||n<(vehicle.odometer ?? 0)){setError('Current mileage: enter a whole-number reading at least as large as the previous mileage.');setStep(2);return;}value.reading={date:dateOnly(new Date()),odometer:n,recordedBy:actor,confirmed:true,source:'Manager measured odometer'};}
+      if(hasBaseline && !p.baselineUnknown){if(!baselineMeasured){setError('Last oil service: confirm the date and mileage against actual service records.');setStep(2);return;}const service:VehicleServiceRecord={id:baselineId.current,kind:'oil',title:'Oil & filter change',date:baseline.date,odometer:Number(baseline.odometer),recordedBy:actor,recordedAt:new Date().toISOString()};const err=!baseline.odometer.trim()?'Enter oil-service baseline mileage.':validateService(service,value.reading?.odometer ?? vehicle.odometer);if(err){setError(err);setStep(2);return;}value.service=service;}
+    }else if(mode==='appointment'){
+      if(!booking.title.trim()||!validDay(booking.date)){setError('Enter an appointment title and valid date.');return;}
+      if(booking.status==='completed' && !effectiveServices(vehicle.serviceHistory || []).some(s=>s.id===booking.serviceRecordId && (s.ruleId || s.kind)===booking.ruleId)){setError('Link a recorded completed service before completing the appointment.');return;}value=booking;
+    }else{
+      const n=Number(record.odometer);if(!record.odometer.trim()){setError('Enter the odometer reading.');return;}
+      if(mode==='reading'){if(!measured){setError('Confirm that this mileage was measured.');return;}if(!Number.isInteger(n)||n<(vehicle.odometer ?? 0)){setError('Enter a whole-number reading at least as large as the previous mileage.');return;}value={date:dateOnly(new Date()),odometer:n,recordedBy:actor,confirmed:true,source:'Manager measured odometer'};}
+      else{const err=validateService({...record,odometer:n},vehicle.odometer);if(err){setError(err);return;}if(mode==='correction'&&!record.reason.trim()){setError('Enter the correction reason.');return;}value={id:recordId.current,kind:record.kind,title:record.title,date:record.date,odometer:n,notes:record.notes,recordedBy:actor,recordedAt:new Date().toISOString(),...(record.ruleId!==record.kind || original?.ruleId?{ruleId:original?.ruleId || record.ruleId}:{}),...(record.appointmentId?{appointmentId:record.appointmentId}:{}),...(mode==='correction'?{supersedesId:original?.id,correctionReason:record.reason}:{} )};}
     }
-    setDecoding(true);
-    setError("");
-    const controller = new AbortController();
-    decodeController.current = controller;
-    const timer = setTimeout(() => controller.abort(), 12000);
-    try {
-      const response = await fetch(
-        `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodeURIComponent(vin)}?format=json`,
-        { signal: controller.signal },
-      );
-      if (!response.ok)
-        throw new Error(
-          "VIN service is unavailable. Enter details manually or try again later.",
-        );
-      const identity = decodeVinResult(await response.json());
-      setProfile((p) => ({ ...p, ...identity, vin, scheduleConfirmed: false }));
-    } catch (e) {
-      setError(
-        e instanceof Error && e.name !== "AbortError"
-          ? e.message
-          : "VIN lookup timed out. You can enter details manually.",
-      );
-    } finally {
-      clearTimeout(timer);
-      setDecoding(false);
-    }
+    setBusy(true);try{await onSave(mode,value);onClose();}catch(e){setError(e instanceof Error?e.message:'Could not confirm save. Check history before retrying.');}finally{setBusy(false);}
   }
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    let value: MaintenanceProfile | VehicleServiceRecord | MaintenanceReading;
-    if (mode === "profile") {
-      const issue = validateProfile(profile);
-      if (issue) {
-        setError(issue);
-        return;
-      }
-      value = profile;
-    } else {
-      if (!record.odometer.trim()) {
-        setError("Enter the odometer reading.");
-        return;
-      }
-      const odometer = Number(record.odometer);
-      if (mode === "reading") {
-        if (!Number.isInteger(odometer) || odometer < (vehicle.odometer ?? 0)) {
-          setError(
-            "Enter a whole-number reading at least as large as the previous mileage.",
-          );
-          return;
-        }
-        value = { date: dateOnly(new Date()), odometer, recordedBy: actor };
-      } else {
-        const issue = validateService(
-          { ...record, odometer },
-          vehicle.odometer,
-        );
-        if (issue) {
-          setError(issue);
-          return;
-        }
-        value = {
-          ...record,
-          odometer,
-          id: crypto.randomUUID(),
-          recordedBy: actor,
-        };
-      }
-    }
-    setBusy(true);
-    try {
-      await onSave(mode, value);
-      onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  const heading =
-    mode === "profile"
-      ? "Maintenance setup"
-      : mode === "service"
-        ? "Record completed service"
-        : "Confirm current mileage";
-  return (
-    <div
-      className={styles.overlay}
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !busy) onClose();
-      }}
-    >
-      <div
-        ref={panel}
-        className={styles.dialog}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="maintenance-dialog-title"
-        onKeyDown={(e) => {
-          if (e.key === "Escape" && !busy) onClose();
-          if (e.key === "Tab") {
-            const nodes = Array.from(
-              panel.current?.querySelectorAll<HTMLElement>(
-                "button:not(:disabled), input, select, textarea, a[href]",
-              ) || [],
-            );
-            const first = nodes[0],
-              last = nodes[nodes.length - 1];
-            if (e.shiftKey && document.activeElement === first) {
-              e.preventDefault();
-              last?.focus();
-            } else if (!e.shiftKey && document.activeElement === last) {
-              e.preventDefault();
-              first?.focus();
-            }
-          }
-        }}
-      >
-        <header className={styles.dialogHeader}>
-          <div>
-            <span className={styles.eyebrow}>
-              {vehicle.vehicleNumber}
-              {demo ? " · Sample mode" : ""}
-            </span>
-            <h2 id="maintenance-dialog-title">{heading}</h2>
-          </div>
-          <button
-            type="button"
-            className={styles.iconButton}
-            onClick={onClose}
-            disabled={busy}
-            aria-label="Close maintenance form"
-          >
-            <X size={20} />
-          </button>
-        </header>
-        <form onSubmit={submit} className={styles.form}>
-          {mode === "profile" ? (
-            <>
-              <label>
-                VIN
-                <div className={styles.inputAction}>
-                  <input
-                    value={profile.vin || ""}
-                    maxLength={17}
-                    onChange={(e) =>
-                      field("vin", e.target.value.trim().toUpperCase())
-                    }
-                    placeholder="17-character VIN"
-                  />
-                  <button
-                    type="button"
-                    onClick={decode}
-                    disabled={decoding || busy || demo}
-                  >
-                    <Search size={16} />
-                    {decoding ? "Looking up…" : "Decode VIN"}
-                  </button>
-                </div>
-              </label>
-              <p className={styles.muted}>
-                VIN lookup identifies the truck. Mileage, service history and
-                the manufacturer’s applicable schedule determine maintenance.
-              </p>
-              <div className={styles.formGrid}>
-                {(["make", "model", "engine", "drivetrain"] as const).map(
-                  (key) => (
-                    <label key={key}>
-                      {key === "drivetrain"
-                        ? "Drivetrain"
-                        : key[0].toUpperCase() + key.slice(1)}
-                      <input
-                        value={profile[key] || ""}
-                        onChange={(e) => field(key, e.target.value)}
-                      />
-                    </label>
-                  ),
-                )}
-                <label>
-                  Model year
-                  <input
-                    type="number"
-                    min={1981}
-                    max={new Date().getFullYear() + 1}
-                    value={profile.year ?? ""}
-                    onChange={(e) =>
-                      field(
-                        "year",
-                        e.target.value ? Number(e.target.value) : undefined,
-                      )
-                    }
-                  />
-                </label>
-                <label>
-                  Operating conditions
-                  <select
-                    value={profile.operatingProfile || ""}
-                    onChange={(e) => field("operatingProfile", e.target.value)}
-                  >
-                    <option value="">Select conditions</option>
-                    <option>Normal use</option>
-                    <option>Frequent idling / short trips</option>
-                    <option>Towing / heavy loads</option>
-                    <option>Dusty / sandy conditions</option>
-                  </select>
-                </label>
-              </div>
-              <div className={styles.notice}>
-                Use the vehicle’s oil-life warning if it calls for earlier
-                service. Enter verified maximum limits below; the earliest limit
-                applies.
-              </div>
-              <div className={styles.formGrid}>
-                <label>
-                  Oil interval (miles)
-                  <input
-                    type="number"
-                    min={1}
-                    value={profile.oilIntervalMiles ?? ""}
-                    onChange={(e) =>
-                      field(
-                        "oilIntervalMiles",
-                        e.target.value ? Number(e.target.value) : undefined,
-                      )
-                    }
-                  />
-                </label>
-                <label>
-                  Oil interval (months)
-                  <input
-                    type="number"
-                    min={1}
-                    value={profile.oilIntervalMonths ?? ""}
-                    onChange={(e) =>
-                      field(
-                        "oilIntervalMonths",
-                        e.target.value ? Number(e.target.value) : undefined,
-                      )
-                    }
-                  />
-                </label>
-              </div>
-              <label>
-                Schedule source / reference
-                <input
-                  value={profile.scheduleSource || ""}
-                  onChange={(e) => field("scheduleSource", e.target.value)}
-                  placeholder="Manual edition, section or service advisor reference"
-                />
-              </label>
-              <label className={styles.checkbox}>
-                <input
-                  type="checkbox"
-                  checked={profile.scheduleConfirmed || false}
-                  onChange={(e) => field("scheduleConfirmed", e.target.checked)}
-                />
-                I checked these intervals for this truck and its operating
-                conditions.
-              </label>
-              <a
-                className={styles.textLink}
-                href="https://www.ford.com/support/maintenance-schedule/"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open Ford maintenance lookup ↗
-              </a>
-            </>
-          ) : (
-            <>
-              {mode === "service" && (
-                <>
-                  <label>
-                    Service type
-                    <select
-                      value={record.kind}
-                      onChange={(e) => {
-                        const kind = e.target
-                          .value as VehicleServiceRecord["kind"];
-                        setRecord((r) => ({
-                          ...r,
-                          kind,
-                          title:
-                            kind === "oil"
-                              ? "Oil & filter change"
-                              : kind === "tires"
-                                ? "Tire service"
-                                : kind === "filters"
-                                  ? "Filter replacement"
-                                  : "Other service",
-                        }));
-                      }}
-                    >
-                      <option value="oil">Oil & filter</option>
-                      <option value="tires">Tires</option>
-                      <option value="filters">Filters</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </label>
-                  <label>
-                    Description
-                    <input
-                      required
-                      value={record.title}
-                      onChange={(e) =>
-                        setRecord((r) => ({ ...r, title: e.target.value }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    Completed on
-                    <input
-                      type="date"
-                      required
-                      max={dateOnly(new Date())}
-                      value={record.date}
-                      onChange={(e) =>
-                        setRecord((r) => ({ ...r, date: e.target.value }))
-                      }
-                    />
-                  </label>
-                </>
-              )}
-              <label>
-                {mode === "service"
-                  ? "Odometer at service (miles)"
-                  : "Current odometer (miles)"}
-                <input
-                  type="number"
-                  min={0}
-                  required
-                  value={record.odometer}
-                  onChange={(e) =>
-                    setRecord((r) => ({ ...r, odometer: e.target.value }))
-                  }
-                />
-              </label>
-              <p className={styles.muted}>
-                Current recorded mileage:{" "}
-                {vehicle.odometer?.toLocaleString() ?? "Unknown"} mi.{" "}
-                {mode === "service"
-                  ? "Update current mileage first if service mileage exceeds it."
-                  : "Check the truck’s actual odometer before saving."}
-              </p>
-              {mode === "service" && (
-                <label>
-                  Notes
-                  <textarea
-                    value={record.notes}
-                    onChange={(e) =>
-                      setRecord((r) => ({ ...r, notes: e.target.value }))
-                    }
-                    placeholder="Shop, parts, oil-life reset, or other details"
-                  />
-                </label>
-              )}
-            </>
-          )}
-          {error && (
-            <p role="alert" className={styles.error}>
-              {error}
-            </p>
-          )}
-          <div className={styles.dialogFooter}>
-            <button
-              type="button"
-              className={styles.secondary}
-              onClick={onClose}
-              disabled={busy}
-            >
-              Cancel
-            </button>
-            <button className={styles.primary} disabled={busy || decoding}>
-              <Save size={16} />
-              {busy ? "Saving…" : demo ? "Save sample change" : "Save record"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+  const numeric=(name:keyof MaintenanceProfile,label:string)=><label>{label}<input type="number" min="1" value={profile[name] as number ?? ''} onChange={e=>field(name,e.target.value?Number(e.target.value):undefined)}/></label>;
+  const mileage=<><label>Current odometer (miles)<input type="number" min="0" value={record.odometer} onChange={e=>{setRecord(r=>({...r,odometer:e.target.value}));setMeasured(false);}}/></label><label className={styles.checkbox}><input type="checkbox" checked={measured} onChange={e=>setMeasured(e.target.checked)}/>I measured this mileage on the actual odometer today.</label><p className={styles.muted}>Stored mileage: {vehicle.odometer?.toLocaleString() ?? 'Unknown'} mi. Prefilled values are not confirmed measurements.</p></>;
+  return <div className={styles.overlay} onMouseDown={e=>{if(e.target===e.currentTarget&&!busy)onClose();}}><div ref={panel} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="maintenance-dialog-title" onKeyDown={e=>{if(e.key==='Escape'&&!busy)onClose();if(e.key==='Tab'){const nodes=Array.from(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea,a[href],[tabindex="0"]')||[]);if(e.shiftKey&&document.activeElement===nodes[0]){e.preventDefault();nodes.at(-1)?.focus();}else if(!e.shiftKey&&document.activeElement===nodes.at(-1)){e.preventDefault();nodes[0]?.focus();}}}}>
+    <header className={styles.dialogHeader}><div><span className={styles.eyebrow}>{vehicle.vehicleNumber}{demo?' · Sample mode':''}</span><h2 id="maintenance-dialog-title">{mode==='profile'?'Maintenance setup':mode==='reading'?'Confirm current mileage':mode==='correction'?'Append service correction':mode==='appointment'?'Manage service appointment':'Record completed service'}</h2></div><button type="button" className={styles.iconButton} disabled={busy} onClick={onClose} aria-label="Close maintenance form"><X size={20}/></button></header>
+    <form className={styles.form} onSubmit={e=>submit(e)}><fieldset disabled={busy} className={styles.formBody}>
+    {mode==='profile'?<>
+      <nav aria-label="Setup steps" className={styles.stepNav}>{['Identity','Measured baseline','Verified rules'].map((label,i)=><button key={label} type="button" aria-current={step===i+1?'step':undefined} onClick={()=>{setStep(i+1);setError('');}}>{i+1}. {label}</button>)}</nav>
+      <h3 data-step-heading tabIndex={-1}>Step {step} of 3 · {['Identity','Measured baseline','Verified rules'][step-1]}</h3>
+      {step===1?<><label>VIN<div className={styles.inputAction}><input maxLength={17} value={profile.vin || ''} onChange={e=>field('vin',e.target.value.toUpperCase())}/><button type="button" disabled={decoding||demo} onClick={decode}><Search size={16}/>{decoding?'Looking up…':'Decode VIN'}</button></div></label><p className={styles.muted}>VIN identifies the vehicle only. It never confirms schedule, configuration applicability, measurements or history.</p><div className={styles.formGrid}>{(['make','model','engine','drivetrain'] as const).map(key=><label key={key}>{key==='engine'?'Engine / configuration':key[0].toUpperCase()+key.slice(1)}<input value={profile[key] || ''} onChange={e=>field(key,e.target.value)}/></label>)}<label>Model year<input type="number" min="1981" value={profile.year ?? ''} onChange={e=>field('year',e.target.value?Number(e.target.value):undefined)}/></label><label>Operating conditions<select value={profile.operatingProfile || ''} onChange={e=>{field('operatingProfile',e.target.value);setProfile(p=>({...p,rules:p.rules?.map(r=>({...r,confirmed:false}))}));}}><option value="">Select conditions</option><option>Normal use</option><option>Frequent idling / short trips</option><option>Towing / heavy loads</option><option>Dusty / sandy conditions</option></select></label></div></>:
+      step===2?<>{mileage}<label className={styles.checkbox}><input type="checkbox" checked={profile.baselineUnknown || false} onChange={e=>field('baselineUnknown',e.target.checked)}/>Service history is unknown; keep forecasts incomplete.</label><label className={styles.checkbox}><input type="checkbox" checked={hasBaseline} disabled={profile.baselineUnknown} onChange={e=>setHasBaseline(e.target.checked)}/>Record the actual last completed oil service</label>{hasBaseline&&!profile.baselineUnknown&&<><label>Last oil service date<input type="date" max={dateOnly(new Date())} value={baseline.date} onChange={e=>{setBaseline(b=>({...b,date:e.target.value}));setBaselineMeasured(false);}}/></label><label>Last oil service odometer<input type="number" min="0" value={baseline.odometer} onChange={e=>{setBaseline(b=>({...b,odometer:e.target.value}));setBaselineMeasured(false);}}/></label><label className={styles.checkbox}><input type="checkbox" checked={baselineMeasured} onChange={e=>setBaselineMeasured(e.target.checked)}/>I checked this completed service against actual records.</label></>}<label>Actual in-service date (optional)<input type="date" max={dateOnly(new Date())} value={profile.inServiceDate || ''} onChange={e=>field('inServiceDate',e.target.value || undefined)}/></label><p className={styles.muted}>Leave unknown service dates and readings blank. Independent services have their own baselines in step 3.</p></>:
+      <><div className={styles.notice}>The instrument-cluster oil-life monitor may call for earlier service. Verify limits against this truck’s original manual and actual conditions.</div><div className={styles.formGrid}>{numeric('oilIntervalMiles','Oil interval (miles)')}{numeric('oilIntervalMonths','Oil interval (months)')}</div><label>Oil schedule source / reference<input value={profile.scheduleSource || ''} onChange={e=>field('scheduleSource',e.target.value)}/></label>{profile.scheduleSource?.startsWith('https://')&&<a href={profile.scheduleSource} target="_blank" rel="noreferrer">Review oil schedule source ↗</a>}<label className={styles.checkbox}><input type="checkbox" checked={profile.scheduleConfirmed || false} onChange={e=>field('scheduleConfirmed',e.target.checked)}/>I checked oil intervals for this configuration and operating conditions.</label><MaintenanceRuleEditor profile={profile} onChange={setProfile} selectedRuleId={initialRuleId}/></>}
+    </>:mode==='reading'?mileage:mode==='appointment'?<MaintenanceAppointmentFields booking={booking} onChange={setBooking} rules={rules} original={appointment} services={vehicle.serviceHistory || []}/>:<MaintenanceServiceFields record={record} onChange={setRecord} rules={rules} original={original} appointments={vehicle.maintenanceAppointments || []} currentMileage={vehicle.odometer}/>}
+    </fieldset>{error&&<p role="alert" className={styles.error}>{error}</p>}<div className={styles.dialogFooter}><button type="button" className={styles.secondary} disabled={busy} onClick={onClose}>Cancel</button>{mode==='profile'&&<>{step>1&&<button type="button" className={styles.secondary} onClick={()=>setStep(step-1)} disabled={busy}>Back</button>}{step<3&&<button type="button" className={styles.secondary} onClick={()=>setStep(step+1)} disabled={busy}>Next</button>}<button type="button" className={styles.secondary} disabled={busy||decoding} onClick={e=>submit(e,true)}>Save draft</button></>}<button className={styles.primary} disabled={busy||decoding}>{busy?'Saving…':demo?'Save sample change':'Save record'}</button></div></form>
+  </div></div>;
 }

@@ -34,3 +34,14 @@
 .due::before { background:#d97706; }
 .controls button:focus-visible,.marker:focus-visible,.event:focus-visible,.scroll:focus-visible { outline:3px solid #5260a5; outline-offset:2px; }
 @media(max-width:640px) { .help { font-size:12px; } .scroll { max-height:70vh; } }
+.timeline { min-width:0; max-width:100%; }
+.scroll { max-width:100%; overscroll-behavior:contain; }
+.booked { background:#f0fdfa; border-color:#5eead4; }
+.mileageLane { height:auto; min-height:180px; }
+.groupedMarkers { display:grid; gap:10px; padding:14px; }
+.groupLabel { color:#64748b; font-size:11px; }
+.groupMarker { position:relative; overflow:hidden; width:100%; display:grid; gap:5px; border:1px solid #cbd5e1; border-radius:9px; padding:12px; text-align:left; color:#334155; font-size:12px; }
+.groupMarker strong,.groupMarker span,.groupMarker small { display:block; }
+.groupMarker small { color:#64748b; font-size:10px; }
+.mileagePosition { position:absolute; top:0; left:0; height:3px; background:#5260a5; }
+.groupMarker:focus-visible { outline:3px solid #5260a5; outline-offset:2px; }

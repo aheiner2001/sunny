@@ -1,65 +1,30 @@
 'use client';
-import React, { useState } from 'react';
-import { addMonths, format, parseISO } from 'date-fns';
-import type { Vehicle, MaintenanceReading } from '@/types';
-import type { OilForecast, PlanningEvent } from '@/lib/maintenance';
+import React,{useState} from 'react';
+import {addMonths,format,parseISO} from 'date-fns';
+import type {Vehicle,MaintenanceReading} from '@/types';
+import type {OilForecast,PlanningEvent} from '@/lib/maintenance';
+import {dateOnly} from '@/lib/maintenance';
+import {effectiveServices,forecastMaintenance,type MaintenanceForecast} from '@/lib/maintenanceRules';
+import {imageErrorFallback} from '@/lib/imageUpload';
 import styles from './fleetTimeline.module.css';
-type Props = { rows: { vehicle: Vehicle; readings: MaintenanceReading[]; oil: OilForecast }[]; events: PlanningEvent[]; now: Date; onService: (id: string) => void; onSetup: (id: string) => void };
-const miles = (n: number) => `${n.toLocaleString()} mi`;
-export default function FleetTimeline({ rows, events, now, onService, onSetup }: Props) {
-  const [view, setView] = useState<'calendar' | 'mileage' | 'list'>('calendar');
-  const values = rows.flatMap(({ vehicle, oil }) => [vehicle.odometer, oil.lastService?.odometer, oil.dueOdometer]).filter((n): n is number => n != null && Number.isFinite(n) && n >= 0);
-  const low = values.length ? Math.floor(Math.min(...values) / 5000) * 5000 : 0;
-  const high = values.length ? Math.ceil(Math.max(...values) / 5000) * 5000 : 10000;
-  const bands = Array.from({ length: Math.min(100, Math.max(1, (high - low) / 5000 + 1)) }, (_, i) => low + i * 5000);
-  const columns = { gridTemplateColumns: `100px repeat(${rows.length}, minmax(230px, 1fr))` };
-  const eventCard = (event: PlanningEvent) => <button key={event.id} className={`${styles.event} ${event.overdue ? styles.urgent : ''}`} onClick={() => onService(event.vehicleId)}>
-    <strong>{format(parseISO(event.date), 'MMM d')} · {event.overdue ? 'Due now' : 'Estimated'}</strong>
-    <span>{event.title}</span><small>{event.detail}</small><span className={styles.action}>Log completed service →</span>
-  </button>;
-  return <div>
-    <div className={styles.controls} role="group" aria-label="Timeline display">
-      {(['calendar', 'mileage', 'list'] as const).map(v => <button key={v} aria-pressed={view === v} onClick={() => setView(v)}>{v === 'calendar' ? 'Calendar' : v === 'mileage' ? 'Mileage' : 'Upcoming work'}</button>)}
-    </div>
-    <p className={styles.help}>{view === 'calendar' ? 'Shared month bands across trucks. Dates are forecasts, not booked appointments.' : view === 'mileage' ? 'Shared odometer scale. Each band covers 5,000 miles; marker positions show mileage within the band. Oil deadlines use the confirmed service baseline.' : 'Estimated oil services in date order. Record a service only after it is completed.'}</p>
-    {!rows.length ? <p>No trucks match your selection. Add a truck or try sample data.</p> : view === 'list' ? <div className={styles.list}>{events.map(eventCard)}{!events.length && <p>Complete a truck’s maintenance setup to see upcoming work.</p>}</div> : <div className={styles.scroll} tabIndex={0} aria-label="Synchronized truck timelines">
-      <div className={styles.board}>
-        <div className={`${styles.grid} ${styles.headers}`} style={columns}>
-          <div className={styles.axis}>{view === 'calendar' ? 'Month' : 'Odometer'}</div>
-          {rows.map(({ vehicle, oil }) => <header key={vehicle.id} className={styles.truck}>
-            {vehicle.imageUrl ? <img src={vehicle.imageUrl} alt={`${vehicle.vehicleNumber} vehicle`} /> : <span className={styles.placeholder} aria-hidden="true">🚚</span>}
-            <strong>{vehicle.vehicleNumber}</strong><small>{[vehicle.maintenance?.year, vehicle.maintenance?.make, vehicle.maintenance?.model].filter(Boolean).join(' ') || vehicle.name}</small>
-            <span>{vehicle.odometer != null ? miles(vehicle.odometer) : 'Mileage needed'}</span>
-            {oil.status === 'needs_setup' && <button onClick={() => onSetup(vehicle.id)}>Complete setup →</button>}
-          </header>)}
-        </div>
-        {view === 'calendar' ? Array.from({length: 13}, (_, i) => addMonths(now, i)).map(month => {
-          const key = format(month, 'yyyy-MM');
-          return <div key={key} className={styles.grid} style={columns}>
-            <div className={styles.axis}><strong>{format(month, 'MMM')}</strong><small>{format(month, 'yyyy')}</small></div>
-            {rows.map(({vehicle}) => <div key={vehicle.id} data-vehicle-lane={vehicle.id} className={styles.calendarLane}>{events.filter(e => e.vehicleId === vehicle.id && e.date.startsWith(key)).map(eventCard)}</div>)}
-          </div>;
-        }) : bands.map(start => <div key={start} data-mileage-band={start} className={styles.grid} style={columns}>
-          <div className={styles.axis}><strong>{miles(start)}</strong><small>to {miles(start + 5000)}</small></div>
-          {rows.map(({vehicle, oil, readings}) => {
-            const latest = [...readings].filter(r => r.odometer === vehicle.odometer).sort((a,b) => b.date.localeCompare(a.date))[0];
-            const points = [
-              ...(oil.lastService ? [{ value: oil.lastService.odometer, label: 'Last oil change', type: 'completed', detail: oil.lastService.date }] : []),
-              ...(vehicle.odometer != null ? [{value: vehicle.odometer, label: 'Current reading', type: 'current', detail: latest?.date || 'Reading date unknown'}] : []),
-              ...(oil.dueOdometer != null ? [{value: oil.dueOdometer, label: oil.status === 'overdue' ? 'Oil service due now' : 'Oil mileage limit', type: 'due', detail: oil.dueDate ? `Planning date ${oil.dueDate}` : ''}] : []),
-            ].filter(p => p.value >= start && p.value < start + 5000);
-            const current = vehicle.odometer;
-            const fill = current == null ? 0 : Math.max(0, Math.min(100, (current - start) / 5000 * 100));
-            return <div key={vehicle.id} data-vehicle-lane={vehicle.id} className={styles.mileageLane}>
-              <div className={styles.rail}><div style={{height: `${fill}%`}} /></div>
-              {points.map(p => <button key={p.type} className={`${styles.marker} ${styles[p.type]}`} style={{top: `${(p.value - start) / 5000 * 100}%`}} onClick={() => p.type === 'current' ? onSetup(vehicle.id) : onService(vehicle.id)} title={`${p.label}: ${miles(p.value)}. ${p.detail}`}>
-                <strong>{p.label}</strong><span>{miles(p.value)}</span><small>{p.detail}</small>
-              </button>)}
-            </div>;
-          })}
-        </div>)}
-      </div>
-    </div>}
-    {view === 'mileage' && <p className={styles.help}>The mileage marker does not represent measured oil life. Time limits or the truck’s oil-life warning can require service sooner. Missing setup is shown above each truck.</p>}
-  </div>;
+type Props={rows:{vehicle:Vehicle;readings:MaintenanceReading[];oil:OilForecast;forecasts?:MaintenanceForecast[]}[];events:PlanningEvent[];now:Date;onService:(id:string,ruleId?:string)=>void;onSetup:(id:string)=>void;onReading?:(id:string)=>void;onAppointment?:(id:string,appointmentId:string)=>void};
+const miles=(n:number)=>`${n.toLocaleString()} mi`;
+type Point={value:number;label:string;type:'completed'|'current'|'due';detail:string;ruleId?:string};
+export default function FleetTimeline({rows,events,now,onService,onSetup,onReading,onAppointment}:Props){
+ const [view,setView]=useState<'calendar'|'mileage'|'list'>('calendar');
+ const forecasts=(row:Props['rows'][number])=>row.forecasts || forecastMaintenance(row.vehicle,row.readings,now);
+ const pointsFor=(row:Props['rows'][number]):Point[]=>{
+   const {vehicle,readings}=row;const latest=[...(vehicle.maintenanceReadings || []),...readings].filter(r=>r.odometer===vehicle.odometer&&r.confirmed===true).sort((a,b)=>b.date.localeCompare(a.date))[0];
+   return [...effectiveServices(vehicle.serviceHistory || []).map(s=>({value:s.odometer,label:`Completed: ${s.title}`,type:'completed' as const,detail:s.date,ruleId:s.ruleId || s.kind})),...(vehicle.odometer!=null?[{value:vehicle.odometer,label:'Current reading',type:'current' as const,detail:latest?`Measured ${latest.date}`:'Measurement confirmation needed'}]:[]),...forecasts(row).filter(f=>f.dueOdometer!=null).map(f=>({value:f.dueOdometer!,label:`${f.title} ${f.status==='overdue'?'due now':'mileage limit'}`,type:'due' as const,detail:f.dueDate?`Estimate ${f.dueDate}`:'Date estimate unavailable',ruleId:f.ruleId}))];
+ };
+ const values=rows.flatMap(pointsFor).map(p=>p.value).filter(n=>Number.isFinite(n)&&n>=0);
+ const low=values.length?Math.floor(Math.min(...values)/5000)*5000:0;
+ const high=values.length?Math.ceil(Math.max(...values)/5000)*5000:10000;
+ const bands=Array.from({length:Math.min(100,Math.max(1,(high-low)/5000+1))},(_,i)=>low+i*5000);
+ const columns={gridTemplateColumns:`100px repeat(${rows.length}, minmax(250px, 1fr))`};
+ const eventCard=(event:PlanningEvent)=>{const a=!event.projected?rows.find(r=>r.vehicle.id===event.vehicleId)?.vehicle.maintenanceAppointments?.find(a=>event.id===`${event.vehicleId}-appointment-${a.id}`):undefined;return <button key={event.id} className={`${styles.event} ${!event.projected?styles.booked:event.overdue?styles.urgent:''}`} onClick={()=>a&&onAppointment?onAppointment(event.vehicleId,a.id):onService(event.vehicleId,rows.find(r=>r.vehicle.id===event.vehicleId)?.forecasts?.find(f=>event.id.startsWith(`${event.vehicleId}-${f.ruleId}-estimate-`))?.ruleId)}><strong>{format(parseISO(event.date),'MMM d')} · {!event.projected?'Booked appointment':event.overdue?'Due now':'Estimated'}</strong><span>{event.title}</span><small>{event.detail}</small><span className={styles.action}>{!event.projected?'Review booking / cancel / link actual completion →':'Log completed service →'}</span></button>;};
+ return <div className={styles.timeline}><div className={styles.controls} role="group" aria-label="Timeline display">{(['calendar','mileage','list'] as const).map(v=><button key={v} aria-pressed={view===v} onClick={()=>setView(v)}>{v==='calendar'?'Calendar':v==='mileage'?'Mileage':'Upcoming work'}</button>)}</div><p className={styles.help}>{view==='calendar'?'Shared month bands. Estimated dates and booked appointments have distinct labels. Later estimates assume earlier services are completed.':view==='mileage'?'Shared odometer bands of 5,000 miles. Nearby labels are grouped in order to avoid overlaps; each retains its exact mileage.':'Estimates and actual bookings in date order. Record service only after actual completion.'}</p>
+ {!rows.length?<p>No trucks match your selection. Add a truck or try sample data.</p>:view==='list'?<div className={styles.list}>{events.map(eventCard)}{!events.length&&<p>Complete maintenance setup to see upcoming work.</p>}</div>:<div className={styles.scroll} tabIndex={0} aria-label="Synchronized truck timelines"><div className={styles.board}><div className={`${styles.grid} ${styles.headers}`} style={columns}><div className={styles.axis}>{view==='calendar'?'Month':'Odometer'}</div>{rows.map(row=><header key={row.vehicle.id} className={styles.truck}>{row.vehicle.imageUrl?<img src={row.vehicle.imageUrl} onError={imageErrorFallback} alt={`${row.vehicle.vehicleNumber} vehicle`}/>:<span className={styles.placeholder} aria-hidden="true">🚚</span>}<strong>{row.vehicle.vehicleNumber}</strong><small>{[row.vehicle.maintenance?.year,row.vehicle.maintenance?.make,row.vehicle.maintenance?.model].filter(Boolean).join(' ')||row.vehicle.name}</small><button onClick={()=>(onReading || onSetup)(row.vehicle.id)}>{row.vehicle.odometer!=null?miles(row.vehicle.odometer):'Measure mileage'} · current</button>{forecasts(row).some(f=>f.status==='needs_setup')&&<button onClick={()=>onSetup(row.vehicle.id)}>Complete setup →</button>}</header>)}</div>
+ {view==='calendar'?Array.from({length:13},(_,i)=>addMonths(now,i)).map(month=>{const key=format(month,'yyyy-MM');return <div key={key} className={styles.grid} style={columns}><div className={styles.axis}><strong>{format(month,'MMM')}</strong><small>{format(month,'yyyy')}</small></div>{rows.map(({vehicle})=><div key={vehicle.id} data-vehicle-lane={vehicle.id} className={styles.calendarLane}>{key===format(now,'yyyy-MM')&&<button className={`${styles.event} ${styles.current}`} onClick={()=>(onReading || onSetup)(vehicle.id)}><strong>Today · {dateOnly(now)}</strong><span>Current mileage: {vehicle.odometer!=null?miles(vehicle.odometer):'Unknown'}</span><small>Confirm the actual odometer →</small></button>}{effectiveServices(vehicle.serviceHistory || []).filter(s=>s.date.startsWith(key)).map(s=><div key={s.id} className={`${styles.event} ${styles.completed}`}><strong>Completed · {s.date}</strong><span>{s.title} · {miles(s.odometer)}</span></div>)}{events.filter(e=>e.vehicleId===vehicle.id&&e.date.startsWith(key)).map(eventCard)}</div>)}</div>;}):bands.map(start=><div key={start} data-mileage-band={start} className={styles.grid} style={columns}><div className={styles.axis}><strong>{miles(start)}</strong><small>to {miles(start+5000)}</small></div>{rows.map(row=>{const points=pointsFor(row).filter(p=>p.value>=start&&p.value<start+5000).sort((a,b)=>a.value-b.value);return <div key={row.vehicle.id} data-vehicle-lane={row.vehicle.id} className={styles.mileageLane}><div className={styles.groupedMarkers} data-marker-group={start}>{points.length>1&&<small className={styles.groupLabel}>{points.length} markers in this mileage band</small>}{points.map((p,i)=><button key={`${p.type}-${p.ruleId}-${i}`} className={`${styles.groupMarker} ${styles[p.type]}`} onClick={()=>p.type==='current'?(onReading || onSetup)(row.vehicle.id):onService(row.vehicle.id,p.ruleId)} title={`${p.label}: ${miles(p.value)}. ${p.detail}`}><span className={styles.mileagePosition} style={{width:`${(p.value-start)/5000*100}%`}}/><strong>{p.label}</strong><span>{miles(p.value)}</span><small>{p.detail}</small><small>{p.type==='current'?'Confirm measured mileage →':p.type==='completed'?'Record additional completed service →':'Log completed service →'}</small></button>)}</div></div>;})}</div>)}
+ </div></div>}{view==='mileage'&&<p className={styles.help}>Mileage is not measured oil life. Time limits, conditions and the instrument-cluster oil-life warning can require earlier work.</p>}</div>;
 }
