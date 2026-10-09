@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { addDays, addMonths, format, parseISO } from "date-fns";
@@ -43,6 +43,14 @@ import VehicleMaintenanceForm, {
   type SetupValue,
 } from "./VehicleMaintenanceForm";
 import styles from "./analytics.module.css";
+import EquipmentServicePanel from "./EquipmentServicePanel";
+import AnalyticsPreferences from "./AnalyticsPreferences";
+import {
+  analyticsPreferenceKey, defaultAnalyticsPreferences, loadAnalyticsPreferences,
+  saveAnalyticsPreferences, resetAnalyticsPreferences,
+  type AnalyticsLayoutPreferences, type AnalyticsWidgetId,
+} from "@/lib/analyticsPreferences";
+import { forecastEquipmentMaintenance } from "@/lib/equipmentMaintenance";
 import FleetTimeline from "./FleetTimeline";
 import MaintenanceActions, { issueAction } from "./MaintenanceActions";
 import { forecastMaintenance, buildMaintenanceTimeline, effectiveServices, setupIssues } from "@/lib/maintenanceRules";
@@ -102,6 +110,22 @@ function sampleFleet(now: Date): Vehicle[] {
     };
   });
 }
+// Every hour, service record and interval here is synthetic sample data.
+function sampleTools(now: Date): Equipment[] {
+  return [
+    { id: "sample-brush", name: "Detailing brush", status: "working", category: "equipment",
+      lifespanEnabled: true, lifespanMode: "usage", expectedCars: 300, carsUsed: 260,
+      operatingHours: 150,
+      hoursReadings: [{date: dateOnly(now), hours: 150, recordedBy: "synthetic-manager"}],
+      maintenanceRules: [{id: "sample-clean", title: "Synthetic cleaning service", intervalHours: 100,
+        source: "Synthetic sample policy only — not a manufacturer recommendation", confirmed: true}],
+      serviceHistory: [{id: "sample-tool-service", ruleId: "sample-clean", title: "Synthetic cleaning service",
+        date: dateOnly(addDays(now, -30)), hours: 60, recordedBy: "synthetic-manager", recordedAt: now.toISOString()}],
+    },
+    { id: "sample-hose", name: "Pressure washer hose", status: "working", category: "equipment",
+      lifespanEnabled: true, lifespanMode: "time", dueDate: dateOnly(addDays(now, 20)), expectedMonths: 12 },
+  ];
+}
 function TruckGraphic() {
   return (
     <svg
@@ -142,6 +166,8 @@ function TruckGraphic() {
     </svg>
   );
 }
+type PhotoRequest = {generation: number; managerId: string; demo: boolean};
+
 export default function MaintenanceAnalytics() {
   const { user } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]),
@@ -149,6 +175,7 @@ export default function MaintenanceAnalytics() {
     [inspections, setInspections] = useState<Inspection[]>([]);
   const [demo, setDemo] = useState(false),
     [samples, setSamples] = useState<Vehicle[]>([]),
+    [sampleEquipment, setSampleEquipment] = useState<Equipment[]>([]),
     [query, setQuery] = useState(""),
     [tab, setTab] = useState<"overview" | "timeline" | "equipment">("overview");
   const [editor, setEditor] = useState<{ id: string; mode: EditorMode; ruleId?:string; step?:number; original?:VehicleServiceRecord; appointment?:MaintenanceAppointment } | null>(
@@ -156,16 +183,66 @@ export default function MaintenanceAnalytics() {
     ),
     [message, setMessage] = useState(""),
     [now, setNow] = useState(() => new Date());
+  const managerId = user?.id || "";
+  const [layout, setLayout] = useState(() => ({managerId: "", preferences: defaultAnalyticsPreferences(), storageMessage: ""}));
+  const preferences = layout.managerId === managerId ? layout.preferences : defaultAnalyticsPreferences();
+  const storageMessage = layout.managerId === managerId ? layout.storageMessage : "";
+  const storageUnavailable = "Layout changed for this session; browser storage is unavailable.";
+  useEffect(() => {
+    let storageMessage = "";
+    try { window.localStorage.getItem(analyticsPreferenceKey(managerId)); }
+    catch { storageMessage = "Layout defaults apply for this session; browser storage is unavailable."; }
+    setLayout({managerId, preferences: loadAnalyticsPreferences(managerId), storageMessage});
+  }, [managerId]);
+  function changePreferences(next: AnalyticsLayoutPreferences) {
+    const saved = saveAnalyticsPreferences(managerId, next);
+    setLayout({managerId, preferences: next, storageMessage: saved ? "" : storageUnavailable});
+  }
+  function resetPreferences() {
+    const next = resetAnalyticsPreferences(managerId);
+    let storageMessage = "";
+    try {
+      if (window.localStorage.getItem(analyticsPreferenceKey(managerId)) !== null) storageMessage = storageUnavailable;
+    } catch { storageMessage = storageUnavailable; }
+    setLayout({managerId, preferences: next, storageMessage});
+  }
+  const [equipmentFocus, setEquipmentFocus] = useState("");
+  const [removedPhotos, setRemovedPhotos] = useState<Record<string, string>>({});
+  const refreshData = () => {
+    setVehicles(dbService.getVehicles());
+    setEquipment(dbService.getEquipment());
+    setInspections(dbService.getInspections());
+  };
   const savedSetupStages=useRef(new Set<string>());
   const savedSetupServices=useRef(new Map<string,string>());
   const [photoError,setPhotoError]=useState(""),[photoBusy,setPhotoBusy]=useState<string|null>(null);
+  const photoGeneration = useRef(0);
+  const activePhotoRequest = useRef<PhotoRequest | null>(null);
+  // Cleanup invalidates preparation, persistence completion and feedback before another identity paints.
+  useLayoutEffect(() => {
+    photoGeneration.current += 1;
+    activePhotoRequest.current = null;
+    setPhotoBusy(null);
+    setPhotoError("");
+    setRemovedPhotos({});
+    setMessage("");
+    return () => {
+      photoGeneration.current += 1;
+      activePhotoRequest.current = null;
+    };
+  }, [managerId]);
+  const isCurrentPhotoRequest = (request: PhotoRequest) =>
+    activePhotoRequest.current === request && photoGeneration.current === request.generation;
+  function beginPhotoRequest(vehicleId: string): PhotoRequest | null {
+    if (activePhotoRequest.current) return null;
+    const request = {generation: photoGeneration.current, managerId, demo};
+    activePhotoRequest.current = request;
+    setPhotoError("");setMessage("");setPhotoBusy(vehicleId);
+    return request;
+  }
   const edit=(id:string,mode:EditorMode,ruleId?:string,step?:number)=>{setMessage("");setEditor({id,mode,ruleId,step});};
   useEffect(() => {
-    const load = () => {
-      setVehicles(dbService.getVehicles());
-      setEquipment(dbService.getEquipment());
-      setInspections(dbService.getInspections());
-    };
+    const load = refreshData;
     load();
     window.addEventListener("sunny_db_update", load);
     const timer = setInterval(() => setNow(new Date()), 60000);
@@ -175,15 +252,9 @@ export default function MaintenanceAnalytics() {
     };
   }, []);
   const source = demo ? samples : vehicles;
-  const rows = useMemo(
+  const fleetRows = useMemo(
     () =>
-      source
-        .filter((v) =>
-          `${v.vehicleNumber} ${v.name} ${v.maintenance?.vin || ""}`
-            .toLowerCase()
-            .includes(query.toLowerCase()),
-        )
-        .map((vehicle) => {
+      source.map((vehicle) => {
           const readings: MaintenanceReading[] = [
             ...(vehicle.maintenanceReadings || []),
             ...(!demo
@@ -207,8 +278,12 @@ export default function MaintenanceAnalytics() {
           const oil = forecasts.find(f=>f.ruleId==='oil') || forecastOil(vehicle,readings,now);
           return { vehicle, readings, oil, forecasts };
         }),
-    [source, query, demo, inspections, now],
+    [source, demo, inspections, now],
   );
+  const rows = useMemo(() => fleetRows.filter(({vehicle}) =>
+    `${vehicle.vehicleNumber} ${vehicle.name} ${vehicle.maintenance?.vin || ""}`.toLowerCase().includes(query.toLowerCase())), [fleetRows, query]);
+  const identitySetup = fleetRows.map(({vehicle}) => ({vehicle, issues: setupIssues(vehicle).filter(issue =>
+    /vehicle make|vehicle model|model year|engine\/configuration|operating conditions/i.test(issue))})).filter(row => row.issues.length);
   const events = useMemo(
     () =>
       rows
@@ -224,40 +299,28 @@ export default function MaintenanceAnalytics() {
       count: events.filter((e) => e.projected && e.date.startsWith(key)).length,
     };
   });
-  const items = demo
-    ? ([
-        {
-          id: "sample-brush",
-          name: "Detailing brush",
-          status: "working",
-          category: "equipment",
-          lifespanEnabled: true,
-          lifespanMode: "usage",
-          expectedCars: 300,
-          carsUsed: 260,
-        },
-        {
-          id: "sample-hose",
-          name: "Pressure washer hose",
-          status: "working",
-          category: "equipment",
-          lifespanEnabled: true,
-          lifespanMode: "time",
-          dueDate: dateOnly(addDays(now, 20)),
-          expectedMonths: 12,
-        },
-      ] as Equipment[])
-    : equipment.filter((e) => !e.retiredAt);
+  const items = demo ? sampleEquipment : equipment.filter((e) => !e.retiredAt);
+  const equipmentWork = items.map(item => ({item, forecasts: forecastEquipmentMaintenance(item, now).filter(f => f.status !== "scheduled")}))
+    .filter(({item, forecasts}) => forecasts.length || !item.maintenanceRules?.length);
+  const equipmentActor = demo ? {id: "synthetic-manager", name: "Synthetic sample manager"} : {id: managerId, name: user?.name || "Manager"};
+  const updateSampleEquipment = (updated: Equipment) => setSampleEquipment(current => current.map(item => item.id === updated.id ? updated : item));
+  const focusedEquipment = equipmentFocus ? [...items].sort((a,b) => Number(b.id === equipmentFocus) - Number(a.id === equipmentFocus)) : items;
+  const openEquipment = (id: string) => {setEquipmentFocus(id);setTab("equipment");};
   const lowTools = items.filter((e) => {
     const s = computeLifespanStatus(e, now);
     return s === "getting_low" || s === "due_for_review";
   });
   const selected = source.find((v) => v.id === editor?.id);
   function toggleDemo() {
+    if (activePhotoRequest.current) return;
+    photoGeneration.current += 1;
     setEditor(null);
     setMessage("");
     setQuery("");
-    if (!demo) setSamples(sampleFleet(now));
+    setPhotoError("");
+    setRemovedPhotos({});
+    setEquipmentFocus("");
+    if (!demo) {setSamples(sampleFleet(now));setSampleEquipment(sampleTools(now));}
     setDemo(!demo);
   }
   async function save(mode:EditorMode,value:EditorValue) {
@@ -297,7 +360,40 @@ export default function MaintenanceAnalytics() {
     else await dbService.recordVehicleService(selected.id,value as VehicleServiceRecord);
     setMessage("Maintenance record saved.");
   }
-  async function uploadPhoto(vehicle:Vehicle,file:File){setPhotoError("");setPhotoBusy(vehicle.id);try{const imageUrl=await prepareImageUpload(file);if(demo)setSamples(list=>list.map(v=>v.id===vehicle.id?{...v,imageUrl}:v));else await dbService.saveVehicleImage(vehicle.id,imageUrl);setMessage(demo?"Sample photo saved for this session.":"Vehicle photo saved.");}catch(error){setPhotoError(error instanceof Error?error.message:'Could not save photo.');}finally{setPhotoBusy(null);}}
+  async function changePhoto(request: PhotoRequest, vehicle: Vehicle, imageUrl: string, action: "upload" | "remove" | "restore") {
+    if (!isCurrentPhotoRequest(request)) return;
+    if (!request.demo) await dbService.saveVehicleImage(vehicle.id, imageUrl);
+    if (!isCurrentPhotoRequest(request)) return;
+    const update = (list: Vehicle[]) => list.map(v => v.id === vehicle.id ? {...v, imageUrl} : v);
+    if (demo) setSamples(update); else setVehicles(update);
+    setRemovedPhotos(current => {
+      const next = {...current};
+      if (action === "remove") next[vehicle.id] = vehicle.imageUrl!;
+      else delete next[vehicle.id];
+      return next;
+    });
+    setMessage(`${demo ? "Sample" : "Vehicle"} photo ${action === "remove" ? "removed" : action === "restore" ? "restored" : "saved"}${demo ? " for this session" : ""}.`);
+  }
+  async function uploadPhoto(vehicle: Vehicle, file: File) {
+    const request = beginPhotoRequest(vehicle.id);
+    if (!request) return;
+    try {await changePhoto(request, vehicle, await prepareImageUpload(file), "upload");}
+    catch(error) {
+      if (isCurrentPhotoRequest(request)) setPhotoError(error instanceof Error ? error.message : "Could not save photo.");
+    } finally {
+      if (isCurrentPhotoRequest(request)) {activePhotoRequest.current = null;setPhotoBusy(null);}
+    }
+  }
+  async function removeOrRestorePhoto(vehicle: Vehicle, restore = false) {
+    const request = beginPhotoRequest(vehicle.id);
+    if (!request) return;
+    try {await changePhoto(request, vehicle, restore ? removedPhotos[vehicle.id] : "", restore ? "restore" : "remove");}
+    catch(error) {
+      if (isCurrentPhotoRequest(request)) setPhotoError(error instanceof Error ? error.message : "Could not save photo.");
+    } finally {
+      if (isCurrentPhotoRequest(request)) {activePhotoRequest.current = null;setPhotoBusy(null);}
+    }
+  }
   function download(content:string,type:string,name:string){const url=URL.createObjectURL(new Blob([content],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function exportJson(){const readings=Object.fromEntries(source.map(v=>[v.id,demo?[]:inspections.filter(i=>i.vehicleId===v.id&&i.status!=='rejected'&&i.odometer!=null&&i.odometerConfirmed===true).map(i=>({date:i.dateString,odometer:i.odometer,confirmed:true,source:'Confirmed inspection'}))]));download(JSON.stringify({vehicles:source,equipment:items,readings},null,2),'application/json',`${demo?'sample-':''}maintenance-report-${dateOnly(now)}.json`);}
   function exportPlan() {
@@ -330,114 +426,8 @@ export default function MaintenanceAnalytics() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  return (
-    <div className={styles.page}>
-      <Link className={styles.back} href="/settings">
-        <ArrowLeft size={15} />
-        Fleet settings
-      </Link>
-      <header className={styles.hero}>
-        <div>
-          <div className={styles.eyebrow}>
-            <span className={styles.liveDot} />
-            {demo ? "Sample workspace" : "Manager workspace"}
-          </div>
-          <h1>
-            Keep your fleet
-            <br />
-            <span>one step ahead.</span>
-          </h1>
-          <p>
-            Service history, upcoming maintenance and equipment life — together
-            in one place.
-          </p>
-          <div className={styles.heroTags}>
-            <span>
-              <ShieldCheck size={14} />
-              Manager analytics
-            </span>
-            <span>
-              <CalendarDays size={14} />
-              12-month outlook
-            </span>
-          </div>
-        </div>
-        <div className={styles.heroAside}>
-          <span className={styles.heroLabel}>NEXT UP</span>
-          <strong>
-            {events[0]
-              ? format(parseISO(events[0].date), "MMM d")
-              : "Ready to plan"}
-          </strong>
-          <p>
-            {events[0]
-              ? `${events[0].vehicleNumber} · ${events[0].title}`
-              : "Add an oil-service baseline to begin."}
-          </p>
-          <button
-            className={styles.heroButton}
-            onClick={() => setTab("timeline")}
-          >
-            Explore timeline <ArrowUpRight size={18} />
-          </button>
-        </div>
-      </header>
-      <div className={styles.toolbar}>
-        <div
-          className={styles.tabs}
-          role="tablist"
-          aria-label="Analytics views"
-        >
-          {(["overview", "timeline", "equipment"] as const).map((t) => (
-            <button
-              key={t}
-              role="tab"
-              aria-selected={tab === t}
-              aria-controls="analytics-panel"
-              id={`tab-${t}`}
-              onClick={() => setTab(t)}
-              className={tab === t ? styles.activeTab : ""}
-            >
-              {t === "overview"
-                ? "Fleet overview"
-                : t === "timeline"
-                  ? "Maintenance timeline"
-                  : "Equipment life"}
-            </button>
-          ))}
-        </div>
-        <div className={styles.actions}>
-          <button className={styles.secondary} onClick={toggleDemo}>
-            <FlaskConical size={16} />
-            {demo ? "Use fleet data" : "Try sample data"}
-          </button>
-          <button className={styles.secondary} onClick={exportJson}><Download size={16}/>Export report JSON</button>
-          <button
-            className={styles.primary}
-            onClick={exportPlan}
-            disabled={!events.length}
-          >
-            <Download size={16} />
-            Export plan
-          </button>
-        </div>
-      </div>
-      {demo && (
-        <div className={styles.notice}>
-          <FlaskConical size={18} />
-          <span>
-            <strong>Sample mode.</strong> Illustrative intervals and records.
-            Changes stay in this session and do not modify fleet data.
-          </span>
-        </div>
-      )}
-      {message && (
-        <div className={styles.success} role="status">
-          <CheckCircle2 size={16} />
-          {message}
-        </div>
-      )}
-      <div className={styles.metrics}>
+  const widgets: Record<AnalyticsWidgetId, React.ReactNode> = {
+    metrics: (<div className={styles.metrics}>
         {[
           {
             label: "Trucks in view",
@@ -473,13 +463,8 @@ export default function MaintenanceAnalytics() {
             <small>{m.note}</small>
           </div>
         ))}
-      </div>
-      <div id="analytics-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
-        {tab === "overview" && (
-          <>
-            <MaintenanceActions rows={rows} onEdit={edit}/>
-            {photoError && <p role="alert" className={styles.error}>{photoError}</p>}
-            <div className={styles.sectionHeader}>
+      </div>),
+    vehicles: (<><div className={styles.sectionHeader}>
               <div>
                 <span className={styles.eyebrow}>VEHICLE COMPARISON</span>
                 <h2>Your trucks, side by side.</h2>
@@ -534,6 +519,8 @@ export default function MaintenanceAnalytics() {
                     </p>
                     {v.imageUrl ? <img src={v.imageUrl} onError={imageErrorFallback} alt={`${v.vehicleNumber} vehicle`} className={styles.truckGraphic} style={{objectFit: "contain"}} /> : <TruckGraphic />}
                     <label className={styles.photoUpload}>Vehicle photo<input aria-label={`Upload ${v.vehicleNumber} photo`} type="file" accept="image/jpeg,image/png,image/webp" disabled={photoBusy!==null} onChange={e=>{const file=e.target.files?.[0];if(file)void uploadPhoto(v,file);e.target.value="";}}/>{photoBusy===v.id?"Saving photo…":"JPEG, PNG or WebP · up to 5MB"}</label>
+                    {v.imageUrl && <button className={styles.setupLink} aria-label={`Remove ${v.vehicleNumber} photo`} disabled={photoBusy !== null} onClick={() => void removeOrRestorePhoto(v)}>Remove photo</button>}
+                    {removedPhotos[v.id] && <button className={styles.setupLink} aria-label={`Restore ${v.vehicleNumber} photo`} disabled={photoBusy !== null} onClick={() => void removeOrRestorePhoto(v, true)}>Restore removed photo</button>}
                     <div className={styles.reading}>
                       <span>Recorded odometer</span>
                       <strong>
@@ -653,8 +640,8 @@ export default function MaintenanceAnalytics() {
                     : "Add a truck in Vehicles or try sample data to explore this workspace."}
                 </p>
               </div>
-            )}
-            <div className={styles.lowerGrid}>
+            )}</>),
+    outlook: (<div className={styles.lowerGrid}>
               <section className={styles.panel}>
                 <div className={styles.sectionHeader}>
                   <div>
@@ -698,6 +685,174 @@ export default function MaintenanceAnalytics() {
                   automatically.
                 </p>
               </section>
+            </div>),
+    equipment: <EquipmentServicePanel key={String(demo)} items={items} demo={demo} actor={equipmentActor} onSampleChange={updateSampleEquipment} onSaved={refreshData} />,
+  };
+  return (
+    <div className={styles.page}>
+      <Link className={styles.back} href="/settings">
+        <ArrowLeft size={15} />
+        Fleet settings
+      </Link>
+      <header className={styles.hero}>
+        <div>
+          <div className={styles.eyebrow}>
+            <span className={styles.liveDot} />
+            {demo ? "Sample workspace" : "Manager workspace"}
+          </div>
+          <h1>
+            Keep your fleet
+            <br />
+            <span>one step ahead.</span>
+          </h1>
+          <p>
+            Service history, upcoming maintenance and equipment life — together
+            in one place.
+          </p>
+          <div className={styles.heroTags}>
+            <span>
+              <ShieldCheck size={14} />
+              Manager analytics
+            </span>
+            <span>
+              <CalendarDays size={14} />
+              12-month outlook
+            </span>
+          </div>
+        </div>
+        <div className={styles.heroAside}>
+          <span className={styles.heroLabel}>NEXT UP</span>
+          <strong>
+            {events[0]
+              ? format(parseISO(events[0].date), "MMM d")
+              : "Ready to plan"}
+          </strong>
+          <p>
+            {events[0]
+              ? `${events[0].vehicleNumber} · ${events[0].title}`
+              : "Add an oil-service baseline to begin."}
+          </p>
+          <button
+            className={styles.heroButton}
+            onClick={() => setTab("timeline")}
+          >
+            Explore timeline <ArrowUpRight size={18} />
+          </button>
+        </div>
+      </header>
+      <div className={styles.toolbar}>
+        <div
+          className={styles.tabs}
+          role="tablist"
+          aria-label="Analytics views"
+        >
+          {(["overview", "timeline", "equipment"] as const).map((t) => (
+            <button
+              key={t}
+              role="tab"
+              aria-selected={tab === t}
+              aria-controls="analytics-panel"
+              id={`tab-${t}`}
+              onClick={() => setTab(t)}
+              className={tab === t ? styles.activeTab : ""}
+            >
+              {t === "overview"
+                ? "Fleet overview"
+                : t === "timeline"
+                  ? "Maintenance timeline"
+                  : "Equipment life"}
+            </button>
+          ))}
+        </div>
+        <div className={styles.actions}>
+          <button className={styles.secondary} onClick={toggleDemo} disabled={photoBusy !== null}>
+            <FlaskConical size={16} />
+            {demo ? "Use fleet data" : "Try sample data"}
+          </button>
+          <button className={styles.secondary} onClick={exportJson}><Download size={16}/>Export report JSON</button>
+          <button
+            className={styles.primary}
+            onClick={exportPlan}
+            disabled={!events.length}
+          >
+            <Download size={16} />
+            Export plan
+          </button>
+        </div>
+      </div>
+      {demo && (
+        <div className={styles.notice}>
+          <FlaskConical size={18} />
+          <span>
+            <strong>Sample mode.</strong> Illustrative intervals and records.
+            Changes stay in this session and do not modify fleet data.
+          </span>
+        </div>
+      )}
+      {message && (
+        <div className={styles.success} role="status">
+          <CheckCircle2 size={16} />
+          {message}
+        </div>
+      )}
+      <div id="analytics-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
+        {tab === "overview" && (
+          <>
+            <AnalyticsPreferences key={managerId} preferences={preferences} onChange={changePreferences} onReset={resetPreferences} />
+            {storageMessage && <p role="status" className={styles.notice}>{storageMessage}</p>}
+            <MaintenanceActions rows={fleetRows} onEdit={edit}/>
+            {!!identitySetup.length && (
+              <section className={styles.panel} aria-label="Vehicle identity setup">
+                <h2>Vehicle identity setup</h2>
+                <ul className={styles.priorityList}>
+                  {identitySetup.map(({vehicle, issues}) => (
+                    <li key={vehicle.id}>
+                      <strong>{vehicle.vehicleNumber}</strong>
+                      {issues.map(issue => <p key={issue}>{issue} <button className={styles.setupLink} onClick={() => edit(vehicle.id, "profile", undefined, 1)}>Add identity detail →</button></p>)}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {!!equipmentWork.length && (
+              <section className={styles.panel} aria-label="Equipment maintenance actions">
+                <h2>Equipment maintenance actions</h2>
+                <ul className={styles.priorityList}>
+                  {equipmentWork.map(({item, forecasts}) => (
+                    <li key={item.id}>
+                      <strong>{item.name}</strong>
+                      {forecasts.length ? forecasts.map(f => (
+                        <div key={f.ruleId}>
+                          <p>{f.title} · {labels[f.status]}</p>
+                          <p>{f.reason}</p>
+                          <p>Source: {f.source || "Unknown / unverified"}</p>
+                        </div>
+                      )) : <p>Needs setup · Service schedule and history are unknown. No interval is assumed.</p>}
+                      <button className={styles.secondary} onClick={() => openEquipment(item.id)}>Review equipment service →</button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {!!lowTools.length && (
+              <section className={styles.panel} aria-label="Equipment replacement reviews">
+                <h2>Equipment replacement reviews</h2>
+                <p className={styles.muted}>Replacement lifespan is separate from operating-hour and calendar service.</p>
+                <ul className={styles.priorityList}>
+                  {lowTools.map(item => (
+                    <li key={item.id}>
+                      <strong>{item.name} · {computeLifespanStatus(item, now) === "due_for_review" ? "Review now" : "Getting low"}</strong>
+                      {demo ? <button className={styles.secondary} onClick={() => openEquipment(item.id)}>Review sample equipment life →</button> : <Link className={styles.secondary} href="/equipment">Review replacement lifespan →</Link>}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {photoError && <p role="alert" className={styles.error}>{photoError}</p>}
+            <div className={styles.overviewWidgets}>
+              {preferences.order.filter(id => !preferences.hidden.includes(id)).map(id => (
+                <section key={id} data-analytics-widget={id}>{widgets[id]}</section>
+              ))}
             </div>
           </>
         )}
@@ -759,6 +914,7 @@ export default function MaintenanceAnalytics() {
                 </Link>
               )}
             </div>
+            <EquipmentServicePanel key={`${demo}-${equipmentFocus}`} items={focusedEquipment} demo={demo} actor={equipmentActor} onSampleChange={updateSampleEquipment} onSaved={refreshData} />
             <div className={styles.equipmentGrid}>
               {items.map((e) => {
                 const status = computeLifespanStatus(e, now);

@@ -29,6 +29,7 @@
   overflow: hidden;
 }
 .hero h1 {
+  color: white;
   font-size: clamp(30px, 3.2vw, 46px);
   letter-spacing: -1.4px;
   line-height: 1.12;
@@ -883,3 +884,5 @@
 
 .ruleFieldset[data-selected-rule=true] { border-color:#5260a5; background:#f8f9ff; }
 .ruleFieldset:focus { outline:2px solid #5260a5; outline-offset:3px; }
+
+.overviewWidgets { display: grid; gap: 24px; margin-top: 24px; }
