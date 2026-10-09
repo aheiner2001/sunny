@@ -40,6 +40,7 @@ export function mileageRate(
   const rows = readings
     .filter(
       (r) =>
+        r.confirmed !== false &&
         validDay(r.date) &&
         Number.isFinite(r.odometer) &&
         r.odometer >= 0 &&
@@ -99,13 +100,28 @@ export function validateService(
     return "Service mileage exceeds the current odometer. Record the current mileage first.";
   return null;
 }
+/** Corrections are append-only; invalid lineage cannot hide valid originals. */
+export function effectiveServices(records: VehicleServiceRecord[]): VehicleServiceRecord[] {
+  const accepted: VehicleServiceRecord[] = [];
+  const superseded = new Set<string>();
+  for (const record of records) {
+    if (accepted.some(s => s.id === record.id)) continue;
+    if (record.supersedesId) {
+      const original = accepted.find(s => s.id === record.supersedesId && !superseded.has(s.id));
+      if (!original || original.id === record.id || original.ruleId !== record.ruleId || original.kind !== record.kind) continue;
+      superseded.add(original.id);
+    }
+    accepted.push(record);
+  }
+  return accepted.filter(s => !superseded.has(s.id));
+}
 export function forecastOil(
   vehicle: Vehicle,
   readings: MaintenanceReading[],
   now = new Date(),
 ): OilForecast {
   const p = vehicle.maintenance;
-  const last = [...(vehicle.serviceHistory || [])]
+  const last = effectiveServices(vehicle.serviceHistory || [])
     .filter(
       (s) =>
         s.kind === "oil" &&
@@ -137,7 +153,7 @@ export function forecastOil(
   );
   // Anchor mileage predictions to the measured reading date, not the page-open date.
   const latest = [...readings]
-    .filter((r) => validDay(r.date) && r.date <= dateOnly(now))
+    .filter((r) => r.confirmed !== false && Number.isFinite(r.odometer) && r.odometer >= 0 && validDay(r.date) && r.date <= dateOnly(now))
     .sort((a, b) => b.date.localeCompare(a.date) || b.odometer - a.odometer)[0];
   const mileageDue =
     rate && latest && latest.odometer === vehicle.odometer

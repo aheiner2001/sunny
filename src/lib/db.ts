@@ -2,7 +2,8 @@
 
 import { 
   Vehicle, 
-  MaintenanceProfile, MaintenanceReading, VehicleServiceRecord,
+  MaintenanceProfile, MaintenanceReading, VehicleServiceRecord, MaintenanceAppointment,
+  EquipmentMaintenanceRule, EquipmentServiceRecord, EquipmentHoursReading,
   Equipment, 
   ChecklistQuestion, 
   ChecklistCategoryConfig,
@@ -35,6 +36,8 @@ import {
   VehicleAssignment
 } from '@/types';
 import { validDay, dateOnly, validateProfile, validateService } from './maintenance';
+import { effectiveServices, validateMaintenanceRule } from './maintenanceRules';
+import { validateEquipmentRule, validateEquipmentHours, validateEquipmentService } from './equipmentMaintenance';
 import { transitionAssignment } from './vehicleAssignments';
 import { classifyIssueType } from './issueClassification';
 import { shouldAutoReturnVehicle, localDateString } from './occupancy';
@@ -78,7 +81,8 @@ import {
   updateDoc, 
   arrayUnion,
   onSnapshot,
-  writeBatch
+  writeBatch,
+  runTransaction
 } from 'firebase/firestore';
 
 const STORAGE_KEYS = {
@@ -1274,25 +1278,170 @@ class DataStore {
   public async saveMaintenanceProfile(vehicleId: string, profile: MaintenanceProfile): Promise<void> {
     const error = validateProfile(profile);
     if (error) throw new Error(error);
+    for (const rule of profile.rules || []) {
+      const ruleError = validateMaintenanceRule(rule);
+      if (ruleError) throw new Error(ruleError);
+    }
+    if (new Set((profile.rules || []).map(r => r.id)).size !== (profile.rules || []).length) throw new Error('Rule identifiers must be unique.');
+    if (profile.inServiceDate && (!validDay(profile.inServiceDate) || profile.inServiceDate > dateOnly(new Date()))) throw new Error('Enter a valid in-service date that is not in the future.');
     const value = sanitizeForFirestore(profile);
     await this.persistMaintenancePatch(vehicleId, { maintenance: value }, v => ({ ...v, maintenance: value }));
   }
 
+  private maintenanceWriteQueue = new Map<string, Promise<void>>();
+
+  /** Validate against the server document inside a retriable transaction. */
+  private async mutateMaintenance<T extends Vehicle | Equipment>(path: 'vehicles' | 'equipment', id: string, derive: (current: T) => { remote: Record<string, unknown>; patch: Partial<T> }): Promise<void> {
+    const key = `${path}/${id}`;
+    const operation = (this.maintenanceWriteQueue.get(key) || Promise.resolve()).catch(() => undefined).then(async () => {
+      if (!this.isClient()) throw new Error('Client only');
+      const cached = (path === 'vehicles' ? this.getVehicle(id) : this.getEquipmentItem(id)) as T | undefined;
+      if (!cached) throw new Error(`${path === 'vehicles' ? 'Vehicle' : 'Equipment'} not found.`);
+      let patch: Partial<T>;
+      if (db) {
+        await ensureAuth();
+        const reference = doc(db, path, id);
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          patch = await Promise.race([
+            runTransaction(db, async transaction => {
+              const snapshot = await transaction.get(reference);
+              if (!snapshot.exists()) throw new Error(`${path === 'vehicles' ? 'Vehicle' : 'Equipment'} not found on the server.`);
+              const change = derive(snapshot.data() as T);
+              transaction.update(reference, change.remote);
+              return change.patch;
+            }),
+            new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Could not confirm the save. Check connection and history before retrying.')), 15000); }),
+          ]);
+        } finally { if (timer) clearTimeout(timer); }
+      } else patch = derive(cached).patch;
+      // Never mutate cache from the transaction callback: Firestore can retry it.
+      if (path === 'vehicles') localStorage.setItem(STORAGE_KEYS.VEHICLES, JSON.stringify(this.getVehicles().map(v => v.id === id ? { ...v, ...patch } : v)));
+      else localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(this.getEquipment().map(e => e.id === id ? { ...e, ...patch } : e)));
+      window.dispatchEvent(new Event('sunny_db_update'));
+    });
+    this.maintenanceWriteQueue.set(key, operation);
+    try { await operation; } finally { if (this.maintenanceWriteQueue.get(key) === operation) this.maintenanceWriteQueue.delete(key); }
+  }
+
   public async recordVehicleService(vehicleId: string, record: VehicleServiceRecord): Promise<void> {
-    const vehicle = this.getVehicle(vehicleId);
-    const error = validateService(record, vehicle?.odometer);
-    if (error) throw new Error(error);
-    const value = sanitizeForFirestore(record);
-    await this.persistMaintenancePatch(vehicleId, { serviceHistory: arrayUnion(value) }, v => ({ ...v, serviceHistory: [...(v.serviceHistory || []).filter(s => s.id !== value.id), value] }));
+    await this.mutateMaintenance<Vehicle>('vehicles', vehicleId, vehicle => {
+      const error = validateService(record, vehicle?.odometer);
+      if (error) throw new Error(error);
+      if (!record.id?.trim() || !record.recordedBy?.trim()) throw new Error('Record a service identifier and actor.');
+      if (vehicle?.serviceHistory?.some(s => s.id === record.id)) throw new Error('This service identifier already exists; append a correction instead.');
+      if (record.supersedesId) {
+        if (!record.correctionReason?.trim() || !record.recordedAt || !Number.isFinite(Date.parse(record.recordedAt))) throw new Error('Corrections require a reason and audit timestamp.');
+        const original = effectiveServices(vehicle?.serviceHistory || []).find(s => s.id === record.supersedesId);
+        if (!original) throw new Error('Original service is missing or already corrected.');
+        if (original.ruleId !== record.ruleId || original.kind !== record.kind) throw new Error('A correction must belong to the original service rule.');
+      }
+      let appointments = vehicle.maintenanceAppointments;
+      const linkedCorrections = record.supersedesId ? (appointments || []).filter(a => a.status === 'completed' && a.serviceRecordId === record.supersedesId) : [];
+      const normalizedRecord = linkedCorrections.length && !record.appointmentId ? { ...record, appointmentId: linkedCorrections[0].id } : record;
+      if (normalizedRecord.appointmentId) {
+        const appointment = appointments?.find(a => a.id === normalizedRecord.appointmentId);
+        const correctionOfLinked = appointment?.status === 'completed' && appointment.serviceRecordId === record.supersedesId;
+        if (!appointment || (appointment.status !== 'booked' && !correctionOfLinked) || appointment.ruleId !== (record.ruleId || record.kind)) throw new Error('Select a booked appointment for this service rule.');
+        appointments = appointments!.map(a => (a.id === normalizedRecord.appointmentId || linkedCorrections.some(linked=>linked.id===a.id)) ? { ...a, status: 'completed' as const, serviceRecordId: record.id } : a);
+      }
+      const value = sanitizeForFirestore(normalizedRecord);
+      const remote: Record<string, unknown> = { serviceHistory: arrayUnion(value) };
+      if (normalizedRecord.appointmentId) remote.maintenanceAppointments = sanitizeForFirestore(appointments);
+      return { remote, patch: { serviceHistory: [...(vehicle.serviceHistory || []), value], ...(normalizedRecord.appointmentId ? { maintenanceAppointments: appointments } : {}) } };
+    });
+  }
+
+  public async correctVehicleService(vehicleId: string, originalId: string, replacement: VehicleServiceRecord, reason: string, actor: { id: string; name: string }): Promise<void> {
+    if (!reason.trim()) throw new Error('Enter the correction reason.');
+    if (!actor.id?.trim()) throw new Error('Record the correcting actor.');
+    const original = effectiveServices(this.getVehicle(vehicleId)?.serviceHistory || []).find(s => s.id === originalId);
+    if (!original) throw new Error('Original service is missing or already corrected.');
+    if (replacement.id === originalId) throw new Error('A correction must have a new identifier.');
+    const { appointmentId: _appointmentId, ...corrected } = replacement;
+    await this.recordVehicleService(vehicleId, { ...corrected, ...(original.ruleId ? { ruleId: original.ruleId } : {}), kind: original.kind, supersedesId: originalId, correctionReason: reason.trim(), recordedBy: actor.id, recordedAt: new Date().toISOString() });
+  }
+
+  public async saveMaintenanceAppointment(vehicleId: string, appointment: MaintenanceAppointment): Promise<void> {
+    await this.mutateMaintenance<Vehicle>('vehicles', vehicleId, vehicle => {
+      if (!appointment.id?.trim() || !appointment.ruleId?.trim() || !appointment.title?.trim() || !validDay(appointment.date)) throw new Error('Enter an appointment title, rule and valid date.');
+      if (!['booked', 'canceled', 'completed'].includes(appointment.status)) throw new Error('Choose a valid appointment status.');
+      const existing = vehicle.maintenanceAppointments?.find(a => a.id === appointment.id);
+      if (existing?.status === 'completed' && appointment.status !== 'completed') throw new Error('A completed appointment cannot be reopened or canceled. Record a separate booking.');
+      if (appointment.status === 'completed') {
+        const linked = effectiveServices(vehicle.serviceHistory || []).find(s => s.id === appointment.serviceRecordId && (s.ruleId || s.kind) === appointment.ruleId);
+        if (!linked) throw new Error('Link a recorded completed service before completing the appointment.');
+      }
+      const value = sanitizeForFirestore(appointment);
+      const appointments = [...(vehicle.maintenanceAppointments || [])];
+      const index = appointments.findIndex(a => a.id === value.id);
+      if (index < 0) appointments.push(value); else appointments[index] = value;
+      return { remote: { maintenanceAppointments: appointments }, patch: { maintenanceAppointments: appointments } };
+    });
+  }
+
+  public async saveVehicleImage(vehicleId: string, imageUrl: string): Promise<void> {
+    if (imageUrl !== '' && !imageUrl.trim()) throw new Error('Select a vehicle image.');
+    await this.persistMaintenancePatch(vehicleId, { imageUrl }, v => ({ ...v, imageUrl }));
+  }
+
+  private async persistEquipmentMaintenancePatch(equipmentId: string, remote: Record<string, unknown>, patch: (equipment: Equipment) => Equipment): Promise<void> {
+    if (!this.isClient()) throw new Error('Client only');
+    if (!this.getEquipmentItem(equipmentId)) throw new Error('Equipment not found.');
+    if (db) {
+      await ensureAuth();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          updateDoc(doc(db, 'equipment', equipmentId), remote),
+          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Could not confirm the equipment save. Check connection and history before retrying.')), 15000); }),
+        ]);
+      } finally { if (timer) clearTimeout(timer); }
+    }
+    const equipment = this.getEquipment().map(e => e.id === equipmentId ? patch(e) : e);
+    localStorage.setItem(STORAGE_KEYS.EQUIPMENT, JSON.stringify(equipment));
+    window.dispatchEvent(new Event('sunny_db_update'));
+  }
+
+  public async saveEquipmentMaintenanceRules(equipmentId: string, rules: EquipmentMaintenanceRule[]): Promise<void> {
+    for (const rule of rules) { const error = validateEquipmentRule(rule); if (error) throw new Error(error); }
+    if (new Set(rules.map(r => r.id)).size !== rules.length) throw new Error('Rule identifiers must be unique.');
+    const value = sanitizeForFirestore(rules);
+    await this.persistEquipmentMaintenancePatch(equipmentId, { maintenanceRules: value }, e => ({ ...e, maintenanceRules: value }));
+  }
+
+  public async recordEquipmentService(equipmentId: string, record: EquipmentServiceRecord): Promise<void> {
+    await this.mutateMaintenance<Equipment>('equipment', equipmentId, equipment => {
+      const error = validateEquipmentService(record, equipment.operatingHours);
+      if (error) throw new Error(error);
+      if (!record.id?.trim() || !record.recordedBy?.trim() || !record.recordedAt || !Number.isFinite(Date.parse(record.recordedAt))) throw new Error('Record a service identifier, actor and timestamp.');
+      const rule = equipment.maintenanceRules?.find(r => r.id === record.ruleId);
+      if (!rule) throw new Error('Select a configured equipment service rule.');
+      if (rule.intervalHours && record.hours == null) throw new Error('Record measured service hours for this rule.');
+      if (equipment.serviceHistory?.some(s => s.id === record.id)) throw new Error('This service identifier already exists.');
+      const value = sanitizeForFirestore(record);
+      return { remote: { serviceHistory: arrayUnion(value) }, patch: { serviceHistory: [...(equipment.serviceHistory || []), value] } };
+    });
+  }
+
+  public async recordEquipmentHours(equipmentId: string, reading: EquipmentHoursReading): Promise<void> {
+    await this.mutateMaintenance<Equipment>('equipment', equipmentId, equipment => {
+      const error = validateEquipmentHours(reading, equipment.operatingHours);
+      if (error) throw new Error(error);
+      const value = sanitizeForFirestore(reading);
+      return { remote: { operatingHours: reading.hours, hoursReadings: arrayUnion(value) }, patch: { operatingHours: reading.hours, hoursReadings: [...(equipment.hoursReadings || []), value] } };
+    });
   }
 
   public async recordMaintenanceReading(vehicleId: string, reading: MaintenanceReading): Promise<void> {
-    const vehicle = this.getVehicle(vehicleId);
-    if (!validDay(reading.date) || reading.date !== dateOnly(new Date())) throw new Error('Mileage checks must use today’s date.');
-    if (!Number.isInteger(reading.odometer) || reading.odometer < 0) throw new Error('Enter a valid whole-number mileage.');
-    if (reading.odometer < (vehicle?.odometer ?? 0)) throw new Error('Mileage is less than the previous reading.');
-    const value = sanitizeForFirestore(reading);
-    await this.persistMaintenancePatch(vehicleId, { odometer: reading.odometer, maintenanceReadings: arrayUnion(value) }, v => ({ ...v, odometer: value.odometer, maintenanceReadings: [...(v.maintenanceReadings || []), value] }));
+    await this.mutateMaintenance<Vehicle>('vehicles', vehicleId, vehicle => {
+      if (!validDay(reading.date) || reading.date !== dateOnly(new Date())) throw new Error('Mileage checks must use today’s date.');
+      if (!Number.isInteger(reading.odometer) || reading.odometer < 0) throw new Error('Enter a valid whole-number mileage.');
+      if (reading.confirmed !== true) throw new Error('Confirm that this mileage was measured.');
+      if (reading.odometer < (vehicle?.odometer ?? 0)) throw new Error('Mileage is less than the previous reading.');
+      const value = sanitizeForFirestore(reading);
+      return { remote: { odometer: reading.odometer, maintenanceReadings: arrayUnion(value) }, patch: { odometer: value.odometer, maintenanceReadings: [...(vehicle.maintenanceReadings || []), value] } };
+    });
   }
 
   public async updateVehicle(updated: Vehicle): Promise<Vehicle> {
