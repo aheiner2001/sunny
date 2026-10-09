@@ -83,19 +83,28 @@ export default function ScanPage() {
     };
   }, []);
 
-  const handleDecoded = (rawCode: string) => {
-    let token = rawCode;
-    if (rawCode.includes('/inspect?id=')) {
-      token = rawCode.split('/inspect?id=')[1]?.split('&')[0] || rawCode;
-    } else if (rawCode.includes('?inspect=')) {
-      token = rawCode.split('?inspect=')[1]?.split('&')[0] || rawCode;
-    } else if (rawCode.includes('/inspect/')) {
-      token = rawCode.split('/inspect/')[1]?.split('?')[0] || rawCode;
-    } else if (rawCode.includes('sunny://vehicle/')) {
-      token = rawCode.replace('sunny://vehicle/', '');
+  const handleDecoded = async (rawCode: string) => {
+    let token = rawCode.trim();
+    try {
+      token = decodeURIComponent(token);
+    } catch {
+      // ignore malformed URI
     }
 
-    const vehicle = dbService.getVehicleByQR(token) || dbService.getVehicle(token);
+    if (token.includes('/inspect?id=')) {
+      token = token.split('/inspect?id=')[1]?.split('&')[0] || token;
+    } else if (token.includes('?inspect=')) {
+      token = token.split('?inspect=')[1]?.split('&')[0] || token;
+    } else if (token.includes('/inspect/')) {
+      token = token.split('/inspect/')[1]?.split('?')[0] || token;
+    } else if (token.includes('sunny://vehicle/')) {
+      token = token.replace('sunny://vehicle/', '');
+    }
+
+    let vehicle = dbService.getVehicleByQR(token) || dbService.getVehicle(token);
+    if (!vehicle) {
+      vehicle = (await dbService.fetchVehicleAsync(token)) || undefined;
+    }
     if (!vehicle) {
       setScanError(`Vehicle with QR token "${rawCode}" was not found.`);
       return;

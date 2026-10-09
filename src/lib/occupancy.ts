@@ -29,10 +29,12 @@ export function formatCheckoutStarted(
 export type OccupancyKind = 'free' | 'mine' | 'theirs' | 'pending';
 
 export function occupancyKind(
-  vehicle: Pick<Vehicle, 'currentUserId'>,
-  userId: string | null | undefined
+  vehicle: Pick<Vehicle, 'currentUserId' | 'currentUserStartAt' | 'lastInspectionAt'>,
+  userId: string | null | undefined,
+  now = new Date()
 ): OccupancyKind {
   if (!vehicle.currentUserId) return 'free';
+  if (shouldAutoReturnVehicle(vehicle, now)) return 'free';
   if (!userId) return 'pending';
   if (vehicle.currentUserId === userId) return 'mine';
   return 'theirs';
@@ -95,7 +97,7 @@ export function checkOutFields<T extends Vehicle>(
   const ts = checkoutTimestamp(now);
   return {
     ...vehicle,
-    status: vehicle.status === 'maintenance' ? 'maintenance' : 'in_use',
+    status: 'in_use',
     currentUserId: user.id,
     currentUserName: user.name,
     currentUserStartTime: ts.display,

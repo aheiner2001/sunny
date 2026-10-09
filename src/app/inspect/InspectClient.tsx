@@ -451,20 +451,6 @@ export default function InspectClient() {
       return;
     }
 
-    const allEquipmentForGate = dbService.getEquipment();
-    const missingEquipmentPick = questions.find(q => {
-      const resp = responses[q.id];
-      if (!resp?.isFlagged || !q.equipmentFamily) return false;
-      const matches = listVehicleEquipmentForFamily(allEquipmentForGate, vehicle.id, q.equipmentFamily);
-      return matches.length >= 2 && !equipmentPicks[q.id];
-    });
-    if (missingEquipmentPick) {
-      alert(
-        `Select which ${missingEquipmentPick.equipmentFamily} this flag applies to before submitting.`
-      );
-      return;
-    }
-
     const currentOdo = vehicle.odometer || 0;
     const parsedOdo = collectOdometer && odometer ? Number(odometer) : null;
     if (collectOdometer && parsedOdo !== null && parsedOdo < currentOdo) {
@@ -494,7 +480,7 @@ export default function InspectClient() {
               q.equipmentFamily
             );
             const pickId = equipmentPicks[q.id];
-            const chosen = pickId ? matches.find(e => e.id === pickId) : undefined;
+            const chosen = pickId ? matches.find(e => e.id === pickId) : matches[0];
             if (chosen) {
               linked = {
                 equipmentId: chosen.id,
@@ -601,6 +587,27 @@ export default function InspectClient() {
         dbService.saveOfflineInspection(offlineInspection);
         setOfflineCount(dbService.getOfflineInspections().length);
 
+        try {
+          const v = dbService.getVehicle(vehicle.id);
+          if (v) {
+            const checkedOut = {
+              ...v,
+              currentUserId: payload.userId,
+              currentUserName: payload.userName,
+              checkedOutAt: nowIso,
+              status: 'in_use' as const,
+              lastInspectionId: offlineInspection.id,
+              lastInspectionStatus: offlineInspection.status,
+              lastInspectionAt: nowIso,
+            };
+            const currentList = dbService.getVehicles();
+            localStorage.setItem('sunny_vehicles', JSON.stringify(currentList.map(item => item.id === v.id ? checkedOut : item)));
+            setVehicle(checkedOut);
+          }
+        } catch {
+          // ignore offline state refresh error
+        }
+
         const offlineResult = {
           inspection: { ...offlineInspection, isOfflineQueued: true },
           newIssues: flaggedList
@@ -621,6 +628,8 @@ export default function InspectClient() {
         );
         
         setSubmittedInspection(result);
+        const refreshedVehicle = dbService.getVehicle(vehicle.id);
+        if (refreshedVehicle) setVehicle(refreshedVehicle);
         
         // Clear rejection and draft
         const rejectedKey = `sunny_inspection_rejected_${vehicleId}_${user?.id}`;
@@ -631,6 +640,8 @@ export default function InspectClient() {
         const result = await dbService.submitInspection(payload);
 
         setSubmittedInspection(result);
+        const refreshedVehicle = dbService.getVehicle(vehicle.id);
+        if (refreshedVehicle) setVehicle(refreshedVehicle);
         
         // Clear draft
         const draftKey = `sunny_inspection_draft_${vehicleId}`;
@@ -1099,8 +1110,8 @@ export default function InspectClient() {
           {role === 'manager' && (
             <label className="block mt-3 text-sm font-bold">Inspection for
               <select className="select mt-1" value={managerSubjectId} onChange={e => setManagerSubjectId(e.target.value)}>
-                {!vehicle.currentUserId && <option value="">Myself</option>}
-                {dbService.getUsers().filter(candidate => candidate.status === 'active' && candidate.role === 'employee' && (!vehicle.currentUserId || candidate.id === vehicle.currentUserId)).map(candidate => (
+                <option value="">Myself</option>
+                {dbService.getUsers().filter(candidate => candidate.status === 'active' && candidate.role === 'employee').map(candidate => (
                   <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
                 ))}
               </select>
