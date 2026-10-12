@@ -273,7 +273,7 @@ export default function MaintenanceAnalytics() {
             if(f.ruleId!=='oil' || f.status!=='needs_setup' || vehicle.maintenance?.rules?.some(r=>r.id==='oil'))return f;
             const p=vehicle.maintenance;
             const missing=[...(!p?.oilIntervalMiles?['Enter oil mileage interval.']:[]),...(!p?.oilIntervalMonths?['Enter oil month interval.']:[]),...(!p?.scheduleSource?.trim()?['Add the verified oil schedule source.']:[]),...(!p?.scheduleConfirmed?['Confirm oil intervals against configuration and operating conditions.']:[]),...(!f.lastService?['Record oil completed-service baseline date and mileage.']:[]),...(vehicle.odometer==null?['Record current measured mileage.']:[])];
-            return {...f,missing:missing.length?missing:f.missing};
+            return {...f,missing:Array.from(new Set([...f.missing.filter(issue=>/chronology/i.test(issue)),...(missing.length?missing:f.missing)]))};
           });
           const oil = forecasts.find(f=>f.ruleId==='oil') || forecastOil(vehicle,readings,now);
           return { vehicle, readings, oil, forecasts };
@@ -336,7 +336,8 @@ export default function MaintenanceAnalytics() {
         if(mode==='appointment'){const a=value as MaintenanceAppointment;return {...v,maintenanceAppointments:[...(v.maintenanceAppointments || []).filter(old=>old.id!==a.id),a]};}
         const service=value as VehicleServiceRecord;
         const original=v.serviceHistory?.find(s=>s.id===service.supersedesId);
-        const corrected=mode==='correction'?{...service,...(original?.ruleId?{ruleId:original.ruleId}:{}),recordedBy:'synthetic-manager',recordedAt:new Date().toISOString()}:service;
+        const {ruleId: _ruleId, ...legacyService}=service;
+        const corrected=mode==='correction'?{...legacyService,...(original?.ruleId?{ruleId:original.ruleId}:{}),recordedBy:'synthetic-manager',recordedAt:new Date().toISOString()}:service;
         return {...v,serviceHistory:[...(v.serviceHistory || []),corrected],maintenanceAppointments:v.maintenanceAppointments?.map(a=>(a.id===service.appointmentId || (service.supersedesId && a.serviceRecordId===service.supersedesId))?{...a,status:'completed',serviceRecordId:service.id}:a)};
       }));
       setMessage("Sample change saved for this session.");return;
@@ -991,6 +992,7 @@ export default function MaintenanceAnalytics() {
           actor={demo?"synthetic-manager":user?.id || ""}
           demo={demo}
           onClose={() => setEditor(null)}
+          onCorrect={original=>setEditor({id:selected.id,mode:"correction",original})}
           onSave={save}
           initialStep={editor.step}
           initialRuleId={editor.ruleId}

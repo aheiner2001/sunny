@@ -48,6 +48,71 @@ class ReportTests(unittest.TestCase):
         self.assertTrue(SCRIPT.exists(), 'The report CLI has not been implemented')
         return self.report.build_report(data or fleet(), day)
 
+    def test_legacy_builtin_completed_appointment_kind_fallback(self):
+        for kind in ['tires', 'filters', 'other']:
+            with self.subTest(kind=kind):
+                data = fleet()
+                v = data['vehicles'][0]
+                v['serviceHistory'].append({'id': 'legacy', 'kind': kind, 'title': kind,
+                    'date': '2026-10-01', 'odometer': 11900, 'recordedBy': 'm'})
+                v['maintenanceAppointments'] = [{'id': 'a', 'ruleId': kind, 'title': kind,
+                    'date': '2026-10-01', 'status': 'completed', 'serviceRecordId': 'legacy'}]
+                self.build(data)
+                v['serviceHistory'][-1]['ruleId'] = 'separate'
+                with self.assertRaisesRegex(ValueError, 'same rule'):
+                    self.build(data)
+
+    def test_legacy_oil_ignores_independent_oil_history(self):
+        data = fleet()
+        v = data['vehicles'][0]
+        v['odometer'] = 30000
+        v['maintenanceReadings'] = []
+        v['maintenance'] = {'oilIntervalMiles': 5000, 'oilIntervalMonths': 6,
+            'scheduleConfirmed': True, 'scheduleSource': 'Manual',
+            'rules': [{'id': 'gearbox-oil', 'kind': 'oil', 'title': 'Gearbox',
+                'intervalMonths': 12, 'recurrence': 'after_service', 'source': 'Manual', 'confirmed': True}]}
+        old = {'id': 'engine', 'kind': 'oil', 'title': 'Engine oil',
+            'date': '2026-09-01', 'odometer': 20000, 'recordedBy': 'm'}
+        separate = {**old, 'id': 'gearbox', 'ruleId': 'gearbox-oil', 'date': '2026-10-01', 'odometer': 29000}
+        for legacy in [old, {**old, 'ruleId': 'oil'}]:
+            v['serviceHistory'] = [legacy, separate]
+            row = next(r for r in self.build(data) if r['ruleId'] == 'oil')
+            self.assertEqual(row['dueOdometer'], 25000)
+            self.assertEqual(row['status'], 'overdue')
+        v['serviceHistory'] = [separate]
+        row = next(r for r in self.build(data) if r['ruleId'] == 'oil')
+        self.assertEqual(row['status'], 'needs_setup')
+        self.assertIsNone(row['dueOdometer'])
+
+    def test_date_only_rate_boundaries_match_fixed_noon_typescript_cases(self):
+        for readings, current in [
+            ([{'date': '2026-07-08', 'odometer': 1000, 'confirmed': True},
+              {'date': '2026-10-08', 'odometer': 10200, 'confirmed': True}], 10200),
+            ([{'date': '2026-09-01', 'odometer': 1000, 'confirmed': True},
+              {'date': '2026-09-23', 'odometer': 3200, 'confirmed': True}], 3200),
+        ]:
+            rate, _ = self.report.mileage_rate(readings, self.report.day('2026-10-08'), current)
+            self.assertEqual(rate, 100)
+
+    def test_service_chronology_uses_effective_records_across_rules_and_no_same_day_order(self):
+        data = fleet()
+        v = data['vehicles'][0]
+        old = v['serviceHistory'][0]
+        old.update(date='2026-09-01', odometer=11000)
+        v['serviceHistory'].append({**old, 'id': 'later', 'ruleId': 'tires', 'kind': 'tires',
+            'date': '2026-10-01', 'odometer': 10000})
+        with self.assertRaisesRegex(ValueError, 'monotonic'):
+            self.build(data)
+        v['serviceHistory'].append({**old, 'id': 'fix', 'odometer': 9000,
+            'supersedesId': old['id'], 'correctionReason': 'Invoice', 'recordedBy': 'm',
+            'recordedAt': '2026-10-08T12:00:00Z'})
+        self.build(data)
+        v['serviceHistory'][-1]['odometer'] = 10500
+        with self.assertRaisesRegex(ValueError, 'monotonic'):
+            self.build(data)
+        v['serviceHistory'][-1]['date'] = '2026-10-01'
+        self.build(data)
+
     def test_calendar_limit_precedes_mileage_limit(self):
         row = self.build()[0]
         self.assertEqual(row['dueDate'], '2026-11-01')

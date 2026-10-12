@@ -1,6 +1,6 @@
 import { addMonths, parseISO } from 'date-fns';
 import type { Vehicle, VehicleServiceRecord, MaintenanceReading, MaintenanceRule } from '@/types';
-import { dateOnly, validDay, mileageRate, forecastOil, buildOilTimeline, effectiveServices } from './maintenance';
+import { dateOnly, validDay, mileageRate, forecastOil, buildOilTimeline, effectiveServices, vehicleServiceHistoryIssue } from './maintenance';
 import type { PlanningEvent, OilStatus } from './maintenance';
 export interface MaintenanceForecast {
   ruleId: string; title: string; status: OilStatus; reason: string; source: string;
@@ -24,7 +24,7 @@ export function forecastMaintenance(vehicle: Vehicle, readings: MaintenanceReadi
   const configured = vehicle.maintenance?.rules;
   if (!configured?.length) {
     const oil = forecastOil(vehicle,readings,now);
-    return [{...oil,ruleId:'oil',title:'Oil & filter service',source:vehicle.maintenance?.scheduleSource || '',missing:oil.status === 'needs_setup' ? ['Confirm oil intervals, current mileage and last completed oil service.'] : [],basis:[...(oil.lastService ? [`Completed service ${oil.lastService.date} at ${oil.lastService.odometer} miles`] : []), 'Legacy oil profile: stored mileage/readings may predate explicit measurement confirmation.']}];
+    return [{...oil,ruleId:'oil',title:'Oil & filter service',source:vehicle.maintenance?.scheduleSource || '',missing:oil.status === 'needs_setup' ? [oil.reason] : [],basis:[...(oil.lastService ? [`Completed service ${oil.lastService.date} at ${oil.lastService.odometer} miles`] : []), 'Legacy oil profile: stored mileage/readings may predate explicit measurement confirmation.']}];
   }
   const today = dateOnly(now);
   const confirmed = [...(vehicle.maintenanceReadings || []),...readings].filter(r=>r.confirmed === true);
@@ -38,7 +38,8 @@ export function forecastMaintenance(vehicle: Vehicle, readings: MaintenanceReadi
     const baseMiles = initial ? 0 : lastService?.odometer ?? rule.baselineOdometer;
     const months = initial ? rule.initialMonths ?? rule.intervalMonths : rule.intervalMonths;
     const miles = initial ? rule.initialMiles ?? rule.intervalMiles : rule.intervalMiles;
-    const missing: string[] = [];
+    const historyIssue = vehicleServiceHistoryIssue(effectiveServices(vehicle.serviceHistory || []));
+    const missing: string[] = historyIssue ? [historyIssue] : [];
     const invalid = validateMaintenanceRule(rule,now);
     if (invalid) missing.push(invalid);
     if (![rule.intervalMiles,rule.intervalMonths].some(positive)) missing.push('Enter a positive mileage or month interval.');

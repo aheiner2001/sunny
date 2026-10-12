@@ -5,6 +5,7 @@ import type {MaintenanceForecast} from '@/lib/maintenanceRules';
 import type {EditorMode} from './VehicleMaintenanceForm';
 import styles from './analytics.module.css';
 export function issueAction(issue:string,ruleId?:string,independentRule=!!ruleId && ruleId!=='oil'):{label:string;mode:EditorMode;step:number} {
+ if(/conflicting.*chronology/i.test(issue))return {label:'Review service history',mode:'history',step:1};
  if(/prior service is unknown|history.*unknown|unknown.*history/i.test(issue))return {label:'Verify service history',mode:'profile',step:2};
  if(/current.*mileage|measured.*mileage|reading from|Current mileage/i.test(issue))return {label:'Measure mileage',mode:'reading',step:2};
  if(/source|interval|confirm.*rule|configuration.*usage/i.test(issue))return {label:/source/i.test(issue)?'Verify rule source':'Review intervals and applicability',mode:'profile',step:3};

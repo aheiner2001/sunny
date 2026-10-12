@@ -54,7 +54,7 @@ function EquipmentEditor({ item, demo, actor, onSampleChange, onSaved }: Equipme
     const rule = equipment.maintenanceRules?.find(r => r.id === service.ruleId);
     if (!rule) { setError('Select a service rule.'); return; }
     const record: EquipmentServiceRecord = { id: newId(), ruleId: rule.id, title: rule.title, date: service.date, hours: optionalNumber(service.hours), recordedBy: actor.id, recordedAt: new Date().toISOString() };
-    const issue = rule.intervalHours && record.hours == null ? 'Record measured service hours for this rule.' : validateEquipmentService(record, equipment.operatingHours);
+    const issue = rule.intervalHours && record.hours == null ? 'Record measured service hours for this rule.' : validateEquipmentService(record, equipment.operatingHours, new Date(), equipment.serviceHistory || []);
     if (issue) { setError(issue); return; }
     if (await persist({ ...equipment, serviceHistory: [...(equipment.serviceHistory || []), record] }, () => dbService.recordEquipmentService(equipment.id, record), 'Completed service saved.')) setService(null);
   }

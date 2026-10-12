@@ -309,7 +309,7 @@ def build_report(data, as_of):
                     linked = next((service for service in effective if service['id'] == appointment.get('serviceRecordId')), None)
                     if linked is None:
                         raise ValueError('Completed appointment requires an effective completed serviceRecordId')
-                    linked_rule = linked.get('ruleId') or ('oil' if linked.get('kind') == 'oil' else None)
+                    linked_rule = linked.get('ruleId') or (linked.get('kind') if linked.get('kind') in ['oil', 'tires', 'filters', 'other'] else None)
                     if linked_rule != appointment.get('ruleId'):
                         raise ValueError('Completed appointment must link to service for the same rule')
             if not rules:

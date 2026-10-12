@@ -1326,7 +1326,7 @@ class DataStore {
 
   public async recordVehicleService(vehicleId: string, record: VehicleServiceRecord): Promise<void> {
     await this.mutateMaintenance<Vehicle>('vehicles', vehicleId, vehicle => {
-      const error = validateService(record, vehicle?.odometer);
+      const error = validateService(record, vehicle?.odometer, new Date(), vehicle.serviceHistory || []);
       if (error) throw new Error(error);
       if (!record.id?.trim() || !record.recordedBy?.trim()) throw new Error('Record a service identifier and actor.');
       if (vehicle?.serviceHistory?.some(s => s.id === record.id)) throw new Error('This service identifier already exists; append a correction instead.');
@@ -1358,7 +1358,7 @@ class DataStore {
     const original = effectiveServices(this.getVehicle(vehicleId)?.serviceHistory || []).find(s => s.id === originalId);
     if (!original) throw new Error('Original service is missing or already corrected.');
     if (replacement.id === originalId) throw new Error('A correction must have a new identifier.');
-    const { appointmentId: _appointmentId, ...corrected } = replacement;
+    const { appointmentId: _appointmentId, ruleId: _ruleId, ...corrected } = replacement;
     await this.recordVehicleService(vehicleId, { ...corrected, ...(original.ruleId ? { ruleId: original.ruleId } : {}), kind: original.kind, supersedesId: originalId, correctionReason: reason.trim(), recordedBy: actor.id, recordedAt: new Date().toISOString() });
   }
 
@@ -1412,7 +1412,7 @@ class DataStore {
 
   public async recordEquipmentService(equipmentId: string, record: EquipmentServiceRecord): Promise<void> {
     await this.mutateMaintenance<Equipment>('equipment', equipmentId, equipment => {
-      const error = validateEquipmentService(record, equipment.operatingHours);
+      const error = validateEquipmentService(record, equipment.operatingHours, new Date(), equipment.serviceHistory || []);
       if (error) throw new Error(error);
       if (!record.id?.trim() || !record.recordedBy?.trim() || !record.recordedAt || !Number.isFinite(Date.parse(record.recordedAt))) throw new Error('Record a service identifier, actor and timestamp.');
       const rule = equipment.maintenanceRules?.find(r => r.id === record.ruleId);

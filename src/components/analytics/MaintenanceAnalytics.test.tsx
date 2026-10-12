@@ -270,3 +270,20 @@ it.each(["resolve", "reject"] as const)("ignores old sample preparation %s after
   expect(el.querySelector('img[alt="Mav 1 vehicle"]')?.getAttribute('src')).toBe("data:image/jpeg;base64,NEW-SAMPLE");
   expect(db.saveVehicleImage).not.toHaveBeenCalled();
 });
+it('routes chronology review from pinned priority work to actual correction controls even with vehicle widgets hidden',async()=>{
+ state.role='manager';vi.useFakeTimers();vi.setSystemTime(new Date('2026-10-08T12:00:00Z'));
+ const old={id:'old',kind:'oil',title:'Engine oil',date:'2026-09-01',odometer:900,recordedBy:'m'};
+ db.getVehicles.mockReturnValue([{id:'live',vehicleNumber:'Truck',name:'Truck',licensePlate:'',qrCodeToken:'',status:'active',odometer:1000,maintenance:{oilIntervalMiles:500,oilIntervalMonths:6,scheduleSource:'Manual',scheduleConfirmed:true},serviceHistory:[old,{...old,id:'later',kind:'tires',title:'Tires',date:'2026-10-01',odometer:800}]}] as never[]);
+ const el=await render();await clickLabel(el,'Show Vehicle overview');
+ const priority=el.querySelector('[aria-label="Weekly maintenance actions"]')!;
+ expect(priority.textContent).toContain('conflicting mileage chronology');
+ const review=Array.from(priority.querySelectorAll('button')).find(b=>b.textContent==='Review service history')!;
+ await act(async()=>review.click());
+ let dialog=el.querySelector('[role="dialog"]') as HTMLElement;
+ expect(dialog.textContent).toContain('Engine oil');expect(dialog.textContent).toContain('Tires');
+ expect(dialog.textContent).not.toContain('Service history is unknown');
+ const correction=Array.from(dialog.querySelectorAll('button')).find(b=>b.textContent?.includes('Append correction'))!;
+ await act(async()=>correction.click());dialog=el.querySelector('[role="dialog"]') as HTMLElement;
+ expect(dialog.textContent).toContain('Append service correction');expect(dialog.textContent).toContain('Correction reason');
+ expect(db.correctVehicleService).not.toHaveBeenCalled();expect(db.recordVehicleService).not.toHaveBeenCalled();
+});

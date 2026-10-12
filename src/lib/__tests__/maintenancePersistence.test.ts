@@ -263,3 +263,55 @@ it("still rejects whitespace-only photo values without a remote write", async ()
  await expect(dbService.saveVehicleImage("v"," ")).rejects.toThrow(/image/i);
  expect(mocks.updateDoc).not.toHaveBeenCalled();
 });
+it.each([['2026-10-01',9000],['2026-08-01',11000]] as const)('rejects authoritative cross-rule service chronology %s',async(date,odometer)=>{
+ const old={id:'old',kind:'oil' as const,title:'Oil',date:'2026-09-01',odometer:10000,recordedBy:'m'};
+ mocks.remote.set('vehicles/v',{...dbService.getVehicle('v'),serviceHistory:[old]});
+ await expect(dbService.recordVehicleService('v',{...old,id:'new',ruleId:'tires',kind:'tires',date,odometer})).rejects.toThrow(/chronolog/i);
+ expect(mocks.updateDoc).not.toHaveBeenCalled();expect(dbService.getVehicle('v')?.serviceHistory).toBeUndefined();
+});
+it('accepts correcting erroneous original while rejecting contradictions against other effective records',async()=>{
+ const bad={id:'bad',kind:'oil' as const,title:'Oil',date:'2026-08-01',odometer:11000,recordedBy:'m'};
+ const later={...bad,id:'later',ruleId:'tires',kind:'tires' as const,date:'2026-09-01',odometer:10000};
+ localStorage.setItem('sunny_vehicles',JSON.stringify([{...dbService.getVehicle('v'),serviceHistory:[bad,later]}]));
+ await expect(dbService.correctVehicleService('v','bad',{...bad,id:'wrong',odometer:10500},'Invoice',{id:'m',name:'M'})).rejects.toThrow(/chronolog/i);
+ await dbService.correctVehicleService('v','bad',{...bad,id:'fixed',odometer:9000,ruleId:'oil'},'Invoice',{id:'m',name:'M'});
+ expect(dbService.getVehicle('v')?.serviceHistory).toHaveLength(3);
+ expect(dbService.getVehicle('v')?.serviceHistory?.at(-1)).toMatchObject({supersedesId:'bad',odometer:9000});
+ expect(dbService.getVehicle('v')?.serviceHistory?.at(-1)?.ruleId).toBeUndefined();
+});
+it.each(['vehicle','equipment'])('revalidates %s service chronology on transaction retry and retains cache',async(type)=>{
+ const old={id:'old',ruleId:'pump',kind:'oil' as const,title:'Service',date:'2026-09-01',odometer:10000,hours:100,recordedBy:'m',recordedAt:'2026-10-08T12:00:00Z'};
+ const e={id:'e',name:'Tool',category:'equipment',status:'working',operatingHours:200,maintenanceRules:[{id:'pump',title:'Pump',intervalHours:100,source:'Manual',confirmed:true}]};
+ localStorage.setItem('sunny_equipment',JSON.stringify([e]));
+ const prior=type==='vehicle'?dbService.getVehicle('v')!:e;
+ const update=vi.fn();
+ mocks.runTransaction.mockImplementationOnce(async(_db,callback)=>{
+   await callback({get:async()=>({exists:()=>true,data:()=>prior}),update});
+   expect(update).toHaveBeenCalledTimes(1);
+   return callback({get:async()=>({exists:()=>true,data:()=>({...prior,serviceHistory:[old]})}),update});
+ });
+ const record={...old,id:'new',date:'2026-10-01',odometer:9000,hours:90};
+ await expect(type==='vehicle'?dbService.recordVehicleService('v',record):dbService.recordEquipmentService('e',record)).rejects.toThrow(/chronolog/i);
+ expect(update).toHaveBeenCalledTimes(1);
+ expect(dbService.getVehicle('v')?.serviceHistory).toBeUndefined();expect(dbService.getEquipmentItem('e')?.serviceHistory).toBeUndefined();
+});
+it.each([['2026-10-01',100],['2026-08-01',175]] as const)('rejects authoritative equipment service chronology %s across rule IDs',async(date,hours)=>{
+ const e={id:'e',name:'Tool',category:'equipment',status:'working',operatingHours:200,maintenanceRules:[{id:'other',title:'Other',intervalHours:100,source:'Manual',confirmed:true}]};
+ localStorage.setItem('sunny_equipment',JSON.stringify([e]));
+ const old={id:'old',ruleId:'pump',title:'Pump',date:'2026-09-01',hours:150,recordedBy:'m',recordedAt:'2026-10-08T12:00:00Z'};
+ mocks.remote.set('equipment/e',{...e,serviceHistory:[old]});
+ await expect(dbService.recordEquipmentService('e',{...old,id:'new',ruleId:'other',date,hours})).rejects.toThrow(/chronolog/i);
+ expect(mocks.updateDoc).not.toHaveBeenCalled();
+});
+it('revalidates prospective correction chronology on retry after a different rule gains service history',async()=>{
+ const old={id:'old',kind:'oil' as const,title:'Oil',date:'2026-09-01',odometer:11000,recordedBy:'m'};
+ const prior={...dbService.getVehicle('v')!,serviceHistory:[old]};
+ localStorage.setItem('sunny_vehicles',JSON.stringify([prior]));
+ const update=vi.fn();
+ mocks.runTransaction.mockImplementationOnce(async(_db,callback)=>{
+   await callback({get:async()=>({exists:()=>true,data:()=>prior}),update});
+   return callback({get:async()=>({exists:()=>true,data:()=>({...prior,serviceHistory:[old,{...old,id:'later',kind:'tires',ruleId:'tires',date:'2026-10-01',odometer:9000}]})}),update});
+ });
+ await expect(dbService.correctVehicleService('v','old',{...old,id:'fix',odometer:10000},'Invoice',{id:'m',name:'M'})).rejects.toThrow(/chronolog/i);
+ expect(update).toHaveBeenCalledTimes(1);expect(dbService.getVehicle('v')?.serviceHistory).toEqual([old]);
+});

@@ -36,7 +36,8 @@ export function mileageRate(
   readings: MaintenanceReading[],
   now = new Date(),
 ): number | null {
-  const cutoff = addMonths(now, -3).getTime();
+  const reportingDay = parseISO(dateOnly(now));
+  const cutoff = addMonths(reportingDay, -3).getTime();
   const rows = readings
     .filter(
       (r) =>
@@ -55,7 +56,7 @@ export function mileageRate(
     (parseISO(last.date).getTime() - parseISO(first.date).getTime()) / 86400000;
   if (
     elapsed < 7 ||
-    now.getTime() - parseISO(last.date).getTime() > 15 * 86400000 ||
+    reportingDay.getTime() - parseISO(last.date).getTime() > 15 * 86400000 ||
     rows.some((r, i) => i > 0 && r.odometer < rows[i - 1].odometer)
   )
     return null;
@@ -85,9 +86,10 @@ export function validateProfile(profile: MaintenanceProfile): string | null {
   return null;
 }
 export function validateService(
-  record: Pick<VehicleServiceRecord, "date" | "odometer" | "title">,
+  record: Pick<VehicleServiceRecord, "date" | "odometer" | "title"> & Partial<VehicleServiceRecord>,
   current?: number,
   now = new Date(),
+  history: VehicleServiceRecord[] = [],
 ): string | null {
   if (!record.title.trim()) return "Enter a service description.";
   if (!validDay(record.date) || record.date > dateOnly(now))
@@ -98,7 +100,20 @@ export function validateService(
     return "Record the current odometer before adding service history.";
   if (record.odometer > current)
     return "Service mileage exceeds the current odometer. Record the current mileage first.";
-  return null;
+  return vehicleServiceHistoryIssue([
+    ...effectiveServices(history).filter(s => s.id !== record.supersedesId),
+    record,
+  ]);
+}
+/** Date-only entries have no within-day order; order by measurement on ties. */
+export function hasServiceChronologyConflict(rows: { date: string; measurement?: number }[]): boolean {
+  const measured = rows.filter(r => validDay(r.date) && r.measurement != null && Number.isFinite(r.measurement))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.measurement! - b.measurement!);
+  return measured.some((r, i) => i > 0 && r.measurement! < measured[i - 1].measurement!);
+}
+export const VEHICLE_HISTORY_REVIEW = 'Service history has conflicting mileage chronology. Review completed service dates and mileages, then append a correction to the incorrect record.';
+export function vehicleServiceHistoryIssue(records: Pick<VehicleServiceRecord, 'date' | 'odometer'>[]): string | null {
+  return hasServiceChronologyConflict(records.map(s => ({date: s.date, measurement: s.odometer}))) ? VEHICLE_HISTORY_REVIEW : null;
 }
 /** Corrections are append-only; invalid lineage cannot hide valid originals. */
 export function effectiveServices(records: VehicleServiceRecord[]): VehicleServiceRecord[] {
@@ -121,10 +136,14 @@ export function forecastOil(
   now = new Date(),
 ): OilForecast {
   const p = vehicle.maintenance;
-  const last = effectiveServices(vehicle.serviceHistory || [])
+  const history = effectiveServices(vehicle.serviceHistory || []);
+  const historyIssue = vehicleServiceHistoryIssue(history);
+  if (historyIssue) return { status: "needs_setup", reason: historyIssue };
+  const last = history
     .filter(
       (s) =>
         s.kind === "oil" &&
+        (!s.ruleId || s.ruleId === "oil") &&
         validDay(s.date) &&
         s.date <= dateOnly(now) &&
         Number.isFinite(s.odometer),

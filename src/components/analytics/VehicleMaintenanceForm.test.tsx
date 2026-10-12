@@ -25,3 +25,53 @@ it('initializes direct actions with the independent service rule and category',a
 it('identifies and focuses an independently selected rule during profile setup',async()=>{const el=await render('profile',undefined,{initialRuleId:'cabin',initialStep:3,vehicle:{...vehicle,maintenance:{rules:[{id:'cabin',title:'Cabin filter',kind:'filters',intervalMiles:20000,source:'Manual',confirmed:false,recurrence:'after_service'},{id:'brakes',title:'Brake fluid',kind:'other',intervalMonths:36,source:'Manual',confirmed:false,recurrence:'after_service'}]}}});const selected=el.querySelector('[data-maintenance-rule="cabin"]');expect(selected).not.toBeNull();expect(selected?.getAttribute('data-selected-rule')).toBe('true');expect(selected?.textContent).toContain('Selected rule');expect(document.activeElement).toBe(selected);});
 it.each(['tires','filters','other'] as const)('preserves legacy %s correction lineage without adding an oil rule id',async(kind)=>{const save=vi.fn().mockResolvedValue(undefined);const original={id:`original-${kind}`,kind,title:`Legacy ${kind}`,date:'2026-10-01',odometer:900,recordedBy:'first-manager'};const el=await render('correction',save,{original});expect(el.querySelector('select')?.value).toBe(kind);await input(el,'Correction reason','Receipt adjustment');await click(el,'Save sample change');expect(save.mock.calls[0][1]).toMatchObject({kind,supersedesId:original.id});expect(save.mock.calls[0][1].ruleId).toBeUndefined();});
 it.each(['tires','filters','other'] as const)('initializes a legacy %s timeline action as that service category',async(kind)=>{const save=vi.fn().mockResolvedValue(undefined);const el=await render('service',save,{initialRuleId:kind});await click(el,'Save sample change');expect(save.mock.calls[0][1].kind).toBe(kind);expect(save.mock.calls[0][1].title).not.toContain('Oil');expect(save.mock.calls[0][1].ruleId).toBeUndefined();});
+it.each(['oil','tires','filters','other'] as const)('retains explicit configured %s ID even when equal to kind and preserves legacy correction absence',async(kind)=>{
+ const rule={id:kind,kind,title:`Configured ${kind}`,intervalMiles:500,source:'Manual',confirmed:true,recurrence:'after_service' as const};
+ const save=vi.fn().mockResolvedValue(undefined);
+ const el=await render('service',save,{initialRuleId:kind,vehicle:{...vehicle,maintenance:{rules:[rule]}}});
+ await click(el,'Save sample change');
+ expect(save.mock.calls[0][1].ruleId).toBe(kind);
+});
+it('rejects contradictory service in sample form with actionable history feedback',async()=>{
+ const save=vi.fn();
+ const el=await render('service',save,{vehicle:{...vehicle,serviceHistory:[{id:'old',kind:'oil',title:'Oil',date:'2026-09-01',odometer:900,recordedBy:'m'}]}});
+ await input(el,'Odometer at service','800');await click(el,'Save sample change');
+ expect(save).not.toHaveBeenCalled();expect(el.querySelector('[role="alert"]')?.textContent).toMatch(/history.*chronolog/i);
+});
+it('keeps a legacy no-ID correction without an ID even when that built-in rule is configured',async()=>{
+ const original={id:'legacy',kind:'tires' as const,title:'Legacy tires',date:'2026-10-01',odometer:900,recordedBy:'m'};
+ const save=vi.fn().mockResolvedValue(undefined);
+ const el=await render('correction',save,{original,vehicle:{...vehicle,serviceHistory:[original],maintenance:{rules:[{id:'tires',kind:'tires',title:'Tires',intervalMiles:500,source:'Manual',confirmed:true,recurrence:'after_service'}]}}});
+ await input(el,'Correction reason','Invoice correction');await click(el,'Save sample change');
+ expect(save.mock.calls[0][1].ruleId).toBeUndefined();
+});
+it('opens effective record correction controls in history review and retains superseded audit records',async()=>{
+ const old={id:'old',kind:'oil' as const,title:'Old oil',date:'2026-09-01',odometer:900,recordedBy:'m'};
+ const fixed={...old,id:'fixed',title:'Corrected oil',odometer:800,supersedesId:'old',correctionReason:'Invoice'};
+ const onCorrect=vi.fn(),save=vi.fn();
+ const el=await render('history',save,{onCorrect,vehicle:{...vehicle,serviceHistory:[old,fixed]}});
+ expect(el.textContent).toContain('Review service history');expect(el.textContent).toContain('Old oil');expect(el.textContent).toContain('Superseded; retained for audit');
+ expect(Array.from(el.querySelectorAll('button')).filter(b=>b.textContent?.includes('Append correction'))).toHaveLength(1);
+ await click(el,'Append correction');expect(onCorrect).toHaveBeenCalledWith(fixed);expect(save).not.toHaveBeenCalled();
+ expect(el.textContent).not.toContain('Service history is unknown');
+});
+it('accepts a sample correction only after replacing the erroneous original in prospective history',async()=>{
+ const original={id:'bad',kind:'oil' as const,title:'Bad oil',date:'2026-09-01',odometer:950,recordedBy:'m'};
+ const later={...original,id:'later',kind:'tires' as const,title:'Tires',date:'2026-10-01',odometer:900};
+ const save=vi.fn().mockResolvedValue(undefined);
+ const el=await render('correction',save,{original,vehicle:{...vehicle,serviceHistory:[original,later]}});
+ await input(el,'Correction reason','Invoice');await input(el,'Odometer at service','925');await click(el,'Save sample change');
+ expect(save).not.toHaveBeenCalled();expect(el.querySelector('[role="alert"]')?.textContent).toMatch(/chronolog/i);
+ await input(el,'Odometer at service','800');await click(el,'Save sample change');
+ expect(save.mock.calls[0][1]).toMatchObject({supersedesId:'bad',odometer:800});
+});
+it('serialized configured ID equal to kind advances that rule from initial to recurring cadence',async()=>{
+ const {forecastMaintenance}=await import('@/lib/maintenanceRules');
+ const rule={id:'tires',kind:'tires' as const,title:'Tires',initialMiles:3000,intervalMiles:500,source:'Manual',confirmed:true,recurrence:'initial_then_recurring' as const};
+ const fixture={...vehicle,maintenance:{rules:[rule]},maintenanceReadings:[{date:'2026-10-08',odometer:1000,confirmed:true}]};
+ const save=vi.fn().mockResolvedValue(undefined);
+ expect(forecastMaintenance(fixture,[],new Date())[0].dueOdometer).toBe(3000);
+ const el=await render('service',save,{initialRuleId:'tires',vehicle:fixture});await click(el,'Save sample change');
+ const recorded=save.mock.calls[0][1];
+ expect(forecastMaintenance({...fixture,serviceHistory:[recorded]},[],new Date())[0]).toMatchObject({dueOdometer:1500,lastService:recorded});
+});

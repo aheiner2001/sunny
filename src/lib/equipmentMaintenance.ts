@@ -1,6 +1,6 @@
 import { addMonths, parseISO } from 'date-fns';
 import type { Equipment, EquipmentHoursReading, EquipmentServiceRecord, EquipmentMaintenanceRule } from '@/types';
-import { validDay, dateOnly } from './maintenance';
+import { validDay, dateOnly, hasServiceChronologyConflict } from './maintenance';
 import type { OilStatus } from './maintenance';
 export interface EquipmentMaintenanceForecast {
   ruleId: string; title: string; status: OilStatus; source: string; reason: string; missing: string[];
@@ -17,13 +17,18 @@ export function validateEquipmentRule(rule: EquipmentMaintenanceRule, now = new 
   if (rule.baselineHours != null && !hoursValid(rule.baselineHours)) return 'Enter nonnegative measured baseline hours.';
   return null;
 }
+export function equipmentServiceHistoryIssue(records: Pick<EquipmentServiceRecord, 'date' | 'hours'>[]): string | null {
+  return hasServiceChronologyConflict(records.map(s => ({date: s.date, measurement: s.hours})))
+    ? 'Service history has conflicting hours chronology. Review completed service dates and measured hours below. Corrections to existing equipment records are not supported here; keep this history flagged for review until it can be corrected.' : null;
+}
 export function forecastEquipmentMaintenance(equipment: Equipment, now = new Date()): EquipmentMaintenanceForecast[] {
   const today = dateOnly(now);
   return (equipment.maintenanceRules || []).map(rule=> {
     const lastService = [...(equipment.serviceHistory || [])].filter(s=>s.ruleId === rule.id && validDay(s.date) && s.date<=today && (s.hours == null || hoursValid(s.hours))).sort((a,b)=>b.date.localeCompare(a.date)|| (b.hours??0)-(a.hours??0))[0];
     const baseDate = lastService?.date || rule.baselineDate;
     const baseHours = lastService ? lastService.hours : rule.baselineHours;
-    const missing: string[] = [];
+    const historyIssue = equipmentServiceHistoryIssue(equipment.serviceHistory || []);
+    const missing: string[] = historyIssue ? [historyIssue] : [];
     const invalid = validateEquipmentRule(rule,now);
     if (invalid) missing.push(invalid);
     if (rule.intervalHours == null && rule.intervalMonths == null) missing.push('Enter a service hour or month interval.');
@@ -51,10 +56,10 @@ export function validateEquipmentHours(reading: EquipmentHoursReading, current?:
   if (current != null && reading.hours<current) return 'Hours are less than the previous reading.';
   return null;
 }
-export function validateEquipmentService(record:Pick<EquipmentServiceRecord,'title'|'date'|'hours'>,current?:number,now=new Date()):string|null {
+export function validateEquipmentService(record:Pick<EquipmentServiceRecord,'title'|'date'|'hours'>,current?:number,now=new Date(),history:EquipmentServiceRecord[]=[]):string|null {
   if (!record.title?.trim()) return 'Enter a service description.';
   if (!validDay(record.date) || record.date>dateOnly(now)) return 'Enter a valid service date that is not in the future.';
   if (record.hours != null && !hoursValid(record.hours)) return 'Enter valid nonnegative service hours.';
   if (record.hours != null && (!hoursValid(current) || record.hours>current)) return 'Record current operating hours before adding this service.';
-  return null;
+  return equipmentServiceHistoryIssue([...history, record]);
 }
