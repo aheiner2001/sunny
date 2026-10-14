@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertTriangle, Camera, CheckCircle2, Truck, X } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
+import { timesheetService } from '@/lib/timesheets/timesheetService';
 import {
   normalizeReturnQuestions,
   resolveReturnVehicle,
@@ -81,6 +82,10 @@ export default function ReturnClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [returnedVehicle, setReturnedVehicle] = useState<string | null>(null);
+  const [timesheetNotice, setTimesheetNotice] = useState<{
+    type: 'success' | 'no_active_shift' | 'error';
+    message: string;
+  } | null>(null);
   const [jobsCompleted, setJobsCompleted] = useState('0');
   const [inspectionStartedAt, setInspectionStartedAt] = useState(() => new Date().toISOString());
   const damageRef = useRef<VehicleDamageCaptureHandle>(null);
@@ -205,6 +210,28 @@ export default function ReturnClient() {
         id: user.id,
         name: user.name,
       });
+      try {
+        await timesheetService.clockOut(user.id, 'checklist_return', `return-${Date.now()}`);
+        setTimesheetNotice({
+          type: 'success',
+          message: 'Shift ended and submitted for manager review.',
+        });
+      } catch (clockErr: any) {
+        // If NO_ACTIVE_SHIFT, van return still succeeds; driver is alerted
+        if (clockErr?.message === 'NO_ACTIVE_SHIFT') {
+          console.info('Return inspection submitted without an open active shift.');
+          setTimesheetNotice({
+            type: 'no_active_shift',
+            message: 'No active shift was open to clock out. You can request missing shift hours in Timesheets.',
+          });
+        } else {
+          console.warn('Timesheet clock-out error:', clockErr);
+          setTimesheetNotice({
+            type: 'error',
+            message: 'Failed to record clock-out punch.',
+          });
+        }
+      }
       setReturnedVehicle(vehicle.vehicleNumber);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Could not submit return.';
@@ -229,12 +256,40 @@ export default function ReturnClient() {
           <CheckCircle2 className="w-10 h-10 mx-auto text-[var(--ok)]" />
           <h1 className="card-title">Returned — {returnedVehicle} available.</h1>
           <p className="hint">Occupancy is cleared. The van is ready for the next driver.</p>
+
+          {timesheetNotice?.type === 'success' && (
+            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 text-left">
+              <span className="font-bold">Shift Clocked Out:</span> {timesheetNotice.message}
+            </div>
+          )}
+
+          {timesheetNotice?.type === 'no_active_shift' && (
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 text-left space-y-1">
+              <p className="font-bold">No Active Shift Found</p>
+              <p>Van return completed successfully, but you were not clocked into an active shift. If you worked today, please request your hours.</p>
+              <div className="pt-1">
+                <Link href="/timesheets" className="font-semibold underline text-amber-800 hover:text-amber-950">
+                  Request missing hours in Timesheets &rarr;
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {timesheetNotice?.type === 'error' && (
+            <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800 text-left">
+              <span className="font-bold">Timesheet Notice:</span> {timesheetNotice.message}
+            </div>
+          )}
+
           <div className="cluster justify-center pt-2">
             <Link href="/home" className="btn btn-primary btn-sm">
               Home
             </Link>
             <Link href="/vehicles" className="btn btn-secondary btn-sm">
               Vehicles
+            </Link>
+            <Link href="/timesheets" className="btn btn-secondary btn-sm">
+              Timesheets
             </Link>
           </div>
         </div>

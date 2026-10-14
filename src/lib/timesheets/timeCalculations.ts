@@ -29,7 +29,7 @@ export function validateShiftInterval(
   if (unpaidBreakSeconds < 0) {
     return { valid: false, error: 'Unpaid break duration cannot be negative.' };
   }
-  if (unpaidBreakSeconds >= elapsed) {
+  if (unpaidBreakSeconds > 0 && unpaidBreakSeconds >= elapsed) {
     return { valid: false, error: 'Unpaid break cannot meet or exceed total elapsed shift duration.' };
   }
   return { valid: true };

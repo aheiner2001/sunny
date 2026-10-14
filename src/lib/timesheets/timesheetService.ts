@@ -78,7 +78,7 @@ export class TimesheetService {
     source: PunchSource,
     eventId: string,
     unpaidBreakSeconds = 0,
-    timestamp = new Date().toISOString()
+    timestamp?: string
   ): Promise<ShiftRecord> {
     const existingEnded = timesheetStore.getShiftsByEmployee(employeeId).find((s) => s.endEventId === eventId);
     if (existingEnded) {
@@ -99,7 +99,12 @@ export class TimesheetService {
       return shift; // Idempotent retry
     }
 
-    const validation = validateShiftInterval(shift.startAtUtc, timestamp, unpaidBreakSeconds);
+    let effectiveTimestamp = timestamp ?? new Date().toISOString();
+    if (timestamp === undefined && new Date(effectiveTimestamp).getTime() <= new Date(shift.startAtUtc).getTime()) {
+      effectiveTimestamp = new Date(new Date(shift.startAtUtc).getTime() + 1000).toISOString();
+    }
+
+    const validation = validateShiftInterval(shift.startAtUtc, effectiveTimestamp, unpaidBreakSeconds);
     if (!validation.valid) {
       throw new Error(validation.error);
     }
@@ -108,13 +113,13 @@ export class TimesheetService {
     const updated: ShiftRecord = {
       ...shift,
       status: 'pending',
-      endAtUtc: timestamp,
+      endAtUtc: effectiveTimestamp,
       endSource: source,
       endEventId: eventId,
       unpaidBreakSeconds,
       revision: nextRevision,
-      updatedAt: timestamp,
-      submittedAt: timestamp,
+      updatedAt: effectiveTimestamp,
+      submittedAt: effectiveTimestamp,
     };
 
     timesheetStore.saveShift(updated);
@@ -131,7 +136,7 @@ export class TimesheetService {
       reason: null,
       revision: nextRevision,
       eventId,
-      timestamp,
+      timestamp: effectiveTimestamp,
     });
 
     return updated;
