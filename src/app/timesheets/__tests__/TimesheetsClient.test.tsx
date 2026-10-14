@@ -188,4 +188,101 @@ describe('TimesheetsClient (Employee View)', () => {
       expect(requests[0].reason).toBe('Need to add 30m break');
     });
   });
+
+  it('supports loading demo shifts and dismissing toast notifications', async () => {
+    render(<TimesheetsClient />);
+    const loadDemoBtn = screen.getByRole('button', { name: /load demo shifts/i });
+    fireEvent.click(loadDemoBtn);
+
+    expect(screen.getByText(/loaded prototype demo shifts/i)).toBeDefined();
+
+    // Dismiss toast notification
+    const dismissBtn = screen.getByRole('button', { name: /dismiss/i });
+    fireEvent.click(dismissBtn);
+    expect(screen.queryByText(/loaded prototype demo shifts/i)).toBeNull();
+  });
+
+  it('supports cancelling modals without submitting', async () => {
+    // Seed an active shift for break modal cancellation test
+    await timesheetService.clockIn('u-1', 'Trainee Tom', 'manual', 'evt-cancel');
+    render(<TimesheetsClient />);
+
+    // Open and cancel Clock Out / Break modal
+    fireEvent.click(screen.getByRole('button', { name: /clock out/i }));
+    expect(screen.getByRole('heading', { name: /unpaid break duration/i })).toBeDefined();
+    const breakCancelBtn = screen.getByRole('button', { name: /cancel/i });
+    fireEvent.click(breakCancelBtn);
+    expect(screen.queryByRole('heading', { name: /unpaid break duration/i })).toBeNull();
+
+    // Open and cancel Missing Hours modal
+    fireEvent.click(screen.getByRole('button', { name: /request missing hours/i }));
+    expect(screen.getByRole('heading', { name: /request missing hours/i })).toBeDefined();
+    const missingCancelBtn = screen.getByRole('button', { name: /cancel/i });
+    fireEvent.click(missingCancelBtn);
+    expect(screen.queryByRole('heading', { name: /request missing hours/i })).toBeNull();
+  });
+
+  it('supports viewing shift history and opening/closing audit drawer', async () => {
+    timesheetStore.saveShift({
+      id: 'shift-hist-1',
+      employeeId: 'u-1',
+      employeeName: 'Trainee Tom',
+      locationId: 'loc-main',
+      status: 'pending',
+      timeZone: 'America/Denver',
+      startAtUtc: '2026-10-14T14:00:00.000Z',
+      endAtUtc: '2026-10-14T20:00:00.000Z',
+      unpaidBreakSeconds: 0,
+      startSource: 'manual',
+      endSource: 'manual',
+      startEventId: 'evt-h1',
+      endEventId: 'evt-h2',
+      revision: 1,
+      createdAt: '2026-10-14T14:00:00.000Z',
+      updatedAt: '2026-10-14T20:00:00.000Z',
+      submittedAt: '2026-10-14T20:00:00.000Z',
+      approvedAt: null,
+      approvedBy: null,
+    });
+
+    render(<TimesheetsClient />);
+    const historyBtn = screen.getAllByRole('button', { name: /history/i })[0];
+    fireEvent.click(historyBtn);
+
+    expect(screen.getByRole('heading', { name: /shift audit trail/i })).toBeDefined();
+
+    // Close audit drawer
+    const closeBtn = screen.getByRole('button', { name: /close trail/i });
+    fireEvent.click(closeBtn);
+    expect(screen.queryByRole('heading', { name: /shift audit trail/i })).toBeNull();
+  });
+
+  it('displays error notification when clock-in or clock-out service fails', async () => {
+    const clockInSpy = vi.spyOn(timesheetService, 'clockIn').mockRejectedValueOnce(new Error('Network offline'));
+    render(<TimesheetsClient />);
+
+    fireEvent.click(screen.getByRole('button', { name: /clock in/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/network offline/i)).toBeDefined();
+    });
+    clockInSpy.mockRestore();
+
+    // Clock in successfully via UI
+    fireEvent.click(screen.getByRole('button', { name: /clock in/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /clock out/i })).toBeDefined();
+    });
+
+    const clockOutSpy = vi.spyOn(timesheetService, 'clockOut').mockRejectedValueOnce(new Error('Clock-out service unavailable'));
+
+    // Click Clock Out to open modal, then confirm
+    fireEvent.click(screen.getByRole('button', { name: /clock out/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm clock out/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/clock-out service unavailable/i)).toBeDefined();
+    });
+    clockOutSpy.mockRestore();
+  });
 });

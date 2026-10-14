@@ -284,4 +284,56 @@ describe('TimesheetsClient (Manager Review)', () => {
       expect(screen.getByText(/stale_revision_conflict/i)).toBeDefined();
     });
   });
+
+  it('supports cancelling return modal and manager edit drawer', async () => {
+    render(<TimesheetsClient />);
+
+    const aliceRow = screen.getByText('Alice').closest('tr')!;
+    const returnBtn = within(aliceRow).getByRole('button', { name: /return/i });
+
+    // Open Return modal and cancel
+    fireEvent.click(returnBtn);
+    expect(screen.getByRole('heading', { name: /return shift for correction/i })).toBeDefined();
+    const returnCancelBtn = screen.getByRole('button', { name: /cancel/i });
+    fireEvent.click(returnCancelBtn);
+    expect(screen.queryByRole('heading', { name: /return shift for correction/i })).toBeNull();
+
+    // Open Edit drawer and cancel
+    const editBtn = within(aliceRow).getByRole('button', { name: /edit/i });
+    fireEvent.click(editBtn);
+    expect(screen.getByRole('heading', { name: /edit shift/i })).toBeDefined();
+    const editCancelBtn = screen.getByRole('button', { name: /cancel/i });
+    fireEvent.click(editCancelBtn);
+    expect(screen.queryByRole('heading', { name: /edit shift/i })).toBeNull();
+  });
+
+  it('displays empty state when filtered team shifts have no matches and allows resetting filters', async () => {
+    render(<TimesheetsClient />);
+
+    // Filter by nonexistent status
+    const statusSelect = screen.getByRole('combobox', { name: /filter by status/i });
+    fireEvent.change(statusSelect, { target: { value: 'needs_correction' } });
+
+    expect(screen.getByText(/no shifts match the selected filters/i)).toBeDefined();
+
+    // Click Reset filters
+    const resetFiltersBtn = screen.getByRole('button', { name: /reset filters/i });
+    fireEvent.click(resetFiltersBtn);
+
+    expect(screen.getByText('Alice')).toBeDefined();
+  });
+
+  it('displays error notification when manager approval service fails', async () => {
+    const approveSpy = vi.spyOn(timesheetService, 'approveShift').mockRejectedValueOnce(new Error('Permission denied'));
+    render(<TimesheetsClient />);
+
+    const aliceRow = screen.getByText('Alice').closest('tr')!;
+    const approveBtn = within(aliceRow).getByRole('button', { name: /approve/i });
+    fireEvent.click(approveBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/permission denied/i)).toBeDefined();
+    });
+    approveSpy.mockRestore();
+  });
 });

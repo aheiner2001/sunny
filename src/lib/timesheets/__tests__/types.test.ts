@@ -1,8 +1,26 @@
 import { describe, it, expect } from 'vitest';
 import { DateTime } from 'luxon';
-import type { ShiftRecord, CorrectionRequest, AuditEvent, ActiveShiftGuard, TimesheetSummary } from '../types';
+import {
+  SHIFT_STATUSES,
+  PUNCH_SOURCES,
+  CORRECTION_STATUSES,
+  AUDIT_ACTIONS,
+  type ShiftRecord,
+  type CorrectionRequest,
+  type AuditEvent,
+  type ActiveShiftGuard,
+  type TimesheetSummary,
+} from '../types';
 
 describe('Timesheet Types', () => {
+  it('exports valid constant arrays for statuses and actions', () => {
+    expect(SHIFT_STATUSES).toEqual(['active', 'pending', 'needs_correction', 'approved']);
+    expect(PUNCH_SOURCES).toEqual(['qr', 'manual', 'checklist_return']);
+    expect(CORRECTION_STATUSES).toEqual(['pending', 'approved', 'rejected']);
+    expect(AUDIT_ACTIONS).toContain('clock_in');
+    expect(AUDIT_ACTIONS).toContain('amend_approve');
+  });
+
   it('supports valid ShiftRecord and status values', () => {
     const shift: ShiftRecord = {
       id: 'shift-1',

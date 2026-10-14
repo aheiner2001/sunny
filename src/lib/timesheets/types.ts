@@ -10,6 +10,19 @@ export type AuditAction =
   | 'amend_approve' 
   | 'return_for_correction';
 
+export const SHIFT_STATUSES: readonly ShiftStatus[] = ['active', 'pending', 'needs_correction', 'approved'] as const;
+export const PUNCH_SOURCES: readonly PunchSource[] = ['qr', 'manual', 'checklist_return'] as const;
+export const CORRECTION_STATUSES: readonly CorrectionStatus[] = ['pending', 'approved', 'rejected'] as const;
+export const AUDIT_ACTIONS: readonly AuditAction[] = [
+  'clock_in',
+  'clock_out',
+  'request_correction',
+  'manager_edit',
+  'approve',
+  'amend_approve',
+  'return_for_correction',
+] as const;
+
 export interface ShiftRecord {
   id: string;
   employeeId: string;
