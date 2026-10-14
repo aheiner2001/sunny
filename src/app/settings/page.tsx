@@ -974,7 +974,7 @@ function SettingsPageContent() {
 
           {filteredQuestions.length === 0 && (
             <div className="p-8 bg-surface-sunk rounded-2xl border border-line text-center text-xs text-ink-faint">
-              No questions found in this category. Click "Add Question" above to create one.
+              No questions found in this category. Click &ldquo;Add Question&rdquo; above to create one.
             </div>
           )}
         </div>

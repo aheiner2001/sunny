@@ -1552,7 +1552,7 @@ export default function TimesheetsClient() {
                     </p>
                     {evt.reason && (
                       <p className="text-xs italic text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-200 dark:border-slate-700">
-                        "{evt.reason}"
+                        &ldquo;{evt.reason}&rdquo;
                       </p>
                     )}
                   </div>
