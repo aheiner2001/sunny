@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { findPossibleMissedIssues } from '@/lib/possibleMissedIssues';
+import { buildOperatorScorecards, MIN_BONUS_INSPECTIONS } from '@/lib/operatorReliability';
 import { Inspection, Issue, Vehicle, Equipment, ReportSettings } from '@/types';
 import { ManagerOnly } from '@/components/ManagerOnly';
 import { ReportsAnalytics } from '@/components/ReportsAnalytics';
@@ -103,7 +104,8 @@ function ReportsPageContent() {
   const filteredInspections = useMemo(() => {
     if (!startDate || !endDate) return inspections;
     return inspections.filter((i) => {
-      const date = i.dateString || i.submittedAt?.split('T')[0];
+      const timestamp = new Date(i.submittedAt).getTime();
+      const date = Number.isFinite(timestamp) ? new Date(timestamp).toISOString().slice(0, 10) : '';
       return date >= startDate && date <= endDate;
     });
   }, [inspections, startDate, endDate]);
@@ -154,42 +156,16 @@ function ReportsPageContent() {
     }).sort((a, b) => b.repairCost - a.repairCost);
   }, [vehicles, filteredIssues, filteredInspections]);
 
-  // 6.4 Operator Reliability Scorecards
+  // Filter discoveries by report range, but retain full prior custody history.
   const possibleMissedSignals = useMemo(
-    () => findPossibleMissedIssues(issues, inspections, { windowHours: 72 }),
-    [issues, inspections]
+    () => findPossibleMissedIssues(filteredIssues, inspections, { windowHours: 72 }),
+    [filteredIssues, inspections]
   );
 
-  const operatorLeaderboard = useMemo(() => {
-    const users = dbService.getUsers().filter((u) => u.status === 'active');
-    return users.map((user) => {
-      const userInspections = filteredInspections.filter((i) => i.userId === user.id || i.userName === user.name);
-      const userPassed = userInspections.filter((i) => i.status === 'passed').length;
-      const opPassRate = userInspections.length > 0 ? Math.round((userPassed / userInspections.length) * 100) : 100;
-      const userIssuesFlagged = filteredIssues.filter((i) => i.reportedById === user.id || i.reportedByName === user.name).length;
-
-      // Reliability Score: 0-100 based on inspection volume & pass consistency
-      const volumeBonus = Math.min(20, userInspections.length * 2);
-      const score = userInspections.length === 0 ? 80 : Math.min(100, Math.round(opPassRate * 0.8 + volumeBonus));
-
-      let grade = 'A';
-      if (score >= 95) grade = 'A+';
-      else if (score >= 90) grade = 'A';
-      else if (score >= 80) grade = 'B+';
-      else if (score >= 70) grade = 'B';
-      else grade = 'C';
-
-      return {
-        user,
-        totalInspections: userInspections.length,
-        passedInspections: userPassed,
-        passRate: opPassRate,
-        issuesFlagged: userIssuesFlagged,
-        score,
-        grade,
-      };
-    }).sort((a, b) => b.score - a.score);
-  }, [filteredInspections, filteredIssues]);
+  const operatorLeaderboard = useMemo(
+    () => buildOperatorScorecards(dbService.getUsers(), filteredInspections, filteredIssues, possibleMissedSignals),
+    [filteredInspections, filteredIssues, possibleMissedSignals]
+  );
 
   // 6.1 Interactive Trend Graphs data (Last 14-30 days timeline)
   const trendDays = useMemo(() => {
@@ -607,7 +583,7 @@ function ReportsPageContent() {
               <h3 className="card-title text-sm font-extrabold text-ink">
                 Operator Reliability Leaderboard & Scorecards
               </h3>
-              <p className="hint text-xs">Detailer rankings by inspection completion diligence and pass rate accuracy.</p>
+              <p className="hint text-xs">Rankings by checklist diligence, discoveries, and vehicle handoff accountability.</p>
             </div>
           </div>
           <span className="unit-tag flex items-center gap-1">
@@ -616,40 +592,52 @@ function ReportsPageContent() {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          
-      <div className="card card-pad stack gap-3 mb-4">
-        <div>
-          <h2 className="card-title">Possible missed issues</h2>
-          <p className="text-xs text-ink-muted m-0">
-            Soft advisory only — when a later inspection flags something, we gently associate a prior
-            inspection/operator for the same van in a 72-hour window. This does <strong>not</strong> change pass rates.
-          </p>
+        <p className="hint text-xs">
+          Diligence: up to 70 points (35 for volume, 35 for paired pretrip/return consistency).
+          Discoveries: 3 points each, up to 15. Handoff deductions: 10 low/unspecified, 15 moderate,
+          or 25 critical per turnover; multiple findings use the highest deduction.
+          Qualified requires 85 points, at least {MIN_BONUS_INSPECTIONS} completed inspections, and zero handoff flags.
+          These point limits cap the score at 85/100. Grades: A+ ≥95, A ≥90, B+ ≥80, B ≥70, C below 70.
+          Active days use submission dates (UTC). Consistency measures paired checklists per vehicle/workday;
+          days with no submissions cannot be assessed without a shift schedule.
+          Needs Review requires at least 70 points and at most one flag; lower scores or repeated flags are Ineligible.
+        </p>
+        <div className="card card-pad stack gap-3 mb-4">
+          <div>
+            <h2 className="card-title">Turnover Discrepancies &amp; Handoff Audit</h2>
+            <p className="text-xs text-ink-muted m-0">
+              A different operator discovering an issue within 72 hours of the latest cleared inspection
+              creates a reviewable handoff flag for the prior operator and discovery credit for the reporter.
+              Associations need manager review and are not proof of fault. Fleet pass rates remain separate.
+              Deductions are included in the provisional score and bonus badge below.
+            </p>
+          </div>
+          {possibleMissedSignals.length === 0 ? (
+            <p className="text-sm text-ink-faint m-0">No turnover discrepancies in the current report window.</p>
+          ) : (
+            <ul className="stack gap-2 m-0 p-0 list-none">
+              {possibleMissedSignals.slice(0, 12).map(signal => (
+                <li key={`${signal.issueId}-${signal.priorInspectionId}`} className="rounded-xl border border-line p-3 bg-surface-sunk/40">
+                  <p className="text-xs font-bold m-0">{signal.issueTitle}</p>
+                  <p className="text-[11px] text-ink-muted m-0">
+                    {signal.vehicleNumber || signal.vehicleId}
+                    {signal.equipmentName ? ` · ${signal.equipmentName}` : ''}
+                  </p>
+                  <p className="text-[11px] m-0 mt-1">
+                    Caught by <strong>{signal.flaggedByUserName || 'Unknown operator'}</strong> on{' '}
+                    {new Date(signal.flaggedAt).toLocaleString()} (discovery credit).
+                    {' '}Turnover deduction associated with prior operator <strong>{signal.priorUserName || 'Unknown operator'}</strong>,
+                    whose inspection was submitted {new Date(signal.priorSubmittedAt).toLocaleString()}.
+                    {' '}Review this handoff before making a bonus decision.
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-        {possibleMissedSignals.length === 0 ? (
-          <p className="text-sm text-ink-faint m-0">No soft signals in the current report window.</p>
-        ) : (
-          <ul className="stack gap-2 m-0 p-0 list-none">
-            {possibleMissedSignals.slice(0, 12).map(signal => (
-              <li key={`${signal.issueId}-${signal.priorInspectionId}`} className="rounded-xl border border-line p-3 bg-surface-sunk/40">
-                <p className="text-xs font-bold m-0">{signal.issueTitle}</p>
-                <p className="text-[11px] text-ink-muted m-0">
-                  {signal.vehicleNumber || signal.vehicleId}
-                  {signal.equipmentName ? ` · ${signal.equipmentName}` : ''}
-                </p>
-                <p className="text-[11px] m-0 mt-1">
-                  Flagged {new Date(signal.flaggedAt).toLocaleString()} 
-                  {signal.flaggedByUserName ? ` by ${signal.flaggedByUserName}` : ''}.
-                  Prior inspection by <strong>{signal.priorUserName}</strong> on{' '}
-                  {new Date(signal.priorSubmittedAt).toLocaleString()} may be worth a gentle follow-up.
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
 
-      {operatorLeaderboard.map((op, rank) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {operatorLeaderboard.map((op, rank) => (
             <div
               key={op.user.id}
               className="p-3.5 rounded-2xl border border-line bg-surface flex flex-col justify-between hover:border-ink transition-all shadow-xs"
@@ -679,19 +667,35 @@ function ReportsPageContent() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-line text-center text-xs">
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-line text-center text-xs">
                 <div className="p-1.5 rounded-lg bg-surface-sunk">
-                  <div className="text-[10px] text-ink-faint uppercase font-bold">Inspections</div>
+                  <div className="text-[10px] text-ink-faint uppercase font-bold">Completed Inspections</div>
                   <div className="font-bold text-ink mt-0.5">{op.totalInspections}</div>
                 </div>
                 <div className="p-1.5 rounded-lg bg-surface-sunk">
-                  <div className="text-[10px] text-ink-faint uppercase font-bold">Pass Rate</div>
-                  <div className="font-bold text-emerald-600 mt-0.5">{op.passRate}%</div>
+                  <div className="text-[10px] text-ink-faint uppercase font-bold">Active Days</div>
+                  <div className="font-bold text-ink mt-0.5">{op.activeDays}</div>
+                </div>
+                <div className="p-1.5 rounded-lg bg-surface-sunk">
+                  <div className="text-[10px] text-ink-faint uppercase font-bold">Handoff Flags</div>
+                  <div className="font-bold text-ink mt-0.5">{op.handoffFlags}</div>
                 </div>
                 <div className="p-1.5 rounded-lg bg-surface-sunk">
                   <div className="text-[10px] text-ink-faint uppercase font-bold">Score</div>
                   <div className="font-bold text-ink mt-0.5">{op.score}/100</div>
                 </div>
+              </div>
+              <p className="text-[11px] text-ink-muted mt-2 mb-0">
+                Paired checklist days: {op.completedShifts}/{op.observedShifts} ({op.consistency}%).
+                {' '}Diligence {op.baseDiligence} + integrity {op.integrityBonus} − handoff deductions {op.discrepancyPenalty}.
+              </p>
+              <div className="flex items-center justify-between gap-2 mt-2">
+                <span className="text-[10px] text-ink-faint uppercase font-bold">Bonus Eligibility</span>
+                <span className={`px-2 py-1 rounded-md text-xs font-bold ${
+                  op.bonusStatus === 'Qualified' ? 'bg-emerald-100 text-emerald-800'
+                    : op.bonusStatus === 'Needs Review' ? 'bg-amber-100 text-amber-800'
+                    : 'bg-red-100 text-red-800'
+                }`}>{op.bonusStatus}</span>
               </div>
             </div>
           ))}

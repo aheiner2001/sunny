@@ -11,19 +11,26 @@ export type PossibleMissedIssueSignal = {
   flaggedAt: string;
   flaggedByInspectionId?: string | null;
   flaggedByUserName?: string | null;
+  flaggedByUserId?: string | null;
   priorInspectionId: string;
   priorUserName: string;
+  priorUserId?: string | null;
   priorSubmittedAt: string;
   windowHours: number;
-  /** Soft advisory only — must NOT feed pass-rate / operator blame metrics. */
+  /** Reviewable handoff signal; separate from fleet pass-rate metrics. */
   kind: 'possible_missed_issue';
 };
 
 const DEFAULT_WINDOW_HOURS = 72;
 
+export function isCompletedInspection(inspection: Inspection): boolean {
+  return inspection.status !== 'in_progress' && inspection.status !== 'rejected'
+    && Number.isFinite(new Date(inspection.submittedAt).getTime());
+}
+
 
 /**
- * Conservative soft signal: when a later inspection flags something, associate the
+ * Reviewable custody signal: when a later operator flags something, associate the
  * most recent prior inspection/operator for the same vehicle (and equipment when known)
  * inside a defensible window. Never mutates pass-rate inputs.
  */
@@ -36,7 +43,7 @@ export function findPossibleMissedIssues(
   const windowMs = windowHours * 60 * 60 * 1000;
   const signals: PossibleMissedIssueSignal[] = [];
 
-  const sortedInspections = [...inspections].sort(
+  const sortedInspections = inspections.filter(isCompletedInspection).sort(
     (a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime()
   );
 
@@ -53,26 +60,29 @@ export function findPossibleMissedIssues(
         const submitted = new Date(insp.submittedAt).getTime();
         if (Number.isNaN(submitted) || submitted >= flaggedMs) return false;
         if (flaggedMs - submitted > windowMs) return false;
-        // Prior inspection did not itself flag this equipment (if known)
-        if (issue.equipmentId) {
-          const flaggedSame = insp.responses.some(
-            r => r.equipmentId === issue.equipmentId && r.isFlagged
-          );
-          if (flaggedSame) return false;
-        } else if (insp.status === 'issues_found') {
-          // If we cannot scope to equipment, skip priors that already found issues
-          // to avoid noisy blame. Soft signal prefers clean priors only.
-          return false;
-        }
         return true;
       })
       .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())[0];
 
     if (!prior) continue;
 
+    // Inspect the latest custody record first; never reach past an acknowledged
+    // defect to deduct points from an older clean inspection.
+    if (issue.equipmentId) {
+      if (prior.responses.some(r => r.equipmentId === issue.equipmentId && r.isFlagged)) continue;
+      if (prior.status === 'issues_found' && !prior.responses.some(r => r.equipmentId === issue.equipmentId)) continue;
+    } else if (prior.status === 'issues_found' || prior.responses.some(r => r.isFlagged)) continue;
+
     const flaggingInspection = issue.inspectionId
       ? inspections.find(i => i.id === issue.inspectionId)
       : undefined;
+
+    const reporterId = flaggingInspection?.userId || issue.reportedById;
+    const reporterName = flaggingInspection?.userName || issue.reportedByName;
+    // A custody discrepancy requires a different, identifiable reporting operator.
+    if (!reporterId && !reporterName?.trim()) continue;
+    if (prior.userId && reporterId ? prior.userId === reporterId
+      : prior.userName?.trim() && prior.userName.trim() === reporterName?.trim()) continue;
 
     signals.push({
       issueId: issue.id,
@@ -83,9 +93,11 @@ export function findPossibleMissedIssues(
       equipmentName: issue.equipmentName,
       flaggedAt,
       flaggedByInspectionId: issue.inspectionId || null,
-      flaggedByUserName: flaggingInspection?.userName || issue.reportedByName || null,
+      flaggedByUserName: reporterName || null,
+      flaggedByUserId: reporterId || null,
       priorInspectionId: prior.id,
       priorUserName: prior.userName,
+      priorUserId: prior.userId || null,
       priorSubmittedAt: prior.submittedAt,
       windowHours,
       kind: 'possible_missed_issue',
