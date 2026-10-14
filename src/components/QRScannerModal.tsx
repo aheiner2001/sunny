@@ -109,20 +109,29 @@ export function QRScannerModal({
     }
   };
 
-  const handleCodeFound = (scannedText: string) => {
+  const handleCodeFound = async (scannedText: string) => {
     void stopScanner();
-    let token = scannedText;
-    if (scannedText.includes('/inspect?id=')) {
-      token = scannedText.split('/inspect?id=')[1]?.split('&')[0] || scannedText;
-    } else if (scannedText.includes('?inspect=')) {
-      token = scannedText.split('?inspect=')[1]?.split('&')[0] || scannedText;
-    } else if (scannedText.includes('/inspect/')) {
-      token = scannedText.split('/inspect/')[1]?.split('?')[0] || scannedText;
-    } else if (scannedText.includes('sunny://vehicle/')) {
-      token = scannedText.replace('sunny://vehicle/', '');
+    let token = scannedText.trim();
+    try {
+      token = decodeURIComponent(token);
+    } catch {
+      // ignore malformed URI
     }
 
-    const vehicle = dbService.getVehicleByQR(token) || dbService.getVehicle(token);
+    if (token.includes('/inspect?id=')) {
+      token = token.split('/inspect?id=')[1]?.split('&')[0] || token;
+    } else if (token.includes('?inspect=')) {
+      token = token.split('?inspect=')[1]?.split('&')[0] || token;
+    } else if (token.includes('/inspect/')) {
+      token = token.split('/inspect/')[1]?.split('?')[0] || token;
+    } else if (token.includes('sunny://vehicle/')) {
+      token = token.replace('sunny://vehicle/', '');
+    }
+
+    let vehicle = dbService.getVehicleByQR(token) || dbService.getVehicle(token);
+    if (!vehicle) {
+      vehicle = (await dbService.fetchVehicleAsync(token)) || undefined;
+    }
     if (!vehicle) {
       setCameraError(`Vehicle with code "${scannedText}" not found in fleet.`);
       return;
