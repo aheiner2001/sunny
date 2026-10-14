@@ -626,8 +626,7 @@ export default function InspectClient() {
               lastInspectionStatus: offlineInspection.status,
               lastInspectionAt: nowIso,
             };
-            const currentList = dbService.getVehicles();
-            localStorage.setItem('sunny_vehicles', JSON.stringify(currentList.map(item => item.id === v.id ? checkedOut : item)));
+            await dbService.updateVehicle(checkedOut);
             setVehicle(checkedOut);
           }
         } catch {
