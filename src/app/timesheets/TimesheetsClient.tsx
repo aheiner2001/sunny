@@ -22,6 +22,7 @@ import {
   RotateCcw,
   AlertTriangle,
   X,
+  Pencil,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { timesheetService } from '@/lib/timesheets/timesheetService';
@@ -104,6 +105,19 @@ export default function TimesheetsClient() {
   // Manager feedback modal
   const [returnModalShift, setReturnModalShift] = useState<ShiftRecord | null>(null);
   const [returnFeedback, setReturnFeedback] = useState('');
+
+  // Manager edit drawer
+  const [managerEditShift, setManagerEditShift] = useState<ShiftRecord | null>(null);
+  const [managerEditForm, setManagerEditForm] = useState({
+    start: '',
+    end: '',
+    breakMinutes: 0,
+    reason: '',
+  });
+
+  // Manager review table filters
+  const [managerEmployeeFilter, setManagerEmployeeFilter] = useState<string>('all');
+  const [managerStatusFilter, setManagerStatusFilter] = useState<string>('all');
 
   // Audit history drawer
   const [auditShift, setAuditShift] = useState<ShiftRecord | null>(null);
@@ -193,6 +207,26 @@ export default function TimesheetsClient() {
   const teamWeekShifts = useMemo(() => {
     return filterShiftsByWeek(shifts);
   }, [shifts, weekStartUtc, weekEndUtc]);
+
+  const teamEmployees = useMemo(() => {
+    const names = new Set<string>();
+    shifts.forEach((s) => {
+      if (s.employeeName) names.add(s.employeeName);
+    });
+    return Array.from(names).sort();
+  }, [shifts]);
+
+  const filteredTeamShifts = useMemo(() => {
+    return teamWeekShifts.filter((shift) => {
+      if (managerEmployeeFilter !== 'all' && shift.employeeName !== managerEmployeeFilter && shift.employeeId !== managerEmployeeFilter) {
+        return false;
+      }
+      if (managerStatusFilter !== 'all' && shift.status !== managerStatusFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [teamWeekShifts, managerEmployeeFilter, managerStatusFilter]);
 
   // Employee punch actions
   const handleClockIn = async () => {
@@ -336,6 +370,52 @@ export default function TimesheetsClient() {
       refreshData();
     } catch (err: any) {
       setNotification({ type: 'error', message: err.message || 'Error returning shift' });
+    }
+  };
+
+  const handleOpenManagerEdit = (shift: ShiftRecord) => {
+    setManagerEditShift(shift);
+    const startLocal = DateTime.fromISO(shift.startAtUtc, { zone: DEFAULT_TIMEZONE }).toFormat("yyyy-MM-dd'T'HH:mm");
+    const endLocal = shift.endAtUtc
+      ? DateTime.fromISO(shift.endAtUtc, { zone: DEFAULT_TIMEZONE }).toFormat("yyyy-MM-dd'T'HH:mm")
+      : '';
+    setManagerEditForm({
+      start: startLocal,
+      end: endLocal,
+      breakMinutes: Math.round(shift.unpaidBreakSeconds / 60),
+      reason: '',
+    });
+  };
+
+  const handleSaveManagerEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.id || !managerEditShift) return;
+    try {
+      if (!managerEditForm.reason.trim()) {
+        throw new Error('REASON_REQUIRED');
+      }
+      const startUtc = DateTime.fromISO(managerEditForm.start, { zone: DEFAULT_TIMEZONE }).toUTC().toISO();
+      const endUtc = managerEditForm.end
+        ? DateTime.fromISO(managerEditForm.end, { zone: DEFAULT_TIMEZONE }).toUTC().toISO()
+        : undefined;
+      if (!startUtc) throw new Error('Invalid start timestamp.');
+
+      await timesheetService.saveManagerEdit(
+        managerEditShift.id,
+        { id: user.id, name: user.name || user.email || 'Manager' },
+        managerEditShift.revision,
+        {
+          startAtUtc: startUtc,
+          endAtUtc: endUtc || undefined,
+          unpaidBreakSeconds: Number(managerEditForm.breakMinutes) * 60,
+        },
+        managerEditForm.reason
+      );
+      setManagerEditShift(null);
+      setNotification({ type: 'success', message: 'Shift updated successfully.' });
+      refreshData();
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err.message || 'Error updating shift' });
     }
   };
 
@@ -832,17 +912,71 @@ export default function TimesheetsClient() {
         ) : (
           /* Manager Review View */
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <Shield className="w-5 h-5 text-indigo-600" />
-                Manager Review — Team Shifts ({teamWeekShifts.length})
+                Team Shifts ({filteredTeamShifts.length})
               </h2>
+
+              {/* Filters Toolbar */}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                  <label htmlFor="filter-employee" className="font-medium">Employee:</label>
+                  <select
+                    id="filter-employee"
+                    aria-label="Filter by employee"
+                    value={managerEmployeeFilter}
+                    onChange={(e) => setManagerEmployeeFilter(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="all">All Employees</option>
+                    {teamEmployees.map((emp) => (
+                      <option key={emp} value={emp}>Employee: {emp}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                  <label htmlFor="filter-status" className="font-medium">Status:</label>
+                  <select
+                    id="filter-status"
+                    aria-label="Filter by status"
+                    value={managerStatusFilter}
+                    onChange={(e) => setManagerStatusFilter(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="needs_correction">Needs Correction</option>
+                    <option value="active">Active</option>
+                  </select>
+                </div>
+
+                {(managerEmployeeFilter !== 'all' || managerStatusFilter !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManagerEmployeeFilter('all');
+                      setManagerStatusFilter('all');
+                    }}
+                    className="px-2 py-1 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 underline"
+                  >
+                    Reset filters
+                  </button>
+                )}
+              </div>
             </div>
 
             {teamWeekShifts.length === 0 ? (
               <div className="p-8 text-center rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 space-y-2">
                 <CheckCircle2 className="w-10 h-10 mx-auto text-slate-400 opacity-60" />
                 <p className="font-medium">No team shifts recorded for this week.</p>
+              </div>
+            ) : filteredTeamShifts.length === 0 ? (
+              <div className="p-8 text-center rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 space-y-2">
+                <AlertCircle className="w-10 h-10 mx-auto text-slate-400 opacity-60" />
+                <p className="font-medium">No shifts match the selected filters.</p>
               </div>
             ) : (
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
@@ -861,7 +995,7 @@ export default function TimesheetsClient() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {teamWeekShifts.map((shift) => {
+                      {filteredTeamShifts.map((shift) => {
                         const netSecs = shift.endAtUtc
                           ? calculateNetSeconds(shift.startAtUtc, shift.endAtUtc, shift.unpaidBreakSeconds)
                           : 0;
@@ -896,24 +1030,40 @@ export default function TimesheetsClient() {
                                 >
                                   Audit
                                 </button>
-                                {shift.status === 'pending' && !isSelf && (
-                                  <>
+                                <button
+                                  onClick={() => handleOpenManagerEdit(shift)}
+                                  className="px-2.5 py-1 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                >
+                                  Edit
+                                </button>
+                                {shift.status === 'pending' && (
+                                  isSelf ? (
                                     <button
-                                      onClick={() => handleApproveShift(shift)}
-                                      className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                                      disabled
+                                      title="Self-approval disabled"
+                                      className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed border border-slate-200 dark:border-slate-700"
                                     >
                                       Approve
                                     </button>
-                                    <button
-                                      onClick={() => {
-                                        setReturnModalShift(shift);
-                                        setReturnFeedback('');
-                                      }}
-                                      className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition-colors"
-                                    >
-                                      Return
-                                    </button>
-                                  </>
+                                  ) : (
+                                    <>
+                                      <button
+                                        onClick={() => handleApproveShift(shift)}
+                                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
+                                      >
+                                        Approve
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setReturnModalShift(shift);
+                                          setReturnFeedback('');
+                                        }}
+                                        className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition-colors"
+                                      >
+                                        Return
+                                      </button>
+                                    </>
+                                  )
                                 )}
                               </div>
                             </td>
@@ -1246,6 +1396,111 @@ export default function TimesheetsClient() {
                   className="px-5 py-2 text-sm font-semibold rounded-xl bg-rose-600 hover:bg-rose-700 text-white"
                 >
                   Return Shift
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manager Edit Drawer */}
+      {managerEditShift && (
+        <div className="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 h-full max-w-md w-full p-6 shadow-2xl border-l border-slate-200 dark:border-slate-800 overflow-y-auto space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div>
+                <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <Pencil className="w-5 h-5 text-indigo-600" />
+                  Edit Shift — {managerEditShift.employeeName}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Revision {managerEditShift.revision} • Direct manager revision
+                </p>
+              </div>
+              <button
+                onClick={() => setManagerEditShift(null)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveManagerEdit} className="space-y-4">
+              <div>
+                <label htmlFor="edit-start" className="block text-xs font-semibold text-slate-500 mb-1">
+                  Start Time
+                </label>
+                <input
+                  id="edit-start"
+                  aria-label="Start Time"
+                  type="datetime-local"
+                  required
+                  value={managerEditForm.start}
+                  onChange={(e) => setManagerEditForm({ ...managerEditForm, start: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="edit-end" className="block text-xs font-semibold text-slate-500 mb-1">
+                  End Time
+                </label>
+                <input
+                  id="edit-end"
+                  aria-label="End Time"
+                  type="datetime-local"
+                  value={managerEditForm.end}
+                  onChange={(e) => setManagerEditForm({ ...managerEditForm, end: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="edit-break" className="block text-xs font-semibold text-slate-500 mb-1">
+                  Unpaid Break (minutes)
+                </label>
+                <input
+                  id="edit-break"
+                  aria-label="Unpaid Break"
+                  type="number"
+                  min="0"
+                  value={managerEditForm.breakMinutes}
+                  onChange={(e) =>
+                    setManagerEditForm({ ...managerEditForm, breakMinutes: parseInt(e.target.value, 10) || 0 })
+                  }
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="edit-reason" className="block text-xs font-semibold text-slate-500 mb-1">
+                  Reason for Edit (Required)
+                </label>
+                <textarea
+                  id="edit-reason"
+                  aria-label="Reason for Edit"
+                  required
+                  rows={3}
+                  placeholder="Explain reason for manual revision (e.g., corrected departure time per driver log)"
+                  value={managerEditForm.reason}
+                  onChange={(e) => setManagerEditForm({ ...managerEditForm, reason: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setManagerEditShift(null)}
+                  className="px-4 py-2 text-sm font-medium rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white"
+                >
+                  Save Changes
                 </button>
               </div>
             </form>
