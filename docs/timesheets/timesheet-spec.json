@@ -1,0 +1,384 @@
+{
+  "project": "Sunny Fleet Timesheets",
+  "spec_version": "1.0",
+  "date": "2026-10-14",
+  "status": "Specification only; branch, application code and deployment have not been created.",
+  "branch_name": "timesheet-branch",
+  "page_route": "/timesheets",
+  "goal": "Build an isolated TypeScript timesheet prototype inside Sunny with existing styling, individual shift approval and weekly summaries.",
+  "agreed_workflow": [
+    "An authenticated employee scans a recognized vehicle-start QR: immediately clock in before the starting checklist.",
+    "If already clocked in, preserve the active shift and its original start time.",
+    "Successful return-checklist submission clocks out and automatically submits the completed shift for approval.",
+    "Timesheet Clock In and Clock Out buttons support trainees and other exceptions.",
+    "Employees request missing hours or corrections; managers review, edit and approve individual shifts.",
+    "Weekly summaries separate approved hours, pending hours, active shifts and attention flags."
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "title": "Inspect the existing project",
+      "actions": [
+        "Read repository instructions and inspect uncommitted changes.",
+        "Verify the actual development branch, auth roles, styling, test framework, QR flow and return-checklist submission.",
+        "Inspect CI and Firebase environment separation; preserve unrelated work."
+      ],
+      "done_when": [
+        "The implementation paths and development base are verified."
+      ]
+    },
+    {
+      "step": 2,
+      "title": "Create the isolated branch and preview setup",
+      "actions": [
+        "Create timesheet-branch from the verified development tip. If it exists, inspect and reuse safely; do not reset it.",
+        "Store the spec at docs/timesheets/timesheet-spec.json.",
+        "Use synthetic data and a separate test Firebase project or emulator.",
+        "Verify the preview cannot write production data; a branch alone does not isolate Firebase."
+      ],
+      "done_when": [
+        "Branch and testing environment are verified without changing production QR payloads or URLs."
+      ]
+    },
+    {
+      "step": 3,
+      "title": "Define time records and shared services",
+      "actions": [
+        "Use TypeScript and Luxon; install compatible typings if needed.",
+        "Separate capture, review, totals and persistence behind shared service interfaces.",
+        "Persist active, pending, needs_correction and approved records.",
+        "Use trusted backend timestamps and a transactionally enforced per-employee active-shift guard.",
+        "Use stable event IDs for idempotent capture and revision preconditions for edits."
+      ],
+      "done_when": [
+        "Both manual and QR flows use the same rules and persistence service."
+      ]
+    },
+    {
+      "step": 4,
+      "title": "Build the employee Timesheet page",
+      "actions": [
+        "Reuse Sunny navigation, typography, cards, buttons and responsive styling.",
+        "Show clock status, current start time, elapsed time and Clock In or Clock Out.",
+        "Show week selector, approved hours, pending hours and shift history.",
+        "Provide Request Missing Hours and Request Correction with a required reason.",
+        "Design loading, empty, denied-access, save-progress and failure states."
+      ],
+      "done_when": [
+        "A trainee can record a complete shift without a vehicle checklist.",
+        "Keyboard and mobile interaction are usable."
+      ]
+    },
+    {
+      "step": 5,
+      "title": "Connect QR and return-checklist capture",
+      "actions": [
+        "Start a shift when an authenticated employee scans the authorized vehicle-start QR.",
+        "After sign-in, accept a new authenticated punch; do not silently backdate an unauthenticated scan.",
+        "Do not create a punch from a general page visit or manager vehicle viewing.",
+        "Repeated scans or vehicle changes preserve the existing active shift.",
+        "Only successful return-checklist submission triggers automatic clock-out.",
+        "No active shift: preserve the checklist and offer Request Missing Hours.",
+        "Checklist saved but clock-out failed: preserve checklist, display failure and allow safe retry.",
+        "Do not claim offline punches were saved; provide the correction-request path."
+      ],
+      "done_when": [
+        "QR and manual capture are idempotent.",
+        "Clock-out automatically creates a pending entry without another Submit action."
+      ]
+    },
+    {
+      "step": 6,
+      "title": "Build manager review and approvals",
+      "actions": [
+        "Add week, employee and status filters and a readable shift table; use cards on mobile.",
+        "Show start, end, break, net hours, source, status and attention flags.",
+        "Open an edit panel with original values, proposed values, notes and history.",
+        "Require a reason for manager changes.",
+        "Save Changes persists edits without approving a pending entry.",
+        "Approve & Save atomically saves approved values, reviewer metadata, revision and audit history.",
+        "Return for Correction requires a note.",
+        "Reject stale edits instead of overwriting another reviewer.",
+        "Use Amend & Approve with a reason for changes to approved shifts."
+      ],
+      "done_when": [
+        "Each shift can be independently reviewed, corrected and approved.",
+        "Employees cannot approve or overwrite submitted or approved hours."
+      ]
+    },
+    {
+      "step": 7,
+      "title": "Implement time calculations and weekly summaries",
+      "actions": [
+        "Store instants in UTC with the location IANA time zone.",
+        "Calculate net seconds as elapsed seconds minus explicit unpaid-break seconds.",
+        "Round display values only; retain calculation precision.",
+        "Handle overnight shifts and actual elapsed DST hours.",
+        "Reject nonexistent local times and require offset selection for ambiguous manual times.",
+        "Reject end-before-start, zero-length shifts, negative or excessive breaks and overlaps.",
+        "Allow adjacent shifts sharing an endpoint.",
+        "Intersect completed shifts with local week boundaries converted to UTC.",
+        "Use the documented proportional break allocation assumption for cross-week shifts.",
+        "Exclude open shifts from finalized totals.",
+        "Keep the current approved version while its correction is pending; do not double-count it."
+      ],
+      "done_when": [
+        "Weekly approved and pending totals are distinct and correct at time-zone and week boundaries."
+      ]
+    },
+    {
+      "step": 8,
+      "title": "Enforce permissions and audit history",
+      "actions": [
+        "Enforce ownership and manager location/team scope in backend checks or Firestore rules.",
+        "Derive employee identity from authentication rather than browser-supplied IDs.",
+        "Employees read their own records; managers review their authorized team.",
+        "Prevent manager self-approval as the prototype default.",
+        "Preserve original punches and before/after values, actor, timestamp, reason and revision.",
+        "Do not expose hard deletion of submitted or approved entries."
+      ],
+      "done_when": [
+        "Direct unauthorized API/database access is rejected.",
+        "Approval and audit updates succeed or fail together."
+      ]
+    },
+    {
+      "step": 9,
+      "title": "Run meaningful tests and produce quality reports",
+      "actions": [
+        "Use the verified repository test framework; expected Vitest for units/components.",
+        "Use Firebase Emulator tests for rules and transactions and browser tests for end-to-end workflows.",
+        "Run required existing regression tests, type checks, repository checks and builds.",
+        "Report test pass/fail counts, coverage metrics, uncovered paths and commit ID.",
+        "Include all new timesheet production modules in coverage, including untested files."
+      ],
+      "done_when": [
+        "All required tests pass.",
+        "Lines, branches, functions and statements each meet at least 80% coverage for new timesheet code.",
+        "Every critical time, permissions, approval and duplicate-event scenario is explicitly tested."
+      ]
+    },
+    {
+      "step": 10,
+      "title": "Push and deliver the review preview",
+      "actions": [
+        "Commit and push implementation to timesheet-branch only.",
+        "Verify branch preview uses test settings and has a visible prototype label.",
+        "Deliver preview URL, branch/commit links, review PR, seeded walkthrough, coverage report and known limitations.",
+        "Open review PR against the verified development branch.",
+        "Integrate through the existing reviewed development-to-production release process."
+      ],
+      "done_when": [
+        "The manager can review the clean prototype independently.",
+        "No production rollout is implied by the prototype delivery."
+      ]
+    }
+  ],
+  "data_model": {
+    "shift": [
+      "id",
+      "employeeId",
+      "locationId",
+      "status",
+      "timeZone",
+      "startAtUtc",
+      "endAtUtc_nullable",
+      "unpaidBreakSeconds",
+      "startSource",
+      "endSource",
+      "startEventId",
+      "endEventId",
+      "revision",
+      "createdAt",
+      "updatedAt",
+      "submittedAt",
+      "approvedAt",
+      "approvedBy"
+    ],
+    "correction_request": [
+      "id",
+      "shiftId_nullable_for_missing_hours",
+      "employeeId",
+      "proposedStart",
+      "proposedEnd",
+      "proposedBreak",
+      "timeZone",
+      "reason",
+      "status",
+      "baseRevision",
+      "submittedAt",
+      "reviewedAt",
+      "reviewedBy",
+      "reviewNote"
+    ],
+    "audit_event": [
+      "id",
+      "shiftId",
+      "actorId",
+      "action",
+      "beforeValues",
+      "afterValues",
+      "reason",
+      "revision",
+      "eventId",
+      "timestamp"
+    ],
+    "active_shift_guard": [
+      "employeeId",
+      "activeShiftId",
+      "revision"
+    ],
+    "location_settings": [
+      "timeZone",
+      "weekStartsOn",
+      "reviewerScope"
+    ],
+    "storage": "Firestore Timestamp for instants; ISO UTC strings for interchange. Final schema names must match repository conventions."
+  },
+  "states": {
+    "active": "Start recorded, no end; clock-out transitions to pending.",
+    "pending": "Completed shift or missing-hours request awaiting review.",
+    "needs_correction": "Manager returned entry with a reason; employee revises and resubmits.",
+    "approved": "Manager-approved version included in approved totals."
+  },
+  "test_patterns": [
+    {
+      "pattern": "Simple / Data-driven",
+      "examples": [
+        "Normal shift",
+        "Unpaid break",
+        "Manual versus QR",
+        "Multiple shifts",
+        "Missing-hours request"
+      ]
+    },
+    {
+      "pattern": "Parameter-range / Constraint-data",
+      "examples": [
+        "End before start",
+        "Zero-length shift",
+        "Negative/excessive break",
+        "Overlapping shifts",
+        "Adjacent shifts allowed"
+      ]
+    },
+    {
+      "pattern": "Code-path / Data-transformation",
+      "examples": [
+        "UTC/local round-trip",
+        "Overnight",
+        "Spring-forward",
+        "Fall-back",
+        "Cross-week allocation",
+        "Approved correction totals"
+      ]
+    },
+    {
+      "pattern": "Process-state / Process-sequence / Process-rule",
+      "examples": [
+        "Active -> pending -> approved",
+        "Repeated scan preserves start",
+        "No open-shift approval",
+        "Returned entry resubmission",
+        "No employee self-approval"
+      ]
+    },
+    {
+      "pattern": "Data I/O / Transaction / Rollback",
+      "examples": [
+        "Save and reload",
+        "Checklist and clock-out integration",
+        "No partial approval or audit",
+        "Stale revision conflict"
+      ]
+    },
+    {
+      "pattern": "Collection-order / Collection-constraint",
+      "examples": [
+        "Employee/week filtering",
+        "Stable history sorting",
+        "No double-counted corrections"
+      ]
+    },
+    {
+      "pattern": "Service simulation / Concurrency",
+      "examples": [
+        "Controlled clock",
+        "Failed save and retry",
+        "Two-tab clock-in",
+        "Duplicate checklist submission",
+        "Concurrent reviewers"
+      ]
+    },
+    {
+      "pattern": "View-state / Model-state",
+      "examples": [
+        "Correct buttons",
+        "Validation messages",
+        "Loading/empty/error states",
+        "Mobile layout",
+        "Keyboard access"
+      ]
+    }
+  ],
+  "quality_gates": {
+    "required_test_pass_rate_percent": 100,
+    "minimum_new_code_coverage_percent": {
+      "lines": 80,
+      "branches": 80,
+      "functions": 80,
+      "statements": 80
+    },
+    "note": "Coverage is not correctness. No required failing tests are permitted. No test results have been generated by this specification."
+  },
+  "prototype_defaults_to_confirm": {
+    "time_zone": "America/Denver",
+    "week_starts_on": "Monday",
+    "approval": "Individual shifts with weekly summary",
+    "unpaid_breaks": "Explicit recorded duration; no automatic deduction",
+    "cross_week_break_allocation": "Proportional across elapsed segments, preserving full shift total",
+    "rounding": "Display only",
+    "self_approval": "Disabled; another authorized manager required"
+  },
+  "out_of_scope": [
+    "Geofencing or proof of on-site presence",
+    "Payroll and payroll exports",
+    "Automatic overtime rules",
+    "Automatic break deductions",
+    "Automatic closure of forgotten shifts",
+    "Full offline synchronization",
+    "Bulk approval",
+    "Predictive analytics and ML",
+    "Broad stress or deadlock testing"
+  ],
+  "week_5_budget_hours": {
+    "learn_luxon_and_model_rules": 2,
+    "employee_manager_ui": 3,
+    "capture_and_approval_services": 2,
+    "focused_tests": 2,
+    "preview_and_documentation": 1,
+    "total": 10,
+    "note": "Planning target only. Report unfinished integration or emulator work explicitly."
+  },
+  "acceptance_checks": [
+    "Authenticated QR scan starts time before checklist completion.",
+    "Duplicate events preserve one active shift and the original start.",
+    "Successful return submission clocks out once and submits pending approval.",
+    "Timesheet buttons support a trainee shift without a checklist.",
+    "Missing hours and corrections reach manager review.",
+    "Manager edits require reasons and approvals retain audit history.",
+    "Pending and approved weekly totals remain accurate and separate.",
+    "Permissions, invalid times, overlaps and stale updates are enforced.",
+    "Reload preserves data and failed saves never display false success.",
+    "UI works on desktop, mobile and keyboard.",
+    "All required checks pass and all four coverage thresholds meet 80%.",
+    "An isolated preview and sample walkthrough are available for review."
+  ],
+  "references": [
+    "Supplied Sunny Fleet project proposal and agreed design conversation",
+    "https://moment.github.io/luxon/",
+    "https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-best-practices",
+    "https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-code-coverage",
+    "https://learn.microsoft.com/en-us/aspnet/core/test/integration-tests"
+  ]
+}
