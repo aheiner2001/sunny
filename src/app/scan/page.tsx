@@ -16,6 +16,7 @@ import { dbService } from '@/lib/db';
 import { Vehicle } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { PasscodePrompt } from '@/components/PasscodeGate';
+import { timesheetService } from '@/lib/timesheets/timesheetService';
 
 export default function ScanPage() {
   const router = useRouter();
@@ -112,6 +113,13 @@ export default function ScanPage() {
 
   const openVehicle = (vehicle: Vehicle) => {
     const activeRole = dbService.getSession()?.role || roleRef.current;
+    if (activeRole !== 'manager') {
+      const sessionUser = dbService.getSession();
+      if (sessionUser) {
+        const userName = (sessionUser as any).userName || dbService.getUser(sessionUser.userId)?.name || 'Employee';
+        void timesheetService.clockIn(sessionUser.userId, userName, 'qr', `qr-scan-${Date.now()}`);
+      }
+    }
     const mode = activeRole === 'manager' ? '' : '&mode=employee';
     router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}${mode}`);
   };
