@@ -34,6 +34,29 @@ export type VehicleStatus = 'active' | 'in_use' | 'maintenance' | 'inactive';
 export type InspectionStatus = 'passed' | 'issues_found' | 'in_progress' | 'submitted' | 'rejected' | 'approved';
 export type InspectionKind = 'pretrip' | 'return';
 
+export interface MaintenanceReading { date: string; odometer: number; recordedBy?: string; confirmed?: boolean; source?: string; }
+export interface MaintenanceRule {
+  id: string; title: string; kind: VehicleServiceRecord['kind'];
+  intervalMiles?: number; intervalMonths?: number; initialMiles?: number; initialMonths?: number;
+  recurrence: 'after_service' | 'initial_then_recurring'; source: string; confirmed: boolean;
+  baselineDate?: string; baselineOdometer?: number;
+}
+export interface MaintenanceAppointment {
+  id: string; ruleId: string; title: string; date: string;
+  status: 'booked' | 'canceled' | 'completed'; notes?: string; serviceRecordId?: string;
+}
+export interface MaintenanceProfile {
+  vin?: string; year?: number; make?: string; model?: string; engine?: string; drivetrain?: string;
+  operatingProfile?: string; oilIntervalMiles?: number; oilIntervalMonths?: number;
+  scheduleSource?: string; scheduleConfirmed?: boolean;
+  rules?: MaintenanceRule[]; inServiceDate?: string; baselineUnknown?: boolean;
+}
+export interface VehicleServiceRecord {
+  id: string; kind: 'oil' | 'tires' | 'filters' | 'other'; title: string; date: string;
+  odometer: number; recordedBy: string; notes?: string;
+  ruleId?: string; recordedAt?: string; supersedesId?: string; correctionReason?: string; appointmentId?: string;
+}
+
 export interface Vehicle {
   id: string;
   vehicleNumber: string; // e.g. "Van #1"
@@ -52,6 +75,10 @@ export interface Vehicle {
   imageUrl?: string | null;
   odometer?: number;
   fuelLevel?: number;
+  maintenance?: MaintenanceProfile;
+  maintenanceReadings?: MaintenanceReading[];
+  serviceHistory?: VehicleServiceRecord[];
+  maintenanceAppointments?: MaintenanceAppointment[];
   createdAt?: string;
 }
 
@@ -119,6 +146,14 @@ export interface EquipmentAssignment {
   requiredQuantity?: number;
 }
 
+export interface EquipmentMaintenanceRule {
+  id: string; title: string; intervalHours?: number; intervalMonths?: number;
+  source: string; confirmed: boolean; baselineDate?: string; baselineHours?: number;
+}
+export interface EquipmentServiceRecord {
+  id: string; ruleId: string; title: string; date: string; hours?: number; recordedBy: string; recordedAt: string;
+}
+export interface EquipmentHoursReading { date: string; hours: number; recordedBy: string; }
 export interface Equipment {
   id: string;
   /** Legacy single assignment fields. New shared inventory may leave these empty. */
@@ -149,6 +184,10 @@ export interface Equipment {
   lastCheckedAt?: string;
   createdAt?: string;
   updatedAt?: string;
+  maintenanceRules?: EquipmentMaintenanceRule[];
+  serviceHistory?: EquipmentServiceRecord[];
+  operatingHours?: number;
+  hoursReadings?: EquipmentHoursReading[];
   /** Lifespan tracking fields */
   lifespanEnabled?: boolean;
   lifespanMode?: LifespanMode | null;
@@ -289,6 +328,7 @@ export interface Inspection {
   /** Mileage & fuel readings */
   odometer?: number;
   fuelLevel?: number;
+  odometerConfirmed?: boolean;
   /** Employee requested a manager to delete this record */
   deleteRequestedAt?: string | null;
   deleteRequestedById?: string | null;

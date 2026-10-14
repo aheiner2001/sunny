@@ -26,7 +26,7 @@ it('resumes a draft with its original start but resets the start when Start Over
     await act(async () => root.render(<InspectClient />));
     await act(async () => vi.advanceTimersByTime(30_000));
     expect(JSON.parse(localStorage.getItem('sunny_inspection_draft_van')!).startedAt).toBe('2026-09-29T14:00:00Z');
-    const button = [...container.querySelectorAll('button')].find(row => row.textContent?.trim() === 'Start Over');
+    const button = Array.from(container.querySelectorAll('button')).find(row => row.textContent?.trim() === 'Start Over');
     expect(button).toBeDefined();
     await act(async () => button!.click());
     await act(async () => vi.advanceTimersByTime(30_000));

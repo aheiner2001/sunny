@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { 
@@ -617,6 +618,11 @@ function SettingsPageContent() {
         </p>
       </div>
 
+      <Link href="/settings/analytics" className="card card-pad spread hover:border-ink-muted transition-colors">
+        <div><strong>Manager Analytics</strong><p className="hint mt-1">Compare trucks, track oil services, and plan equipment reviews.</p></div>
+        <Gauge className="w-6 h-6 shrink-0" aria-hidden />
+      </Link>
+
       <div className="cluster gap-2 flex-wrap">
         {SETTINGS_TABS.map((tab) => (
           <button
@@ -968,7 +974,7 @@ function SettingsPageContent() {
 
           {filteredQuestions.length === 0 && (
             <div className="p-8 bg-surface-sunk rounded-2xl border border-line text-center text-xs text-ink-faint">
-              No questions found in this category. Click "Add Question" above to create one.
+              No questions found in this category. Click &ldquo;Add Question&rdquo; above to create one.
             </div>
           )}
         </div>

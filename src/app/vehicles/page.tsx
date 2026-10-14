@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   Truck,
@@ -20,6 +20,7 @@ import { VehicleStatusBadge, InspectionStatusBadge } from '@/components/StatusBa
 import { ManagerOnly } from '@/components/ManagerOnly';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
+import { prepareImageUpload, imageErrorFallback } from '@/lib/imageUpload';
 
 export default function VehiclesPage() {
   return (
@@ -40,6 +41,9 @@ function VehiclesPageContent() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState('');
+  const imageUploadRequest = useRef(0);
   const [returningAll, setReturningAll] = useState(false);
   const [deleteEquipmentMode, setDeleteEquipmentMode] = useState<'return_to_shop' | 'delete_associated'>('return_to_shop');
 
@@ -91,6 +95,9 @@ function VehiclesPageContent() {
   });
 
   const handleOpenAdd = () => {
+    imageUploadRequest.current++;
+    setImageUploading(false);
+    setImageUploadError('');
     const nextNum = vehicles.length + 1;
     setFormData({
       vehicleNumber: `Van #${nextNum}`,
@@ -112,6 +119,9 @@ function VehiclesPageContent() {
   };
 
   const handleOpenEdit = (v: Vehicle) => {
+    imageUploadRequest.current++;
+    setImageUploading(false);
+    setImageUploadError('');
     setSelectedVehicle(v);
     setFormData({
       vehicleNumber: v.vehicleNumber,
@@ -132,6 +142,7 @@ function VehiclesPageContent() {
 
   const handleCreateVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (imageUploading) return;
     if (!formData.vehicleNumber.trim() || !formData.name.trim() || !formData.licensePlate.trim()) {
       alert('Please fill out all required vehicle fields.');
       return;
@@ -169,6 +180,7 @@ function VehiclesPageContent() {
 
   const handleUpdateVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (imageUploading) return;
     if (!selectedVehicle) return;
 
     try {
@@ -191,16 +203,26 @@ function VehiclesPageContent() {
     }
   };
 
-  const handleVehicleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVehicleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
-      alert('Vehicle images must be PNG, JPG, or WebP files.');
-      return;
+    const input = e.target;
+    const request = ++imageUploadRequest.current;
+    setImageUploadError('');
+    setImageUploading(true);
+    try {
+      const imageUrl = await prepareImageUpload(file);
+      if (request === imageUploadRequest.current) {
+        setFormData(current => ({ ...current, imageUrl }));
+      }
+    } catch (error) {
+      if (request === imageUploadRequest.current) {
+        setImageUploadError(error instanceof Error ? error.message : 'Could not prepare this image.');
+      }
+    } finally {
+      if (request === imageUploadRequest.current) setImageUploading(false);
+      input.value = '';
     }
-    const reader = new FileReader();
-    reader.onload = () => setFormData(current => ({ ...current, imageUrl: String(reader.result || '') }));
-    reader.readAsDataURL(file);
   };
 
   const handleDeleteVehicle = async () => {
@@ -318,6 +340,7 @@ function VehiclesPageContent() {
                       <img
                         src={vehicle.imageUrl}
                         alt=""
+                        onError={imageErrorFallback}
                         className="icon-tile-lg h-12 w-12 rounded-[var(--radius-lg)] object-cover"
                       />
                     ) : (
@@ -487,17 +510,20 @@ function VehiclesPageContent() {
                 <label className="label" htmlFor="add-vehicle-image">Vehicle Image</label>
                 <div className="cluster">
                   {formData.imageUrl ? (
-                    <img src={formData.imageUrl} alt="Vehicle preview" className="h-14 w-14 rounded-[var(--radius)] object-cover border border-line" />
+                    <img src={formData.imageUrl} onError={imageErrorFallback} alt="Vehicle preview" className="h-14 w-14 rounded-[var(--radius)] object-cover border border-line" />
                   ) : null}
                   <input
                     id="add-vehicle-image"
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
                     onChange={handleVehicleImageUpload}
+                    disabled={imageUploading}
                     className="input text-xs file:mr-2 file:rounded file:border-0 file:bg-[var(--idle-wash)] file:px-3 file:py-2 file:text-xs file:font-bold"
                   />
                 </div>
-                <p className="hint">Saved with the vehicle record and synchronized through the existing Firebase data path.</p>
+                {imageUploading && <p role="status" className="hint">Preparing image…</p>}
+                {imageUploadError && <p role="alert" className="text-sm text-rose-600">{imageUploadError}</p>}
+                <p className="hint">JPEG, PNG, or WebP up to 5MB. Saved as a resized image up to 640 pixels and 300KB.</p>
               </div>
 
               <div className="field">
@@ -586,7 +612,7 @@ function VehiclesPageContent() {
                 <button type="button" onClick={() => setIsAddModalOpen(false)} className="btn btn-secondary">
                   Cancel
                 </button>
-                <button type="submit" disabled={modalLoading} className="btn btn-primary">
+                <button type="submit" disabled={modalLoading || imageUploading} className="btn btn-primary">
                   {modalLoading ? 'Saving...' : 'Create Vehicle'}
                 </button>
               </div>
@@ -642,16 +668,20 @@ function VehiclesPageContent() {
                 <label className="label" htmlFor="edit-vehicle-image">Vehicle Image</label>
                 <div className="cluster">
                   {formData.imageUrl ? (
-                    <img src={formData.imageUrl} alt="Vehicle preview" className="h-14 w-14 rounded-[var(--radius)] object-cover border border-line" />
+                    <img src={formData.imageUrl} onError={imageErrorFallback} alt="Vehicle preview" className="h-14 w-14 rounded-[var(--radius)] object-cover border border-line" />
                   ) : null}
                   <input
                     id="edit-vehicle-image"
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
                     onChange={handleVehicleImageUpload}
+                    disabled={imageUploading}
                     className="input text-xs file:mr-2 file:rounded file:border-0 file:bg-[var(--idle-wash)] file:px-3 file:py-2 file:text-xs file:font-bold"
                   />
                 </div>
+                {imageUploading && <p role="status" className="hint">Preparing image…</p>}
+                {imageUploadError && <p role="alert" className="text-sm text-rose-600">{imageUploadError}</p>}
+                <p className="hint">JPEG, PNG, or WebP up to 5MB. Saved as a resized image up to 640 pixels and 300KB.</p>
               </div>
 
               <div className="field">
@@ -697,7 +727,7 @@ function VehiclesPageContent() {
                 <button type="button" onClick={() => setIsEditModalOpen(false)} className="btn btn-secondary">
                   Cancel
                 </button>
-                <button type="submit" disabled={modalLoading} className="btn btn-primary">
+                <button type="submit" disabled={modalLoading || imageUploading} className="btn btn-primary">
                   {modalLoading ? 'Saving...' : 'Update Vehicle'}
                 </button>
               </div>
