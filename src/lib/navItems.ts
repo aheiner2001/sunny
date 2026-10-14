@@ -12,6 +12,7 @@ import {
   BarChart3,
   Settings,
   QrCode,
+  Clock,
 } from 'lucide-react';
 
 export type NavItem = {
@@ -26,6 +27,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Home', href: '/home', icon: Home, employeeOnly: true },
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, managerOnly: true },
   { label: 'Vehicles', href: '/vehicles', icon: Truck, managerOnly: true },
+  { label: 'Timesheets', href: '/timesheets', icon: Clock },
   { label: 'Inspections', href: '/inspections', icon: ClipboardCheck },
   { label: 'Scan', href: '/scan', icon: QrCode },
   { label: 'Calendar', href: '/calendar', icon: CalendarDays, managerOnly: true },
