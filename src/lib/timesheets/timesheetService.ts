@@ -70,6 +70,8 @@ export class TimesheetService {
       timestamp,
     });
 
+    await timesheetStore.waitForPendingSyncs();
+
     return newShift;
   }
 
@@ -139,6 +141,8 @@ export class TimesheetService {
       timestamp: effectiveTimestamp,
     });
 
+    await timesheetStore.waitForPendingSyncs();
+
     return updated;
   }
 
@@ -198,6 +202,8 @@ export class TimesheetService {
       timestamp: now,
     });
 
+    await timesheetStore.waitForPendingSyncs();
+
     return updated;
   }
 
@@ -247,6 +253,8 @@ export class TimesheetService {
       timestamp: now,
     });
 
+    await timesheetStore.waitForPendingSyncs();
+
     return approved;
   }
 
@@ -286,6 +294,8 @@ export class TimesheetService {
       timestamp: now,
     });
 
+    await timesheetStore.waitForPendingSyncs();
+
     return updated;
   }
 
@@ -322,6 +332,7 @@ export class TimesheetService {
     };
 
     timesheetStore.saveCorrectionRequest(request);
+    await timesheetStore.waitForPendingSyncs();
     return request;
   }
 
@@ -369,6 +380,7 @@ export class TimesheetService {
     };
 
     timesheetStore.saveCorrectionRequest(updated);
+    await timesheetStore.waitForPendingSyncs();
     return updated;
   }
 

@@ -1,4 +1,58 @@
 import type { ShiftRecord, CorrectionRequest, AuditEvent, ActiveShiftGuard } from './types';
+import { db, ensureAuth } from '@/lib/firebase';
+import {
+  collection,
+  doc,
+  setDoc,
+  deleteDoc,
+  onSnapshot,
+  getDocs,
+} from 'firebase/firestore';
+
+export const TIMESHEET_STORAGE_KEYS = {
+  SHIFTS: 'sunny_timesheet_shifts',
+  GUARDS: 'sunny_timesheet_guards',
+  AUDIT: 'sunny_timesheet_audit',
+  CORRECTIONS: 'sunny_timesheet_corrections',
+  INITIALIZED: 'sunny_timesheet_initialized',
+};
+
+export const FIRESTORE_COLLECTIONS = {
+  SHIFTS: 'timesheet_shifts',
+  GUARDS: 'timesheet_guards',
+  AUDIT: 'timesheet_audit',
+  CORRECTIONS: 'timesheet_corrections',
+};
+
+/**
+ * Sanitizes data structures before sending to Cloud Firestore.
+ * Converts any `undefined` values to `null` to avoid Firestore rejection.
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === undefined) {
+    return null as any;
+  }
+  if (data === null || typeof data !== 'object') {
+    return data;
+  }
+  if (data instanceof Date) {
+    return data.toISOString() as any;
+  }
+  if (Array.isArray(data)) {
+    return data.map((item) => sanitizeForFirestore(item)) as any;
+  }
+  const result: Record<string, any> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) {
+      result[key] = null;
+    } else if (value !== null && typeof value === 'object') {
+      result[key] = sanitizeForFirestore(value);
+    } else {
+      result[key] = value;
+    }
+  }
+  return result as T;
+}
 
 export const SAMPLE_SHIFTS: ShiftRecord[] = [
   {
@@ -68,7 +122,29 @@ export const SAMPLE_SHIFTS: ShiftRecord[] = [
   },
   {
     id: 'seed-shift-4',
-    employeeId: 'emp-sarah',
+    employeeId: 'user-sarah',
+    employeeName: 'Sarah Connor',
+    locationId: 'loc-main',
+    status: 'approved',
+    timeZone: 'America/Denver',
+    startAtUtc: '2026-10-12T13:30:00.000Z',
+    endAtUtc: '2026-10-12T21:30:00.000Z',
+    unpaidBreakSeconds: 1800,
+    startSource: 'manual',
+    endSource: 'manual',
+    startEventId: 'evt-seed-4a',
+    endEventId: 'evt-seed-4b',
+    revision: 1,
+    createdAt: '2026-10-12T13:30:00.000Z',
+    updatedAt: '2026-10-13T08:30:00.000Z',
+    submittedAt: '2026-10-12T21:30:00.000Z',
+    approvedAt: '2026-10-13T08:30:00.000Z',
+    approvedBy: 'user-jacob',
+    managerNote: 'Trainee shift verified with lead technician.',
+  },
+  {
+    id: 'seed-shift-5',
+    employeeId: 'user-sarah',
     employeeName: 'Sarah Connor',
     locationId: 'loc-main',
     status: 'pending',
@@ -76,10 +152,10 @@ export const SAMPLE_SHIFTS: ShiftRecord[] = [
     startAtUtc: '2026-10-14T14:00:00.000Z',
     endAtUtc: '2026-10-14T22:00:00.000Z',
     unpaidBreakSeconds: 1800,
-    startSource: 'qr',
-    endSource: 'checklist_return',
-    startEventId: 'evt-seed-4a',
-    endEventId: 'evt-seed-4b',
+    startSource: 'manual',
+    endSource: 'manual',
+    startEventId: 'evt-seed-5a',
+    endEventId: 'evt-seed-5b',
     revision: 1,
     createdAt: '2026-10-14T14:00:00.000Z',
     updatedAt: '2026-10-14T22:00:00.000Z',
@@ -91,7 +167,7 @@ export const SAMPLE_SHIFTS: ShiftRecord[] = [
 
 export const SAMPLE_CORRECTIONS: CorrectionRequest[] = [
   {
-    id: 'seed-cor-1',
+    id: 'seed-corr-1',
     shiftId: 'seed-shift-3',
     employeeId: 'user-john',
     employeeName: 'John Smith',
@@ -99,10 +175,27 @@ export const SAMPLE_CORRECTIONS: CorrectionRequest[] = [
     proposedEnd: '2026-10-14T21:00:00.000Z',
     proposedBreakSeconds: 1800,
     timeZone: 'America/Denver',
-    reason: 'Added missing 30 min meal break requested by manager.',
+    reason: 'Added 30 minute unpaid lunch break as requested by manager.',
     status: 'pending',
     baseRevision: 2,
-    submittedAt: '2026-10-14T21:30:00.000Z',
+    submittedAt: '2026-10-14T21:20:00.000Z',
+    reviewedAt: null,
+    reviewedBy: null,
+    reviewNote: null,
+  },
+  {
+    id: 'seed-corr-2',
+    shiftId: null,
+    employeeId: 'user-sarah',
+    employeeName: 'Sarah Connor',
+    proposedStart: '2026-10-13T15:00:00.000Z',
+    proposedEnd: '2026-10-13T20:00:00.000Z',
+    proposedBreakSeconds: 0,
+    timeZone: 'America/Denver',
+    reason: 'Forgot to clock in during special warehouse inventory training.',
+    status: 'pending',
+    baseRevision: 1,
+    submittedAt: '2026-10-14T09:00:00.000Z',
     reviewedAt: null,
     reviewedBy: null,
     reviewNote: null,
@@ -111,52 +204,76 @@ export const SAMPLE_CORRECTIONS: CorrectionRequest[] = [
 
 export const SAMPLE_AUDIT_EVENTS: AuditEvent[] = [
   {
-    id: 'seed-aud-1a',
+    id: 'seed-aud-1',
     shiftId: 'seed-shift-1',
     actorId: 'user-john',
     actorName: 'John Smith',
     action: 'clock_in',
     beforeValues: null,
-    afterValues: { id: 'seed-shift-1', status: 'active', startAtUtc: '2026-10-12T14:00:00.000Z' },
+    afterValues: {
+      id: 'seed-shift-1',
+      employeeId: 'user-john',
+      status: 'active',
+      startAtUtc: '2026-10-12T14:00:00.000Z',
+    },
     reason: null,
     revision: 1,
     eventId: 'evt-seed-1a',
     timestamp: '2026-10-12T14:00:00.000Z',
   },
   {
-    id: 'seed-aud-1b',
+    id: 'seed-aud-2',
     shiftId: 'seed-shift-1',
     actorId: 'user-john',
     actorName: 'John Smith',
     action: 'clock_out',
-    beforeValues: { status: 'active' },
-    afterValues: { status: 'pending', endAtUtc: '2026-10-12T22:30:00.000Z', unpaidBreakSeconds: 1800 },
+    beforeValues: {
+      status: 'active',
+      endAtUtc: null,
+    },
+    afterValues: {
+      status: 'pending',
+      endAtUtc: '2026-10-12T22:30:00.000Z',
+      unpaidBreakSeconds: 1800,
+    },
     reason: null,
     revision: 2,
     eventId: 'evt-seed-1b',
     timestamp: '2026-10-12T22:30:00.000Z',
   },
   {
-    id: 'seed-aud-1c',
+    id: 'seed-aud-3',
     shiftId: 'seed-shift-1',
     actorId: 'user-jacob',
-    actorName: 'Jacob Heiner',
+    actorName: 'Jacob Stone',
     action: 'approve',
-    beforeValues: { status: 'pending' },
-    afterValues: { status: 'approved', approvedBy: 'user-jacob', approvedAt: '2026-10-13T09:00:00.000Z' },
+    beforeValues: {
+      status: 'pending',
+      approvedAt: null,
+    },
+    afterValues: {
+      status: 'approved',
+      approvedAt: '2026-10-13T09:00:00.000Z',
+      approvedBy: 'user-jacob',
+    },
     reason: 'Verified complete detailing run.',
-    revision: 2,
+    revision: 3,
     eventId: 'evt-seed-1c',
     timestamp: '2026-10-13T09:00:00.000Z',
   },
   {
-    id: 'seed-aud-3a',
+    id: 'seed-aud-4',
     shiftId: 'seed-shift-3',
     actorId: 'user-jacob',
-    actorName: 'Jacob Heiner',
+    actorName: 'Jacob Stone',
     action: 'return_for_correction',
-    beforeValues: { status: 'pending' },
-    afterValues: { status: 'needs_correction' },
+    beforeValues: {
+      status: 'pending',
+    },
+    afterValues: {
+      status: 'needs_correction',
+      managerNote: 'Please record the 30-minute lunch break taken during the afternoon shift.',
+    },
     reason: 'Please record the 30-minute lunch break taken during the afternoon shift.',
     revision: 2,
     eventId: 'evt-seed-3c',
@@ -170,11 +287,246 @@ class TimesheetStore {
   private auditEvents: AuditEvent[] = [];
   private correctionRequests: Map<string, CorrectionRequest> = new Map();
 
-  reset(): void {
-    this.shifts.clear();
-    this.guards.clear();
-    this.auditEvents = [];
-    this.correctionRequests.clear();
+  private initialized = false;
+  private listening = false;
+  private pendingSyncs = new Set<Promise<any>>();
+
+  constructor() {
+    if (this.isClient()) {
+      this.hydrateFromLocalStorage();
+    }
+  }
+
+  private isClient(): boolean {
+    return typeof window !== 'undefined' && typeof localStorage !== 'undefined';
+  }
+
+  private isCloudSyncEnabled(): boolean {
+    if (!this.isClient() || !db) return false;
+    // In automated unit tests without real Firestore emulator, don't initiate unmocked live network RPCs
+    if (typeof process !== 'undefined' && process.env?.VITEST && !process.env?.FIREBASE_EMULATOR_HOST) {
+      const isMocked = (setDoc as any)?.mock !== undefined || (db as any)?._isMock || (onSnapshot as any)?.mock !== undefined;
+      return Boolean(isMocked);
+    }
+    return true;
+  }
+
+  private notifyListeners(): void {
+    if (this.isClient()) {
+      try {
+        window.dispatchEvent(new Event('sunny_timesheet_update'));
+      } catch {
+        // Safe fallback in restricted environments
+      }
+    }
+  }
+
+  private saveToLocalStorage(key: string, data: any): void {
+    if (!this.isClient()) return;
+    try {
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch (e) {
+      console.warn(`LocalStorage write error for ${key}:`, e);
+    }
+  }
+
+  private readFromLocalStorage<T>(key: string): T | null {
+    if (!this.isClient()) return null;
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as T) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private hydrateFromLocalStorage(): void {
+    const storedShifts = this.readFromLocalStorage<ShiftRecord[]>(TIMESHEET_STORAGE_KEYS.SHIFTS);
+    if (storedShifts && Array.isArray(storedShifts)) {
+      this.shifts.clear();
+      storedShifts.forEach((s) => this.shifts.set(s.id, s));
+    }
+
+    const storedGuards = this.readFromLocalStorage<ActiveShiftGuard[]>(TIMESHEET_STORAGE_KEYS.GUARDS);
+    if (storedGuards && Array.isArray(storedGuards)) {
+      this.guards.clear();
+      storedGuards.forEach((g) => this.guards.set(g.employeeId, g));
+    }
+
+    const storedAudit = this.readFromLocalStorage<AuditEvent[]>(TIMESHEET_STORAGE_KEYS.AUDIT);
+    if (storedAudit && Array.isArray(storedAudit)) {
+      this.auditEvents = storedAudit;
+    }
+
+    const storedCorrections = this.readFromLocalStorage<CorrectionRequest[]>(TIMESHEET_STORAGE_KEYS.CORRECTIONS);
+    if (storedCorrections && Array.isArray(storedCorrections)) {
+      this.correctionRequests.clear();
+      storedCorrections.forEach((c) => this.correctionRequests.set(c.id, c));
+    }
+  }
+
+  public init(): void {
+    if (!this.isClient()) return;
+    this.hydrateFromLocalStorage();
+    this.initialized = true;
+    void this.setupFirestoreListeners();
+  }
+
+  public async setupFirestoreListeners(): Promise<void> {
+    if (!this.isCloudSyncEnabled() || this.listening || !db) return;
+    this.listening = true;
+
+    try {
+      await ensureAuth();
+
+      // Listen to timesheet_shifts
+      onSnapshot(
+        collection(db, FIRESTORE_COLLECTIONS.SHIFTS),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            snapshot.forEach((d) => {
+              const shift = d.data() as ShiftRecord;
+              this.shifts.set(shift.id, shift);
+            });
+            this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.SHIFTS, Array.from(this.shifts.values()));
+            this.notifyListeners();
+          }
+        },
+        (err) => {
+          console.warn('Firestore timesheet_shifts listener (using local cache):', err.message);
+        }
+      );
+
+      // Listen to timesheet_guards
+      onSnapshot(
+        collection(db, FIRESTORE_COLLECTIONS.GUARDS),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            snapshot.forEach((d) => {
+              const guard = d.data() as ActiveShiftGuard;
+              this.guards.set(guard.employeeId, guard);
+            });
+            this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.GUARDS, Array.from(this.guards.values()));
+            this.notifyListeners();
+          }
+        },
+        (err) => {
+          console.warn('Firestore timesheet_guards listener (using local cache):', err.message);
+        }
+      );
+
+      // Listen to timesheet_audit
+      onSnapshot(
+        collection(db, FIRESTORE_COLLECTIONS.AUDIT),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const eventsMap = new Map<string, AuditEvent>();
+            this.auditEvents.forEach((e) => eventsMap.set(e.id, e));
+            snapshot.forEach((d) => {
+              const evt = d.data() as AuditEvent;
+              eventsMap.set(evt.id, evt);
+            });
+            this.auditEvents = Array.from(eventsMap.values());
+            this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.AUDIT, this.auditEvents);
+            this.notifyListeners();
+          }
+        },
+        (err) => {
+          console.warn('Firestore timesheet_audit listener (using local cache):', err.message);
+        }
+      );
+
+      // Listen to timesheet_corrections
+      onSnapshot(
+        collection(db, FIRESTORE_COLLECTIONS.CORRECTIONS),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            snapshot.forEach((d) => {
+              const corr = d.data() as CorrectionRequest;
+              this.correctionRequests.set(corr.id, corr);
+            });
+            this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.CORRECTIONS, Array.from(this.correctionRequests.values()));
+            this.notifyListeners();
+          }
+        },
+        (err) => {
+          console.warn('Firestore timesheet_corrections listener (using local cache):', err.message);
+        }
+      );
+    } catch (err) {
+      console.warn('Failed to setup timesheet Firestore listeners:', err);
+    }
+  }
+
+  private trackSync<T>(promise: Promise<T>): Promise<T> {
+    this.pendingSyncs.add(promise);
+    promise.finally(() => this.pendingSyncs.delete(promise));
+    return promise;
+  }
+
+  public async waitForPendingSyncs(): Promise<void> {
+    await Promise.all(Array.from(this.pendingSyncs));
+  }
+
+  // Cloud Sync Workers
+  public async syncShiftToCloud(shift: ShiftRecord): Promise<void> {
+    if (!this.isCloudSyncEnabled() || !db) return;
+    try {
+      await ensureAuth();
+      await setDoc(doc(db, FIRESTORE_COLLECTIONS.SHIFTS, shift.id), sanitizeForFirestore(shift), { merge: true });
+    } catch (err) {
+      console.warn('Firestore sync error for shift:', err);
+    }
+  }
+
+  public async deleteShiftFromCloud(id: string): Promise<void> {
+    if (!this.isCloudSyncEnabled() || !db) return;
+    try {
+      await ensureAuth();
+      await deleteDoc(doc(db, FIRESTORE_COLLECTIONS.SHIFTS, id));
+    } catch (err) {
+      console.warn('Firestore delete error for shift:', err);
+    }
+  }
+
+  public async syncGuardToCloud(guard: ActiveShiftGuard): Promise<void> {
+    if (!this.isCloudSyncEnabled() || !db) return;
+    try {
+      await ensureAuth();
+      await setDoc(doc(db, FIRESTORE_COLLECTIONS.GUARDS, guard.employeeId), sanitizeForFirestore(guard), { merge: true });
+    } catch (err) {
+      console.warn('Firestore sync error for guard:', err);
+    }
+  }
+
+  public async syncAuditEventToCloud(event: AuditEvent): Promise<void> {
+    if (!this.isCloudSyncEnabled() || !db) return;
+    try {
+      await ensureAuth();
+      await setDoc(doc(db, FIRESTORE_COLLECTIONS.AUDIT, event.id), sanitizeForFirestore(event), { merge: true });
+    } catch (err) {
+      console.warn('Firestore sync error for audit event:', err);
+    }
+  }
+
+  public async syncCorrectionToCloud(request: CorrectionRequest): Promise<void> {
+    if (!this.isCloudSyncEnabled() || !db) return;
+    try {
+      await ensureAuth();
+      await setDoc(doc(db, FIRESTORE_COLLECTIONS.CORRECTIONS, request.id), sanitizeForFirestore(request), { merge: true });
+    } catch (err) {
+      console.warn('Firestore sync error for correction request:', err);
+    }
+  }
+
+  public async deleteCorrectionFromCloud(id: string): Promise<void> {
+    if (!this.isCloudSyncEnabled() || !db) return;
+    try {
+      await ensureAuth();
+      await deleteDoc(doc(db, FIRESTORE_COLLECTIONS.CORRECTIONS, id));
+    } catch (err) {
+      console.warn('Firestore delete error for correction request:', err);
+    }
   }
 
   // Shifts
@@ -196,11 +548,24 @@ class TimesheetStore {
   saveShift(shift: ShiftRecord): ShiftRecord {
     const copy = { ...shift };
     this.shifts.set(copy.id, copy);
+    this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.SHIFTS, Array.from(this.shifts.values()));
+    this.notifyListeners();
+    if (this.isCloudSyncEnabled()) {
+      void this.trackSync(this.syncShiftToCloud(copy));
+    }
     return { ...copy };
   }
 
   deleteShift(id: string): boolean {
-    return this.shifts.delete(id);
+    const result = this.shifts.delete(id);
+    if (result) {
+      this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.SHIFTS, Array.from(this.shifts.values()));
+      this.notifyListeners();
+      if (this.isCloudSyncEnabled()) {
+        void this.trackSync(this.deleteShiftFromCloud(id));
+      }
+    }
+    return result;
   }
 
   // Active shift guards
@@ -217,23 +582,39 @@ class TimesheetStore {
       revision: (current?.revision || 0) + 1,
     };
     this.guards.set(employeeId, guard);
+    this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.GUARDS, Array.from(this.guards.values()));
+    this.notifyListeners();
+    if (this.isCloudSyncEnabled()) {
+      void this.trackSync(this.syncGuardToCloud(guard));
+    }
     return { ...guard };
   }
 
   clearActiveShiftGuard(employeeId: string): void {
     const current = this.guards.get(employeeId);
     if (current) {
-      this.guards.set(employeeId, {
+      const updated: ActiveShiftGuard = {
         employeeId,
         activeShiftId: null,
         revision: current.revision + 1,
-      });
+      };
+      this.guards.set(employeeId, updated);
+      this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.GUARDS, Array.from(this.guards.values()));
+      this.notifyListeners();
+      if (this.isCloudSyncEnabled()) {
+        void this.trackSync(this.syncGuardToCloud(updated));
+      }
     }
   }
 
   // Audit Events
   appendAuditEvent(event: AuditEvent): void {
     this.auditEvents.push({ ...event });
+    this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.AUDIT, this.auditEvents);
+    this.notifyListeners();
+    if (this.isCloudSyncEnabled()) {
+      void this.trackSync(this.syncAuditEventToCloud(event));
+    }
   }
 
   getAuditEventsForShift(shiftId: string): AuditEvent[] {
@@ -253,6 +634,11 @@ class TimesheetStore {
   saveCorrectionRequest(request: CorrectionRequest): CorrectionRequest {
     const copy = { ...request };
     this.correctionRequests.set(copy.id, copy);
+    this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.CORRECTIONS, Array.from(this.correctionRequests.values()));
+    this.notifyListeners();
+    if (this.isCloudSyncEnabled()) {
+      void this.trackSync(this.syncCorrectionToCloud(copy));
+    }
     return { ...copy };
   }
 
@@ -275,7 +661,15 @@ class TimesheetStore {
   }
 
   deleteCorrectionRequest(id: string): boolean {
-    return this.correctionRequests.delete(id);
+    const result = this.correctionRequests.delete(id);
+    if (result) {
+      this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.CORRECTIONS, Array.from(this.correctionRequests.values()));
+      this.notifyListeners();
+      if (this.isCloudSyncEnabled()) {
+        void this.trackSync(this.deleteCorrectionFromCloud(id));
+      }
+    }
+    return result;
   }
 
   // Seed helpers for preview mode / local prototypes
@@ -283,6 +677,7 @@ class TimesheetStore {
     shifts?: ShiftRecord[];
     corrections?: CorrectionRequest[];
     auditEvents?: AuditEvent[];
+    syncToCloud?: boolean;
   }): void {
     this.reset();
     const shiftsToSeed = options?.shifts ?? SAMPLE_SHIFTS;
@@ -298,11 +693,34 @@ class TimesheetStore {
 
     correctionsToSeed.forEach((c) => this.saveCorrectionRequest(c));
     auditsToSeed.forEach((a) => this.appendAuditEvent(a));
+
+    if (options?.syncToCloud && this.isCloudSyncEnabled()) {
+      shiftsToSeed.forEach((s) => void this.syncShiftToCloud(s));
+      correctionsToSeed.forEach((c) => void this.syncCorrectionToCloud(c));
+      auditsToSeed.forEach((a) => void this.syncAuditEventToCloud(a));
+    }
   }
 
   seedIfEmpty(): void {
     if (this.shifts.size === 0) {
       this.seed();
+    }
+  }
+
+  reset(): void {
+    this.shifts.clear();
+    this.guards.clear();
+    this.auditEvents = [];
+    this.correctionRequests.clear();
+    if (this.isClient()) {
+      try {
+        localStorage.removeItem(TIMESHEET_STORAGE_KEYS.SHIFTS);
+        localStorage.removeItem(TIMESHEET_STORAGE_KEYS.GUARDS);
+        localStorage.removeItem(TIMESHEET_STORAGE_KEYS.AUDIT);
+        localStorage.removeItem(TIMESHEET_STORAGE_KEYS.CORRECTIONS);
+      } catch {
+        // ignore storage clean errors in tests
+      }
     }
   }
 }
