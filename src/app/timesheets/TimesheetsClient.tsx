@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   X,
   Pencil,
+  Cloud,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { timesheetService } from '@/lib/timesheets/timesheetService';
@@ -147,7 +148,15 @@ export default function TimesheetsClient() {
   }, [user?.id]);
 
   useEffect(() => {
+    timesheetStore.init();
     refreshData();
+    const handleUpdate = () => {
+      refreshData();
+    };
+    window.addEventListener('sunny_timesheet_update', handleUpdate);
+    return () => {
+      window.removeEventListener('sunny_timesheet_update', handleUpdate);
+    };
   }, [refreshData]);
 
   // Live timer tick for active shift
@@ -492,29 +501,32 @@ export default function TimesheetsClient() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-4 sm:p-6 lg:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
-        {/* Prototype Indicator Banner */}
-        <div className="flex items-center justify-between gap-4 p-3 sm:p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 shadow-sm">
+        {/* Firebase Cloud Sync Banner */}
+        <div className="flex items-center justify-between gap-4 p-3 sm:p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-200 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-300">
-              <Sparkles className="w-5 h-5" />
+            <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-300">
+              <Cloud className="w-5 h-5" />
             </div>
             <div>
-              <p className="font-semibold text-sm sm:text-base">
-                Timesheet Prototype (Isolated Test Environment)
+              <p className="font-semibold text-sm sm:text-base flex items-center gap-2">
+                <span>Timesheet Prototype (Isolated Test Environment)</span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200">
+                  Firebase Cloud Sync Active
+                </span>
               </p>
-              <p className="text-xs text-amber-700 dark:text-amber-300/80">
-                Punches and revisions are tracked safely in isolated memory without touching production collections.
+              <p className="text-xs text-emerald-700 dark:text-emerald-300/80">
+                Punches, approvals, corrections, and audit trails are persisted to Cloud Firestore and synchronized in real time.
               </p>
             </div>
           </div>
           {timesheetStore.getAllShifts().length === 0 && (
             <button
               onClick={() => {
-                timesheetStore.seed();
+                timesheetStore.seed({ syncToCloud: true });
                 refreshData();
-                setNotification({ type: 'success', message: 'Loaded prototype demo shifts.' });
+                setNotification({ type: 'success', message: 'Loaded prototype demo shifts into isolated test store and synced to Firebase.' });
               }}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition-colors whitespace-nowrap"
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors whitespace-nowrap"
             >
               Load Demo Shifts
             </button>
