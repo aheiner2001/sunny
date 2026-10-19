@@ -8,16 +8,18 @@ import ReturnClient from '../ReturnClient';
 
 const mockPush = vi.fn();
 const mockReplace = vi.fn();
+let mockMissedId = '';
+
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
-  useSearchParams: () => ({ get: () => null }),
+  useSearchParams: () => ({ get: (key: string) => key === 'missed' ? mockMissedId : null }),
 }));
 
-let mockUser: { id: string; name: string; email?: string } | null = {
+let mockUser: { id: string; name: string; email?: string; role: string } | null = {
   id: 'emp-202',
   name: 'Dave Driver',
-  email: 'dave@sunny.com',
+  email: 'dave@sunny.com', role: 'employee',
 };
 let mockRole = 'employee';
 
@@ -31,9 +33,10 @@ vi.mock('@/context/AuthContext', () => ({
 describe('Return Checklist Clock-Out Integration', () => {
   beforeEach(() => {
     timesheetStore.reset();
+    mockMissedId = '';
     mockPush.mockClear();
     mockReplace.mockClear();
-    mockUser = { id: 'emp-202', name: 'Dave Driver', email: 'dave@sunny.com' };
+    mockUser = { id: 'emp-202', name: 'Dave Driver', email: 'dave@sunny.com', role: 'employee' };
     mockRole = 'employee';
   });
 
@@ -88,7 +91,7 @@ describe('Return Checklist Clock-Out Integration', () => {
 
       vi.spyOn(dbService, 'getMissedReturns').mockReturnValue([]);
       vi.spyOn(dbService, 'getTodayJobsCount').mockReturnValue(3);
-      vi.spyOn(dbService, 'submitReturnInspection').mockResolvedValue('insp-123' as any);
+      vi.spyOn(dbService, 'submitReturnInspection').mockResolvedValue({ inspection: { id: 'insp-123' } } as any);
       vi.spyOn(dbService, 'setVehicleJobsToday').mockResolvedValue(undefined as any);
     });
 
@@ -137,7 +140,9 @@ describe('Return Checklist Clock-Out Integration', () => {
       expect(clockOutSpy).toHaveBeenCalledWith(
         'emp-202',
         'checklist_return',
-        expect.stringMatching(/^return-/)
+        'return-insp-123',
+        0,
+        expect.any(String)
       );
 
       // Verify shift transitioned to pending
@@ -155,6 +160,47 @@ describe('Return Checklist Clock-Out Integration', () => {
         (a) => a.getAttribute('href') === '/timesheets'
       );
       expect(timesheetLink).toBeDefined();
+    });
+
+    it('does not clock out a manager returning a vehicle for an employee', async () => {
+      mockRole = 'manager';
+      mockUser!.role = 'manager';
+      const punch = vi.spyOn(timesheetService, 'clockOut');
+      await act(async () => root.render(React.createElement(ReturnClient)));
+      const yes = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Yes'));
+      await act(async () => yes!.click());
+      const submit = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Submit return'));
+      await act(async () => submit!.click());
+      expect(dbService.submitReturnInspection).toHaveBeenCalledTimes(1);
+      expect(punch).not.toHaveBeenCalled();
+    });
+
+    it('clocks out an employee with temporary manager permissions on their own return', async () => {
+      mockRole = 'manager';
+      const shift = await timesheetService.clockIn('emp-202', 'Dave', 'qr', 'temp-manager-start');
+      await act(async () => root.render(React.createElement(ReturnClient)));
+      const yes = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Yes'));
+      await act(async () => yes!.click());
+      const submit = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Submit return'));
+      await act(async () => submit!.click());
+      expect(timesheetStore.getShift(shift.id)?.status).toBe('pending');
+    });
+
+    it('keeps today’s active shift open when submitting a missed past return', async () => {
+      mockMissedId = 'missed-1';
+      vi.mocked(dbService.getMissedReturns).mockReturnValue([
+        { id: 'missed-1', vehicleId: 'veh-1', status: 'pending', userId: 'emp-202', date: '2026-10-12' } as any,
+      ]);
+      const shift = await timesheetService.clockIn('emp-202', 'Dave', 'qr', 'today-start');
+      const punch = vi.spyOn(timesheetService, 'clockOut');
+      await act(async () => root.render(React.createElement(ReturnClient)));
+      const yes = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Yes'));
+      await act(async () => yes!.click());
+      const submit = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Submit return'));
+      await act(async () => submit!.click());
+      expect(dbService.submitReturnInspection).toHaveBeenCalledTimes(1);
+      expect(punch).not.toHaveBeenCalled();
+      expect(timesheetStore.getShift(shift.id)?.status).toBe('active');
     });
 
     it('safely completes return checklist and shows missing shift notice when NO_ACTIVE_SHIFT occurs', async () => {
@@ -200,8 +246,8 @@ describe('Return Checklist Clock-Out Integration', () => {
     });
 
     it('safely completes return checklist even if timesheetService throws an unexpected error', async () => {
-      vi.spyOn(timesheetService, 'clockOut').mockRejectedValueOnce(new Error('Storage failure'));
-      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await timesheetService.clockIn('emp-202', 'Dave', 'qr', 'start-for-retry');
+      const clockOut = vi.spyOn(timesheetService, 'clockOut').mockRejectedValueOnce(new Error('Storage failure'));
 
       await act(async () => {
         root.render(React.createElement(ReturnClient));
@@ -223,11 +269,13 @@ describe('Return Checklist Clock-Out Integration', () => {
 
       expect(dbService.submitReturnInspection).toHaveBeenCalledTimes(1);
       expect(container.textContent).toContain('Returned — 101 available');
-      expect(container.textContent).toContain('Failed to record clock-out punch');
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        'Timesheet clock-out error:',
-        expect.any(Error)
-      );
+      expect(container.textContent).toContain('clock-out was not confirmed');
+      const retry = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Retry clock-out'));
+      await act(async () => retry!.click());
+      expect(clockOut).toHaveBeenCalledTimes(2);
+      expect(clockOut.mock.calls[1]).toEqual(clockOut.mock.calls[0]);
+      expect(dbService.submitReturnInspection).toHaveBeenCalledTimes(1);
+      expect(container.textContent).toContain('Shift Clocked Out');
     });
   });
 });

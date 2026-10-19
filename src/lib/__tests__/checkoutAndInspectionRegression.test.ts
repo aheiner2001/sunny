@@ -45,7 +45,6 @@ describe('Vehicle Check-out & Inspection Regression Tests', () => {
         status: 'in_use',
         currentUserId: 'yesterday-driver',
         currentUserName: 'Yesterday Driver',
-        checkedOutAt: yesterday.toISOString(),
         currentUserStartAt: yesterday.toISOString(),
       };
 

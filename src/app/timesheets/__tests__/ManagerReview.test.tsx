@@ -1,3 +1,4 @@
+import { beforeAll, afterAll } from 'vitest';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
@@ -337,3 +338,6 @@ describe('TimesheetsClient (Manager Review)', () => {
     approveSpy.mockRestore();
   });
 });
+
+beforeAll(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-14T22:00:00Z')); });
+afterAll(() => vi.useRealTimers());

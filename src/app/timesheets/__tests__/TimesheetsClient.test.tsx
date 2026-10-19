@@ -1,3 +1,4 @@
+import { beforeAll, afterAll } from 'vitest';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -28,9 +29,9 @@ describe('TimesheetsClient (Employee View)', () => {
     mockAuthRole = 'employee';
   });
 
-  it('renders prototype indicator banner', () => {
+  it('renders actual cloud availability', () => {
     render(<TimesheetsClient />);
-    expect(screen.getByText(/timesheet prototype \(isolated test environment\)/i)).toBeDefined();
+    expect(screen.getByText(/local only — cloud sync unavailable/i)).toBeDefined();
   });
 
   it('renders Clock In button when employee is clocked out', () => {
@@ -189,17 +190,11 @@ describe('TimesheetsClient (Employee View)', () => {
     });
   });
 
-  it('supports loading demo shifts and dismissing toast notifications', async () => {
+  it('offers a cloud retry without inserting demonstration payroll data', () => {
     render(<TimesheetsClient />);
-    const loadDemoBtn = screen.getByRole('button', { name: /load demo shifts/i });
-    fireEvent.click(loadDemoBtn);
-
-    expect(screen.getByText(/loaded prototype demo shifts/i)).toBeDefined();
-
-    // Dismiss toast notification
-    const dismissBtn = screen.getByRole('button', { name: /dismiss/i });
-    fireEvent.click(dismissBtn);
-    expect(screen.queryByText(/loaded prototype demo shifts/i)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /retry cloud sync/i }));
+    expect(screen.queryByRole('button', { name: /load demo shifts/i })).toBeNull();
+    expect(timesheetStore.getAllShifts()).toHaveLength(0);
   });
 
   it('supports cancelling modals without submitting', async () => {
@@ -286,3 +281,6 @@ describe('TimesheetsClient (Employee View)', () => {
     clockOutSpy.mockRestore();
   });
 });
+
+beforeAll(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-14T22:00:00Z')); });
+afterAll(() => vi.useRealTimers());

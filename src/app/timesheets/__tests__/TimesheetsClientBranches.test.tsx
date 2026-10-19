@@ -1,3 +1,4 @@
+import { beforeAll, afterAll } from 'vitest';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
@@ -32,7 +33,7 @@ describe('TimesheetsClient Branch & Edge Case Coverage', () => {
     mockAuthUser = null;
     mockAuthRole = 'employee';
     render(<TimesheetsClient />);
-    expect(screen.getByText(/timesheet prototype/i)).toBeDefined();
+    expect(screen.getByText(/local only — cloud sync unavailable/i)).toBeDefined();
     expect(screen.getAllByText(/0.00 hrs/i).length).toBeGreaterThan(0);
   });
 
@@ -291,3 +292,6 @@ describe('TimesheetsClient Branch & Edge Case Coverage', () => {
     expect(screen.queryByRole('heading', { name: /unpaid break duration/i })).toBeNull();
   });
 });
+
+beforeAll(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-14T22:00:00Z')); });
+afterAll(() => vi.useRealTimers());
