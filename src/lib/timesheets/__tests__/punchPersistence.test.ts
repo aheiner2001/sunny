@@ -6,7 +6,15 @@ vi.mock('@/lib/firebase', () => ({ db: { _isMock: true }, ensureAuth: vi.fn().mo
 vi.mock('firebase/firestore', () => ({
   doc: (_db: unknown, col: string, id: string) => `${col}/${id}`,
   collection: (_db: unknown, name: string) => name,
-  setDoc: vi.fn(), deleteDoc: vi.fn(), onSnapshot: vi.fn(), getDocs: vi.fn(),
+  setDoc: vi.fn(), deleteDoc: vi.fn(), onSnapshot: vi.fn(),
+  where: (_field: string, _op: string, employeeId: string) => employeeId,
+  query: (col: string, employeeId: string) => ({ col, employeeId }),
+  getDoc: async (key: string) => ({ exists: () => cloud.docs.has(key), data: () => cloud.docs.get(key) }),
+  getDocs: async ({ col, employeeId }: any) => ({ forEach: (receive: any) => {
+    cloud.docs.forEach((value, key) => {
+      if (key.startsWith(`${col}/`) && value.employeeId === employeeId) receive({ data: () => value });
+    });
+  } }),
   runTransaction: vi.fn((_db: unknown, callback: any) => {
     const result = cloud.queue.then(async () => {
       if (cloud.fail) throw new Error('permission-denied');
@@ -72,4 +80,36 @@ it('publishes one shift and audit if Firestore retries the transaction callback'
   expect(timesheetStore.getAllAuditEvents()).toHaveLength(1);
   expect(Array.from(cloud.docs.keys()).filter(key => key.startsWith('timesheet_shifts/'))).toHaveLength(1);
   expect(cloud.docs.get('timesheet_guards/driver').activeShiftId).toBe(shift.id);
+});
+
+
+import { makeRecoveredShift, buildHistoricalEstimates } from '../historicalRecovery';
+import type { Inspection } from '@/types';
+const recovered = () => makeRecoveredShift(buildHistoricalEstimates([
+  { id: 'old-inspection', userId: 'driver', userName: 'Driver', vehicleId: 'van', submittedAt: '2026-10-12T14:00:00Z', kind: 'pretrip', status: 'passed' },
+  { id: 'old-return', userId: 'driver', userName: 'Driver', vehicleId: 'van', submittedAt: '2026-10-12T22:00:00Z', kind: 'return', status: 'passed' },
+] as Inspection[], [])[0], { id: 'manager', name: 'Manager' });
+it('saves recovered hours as pending without closing today’s active shift', async () => {
+  const today = await start();
+  const result = await timesheetStore.saveRecoveredShift(recovered());
+  expect(result.status).toBe('pending');
+  expect(cloud.docs.get('timesheet_guards/driver').activeShiftId).toBe(today.id);
+  expect(cloud.docs.get(`timesheet_shifts/${today.id}`).status).toBe('active');
+  expect(cloud.docs.get(`timesheet_shifts/${result.id}`).recovery.inspectionId).toBe('old-inspection');
+});
+it('rejects duplicate recovery across browsers', async () => {
+  await timesheetStore.saveRecoveredShift(recovered());
+  timesheetStore.reset();
+  await expect(timesheetStore.saveRecoveredShift(recovered())).rejects.toThrow();
+  expect(Array.from(cloud.docs.keys()).filter(key => key.startsWith('timesheet_shifts/'))).toHaveLength(1);
+});
+it('rejects overlap with remotely stored active hours', async () => {
+  await timesheetService.clockIn('driver', 'Driver', 'qr', 'old-open-shift', '2026-10-12T13:00:00Z');
+  timesheetStore.reset();
+  await expect(timesheetStore.saveRecoveredShift(recovered())).rejects.toThrow('overlap');
+});
+it('does not show a recovered shift as saved when the cloud commit fails', async () => {
+  cloud.failAfter = true;
+  await expect(timesheetStore.saveRecoveredShift(recovered())).rejects.toThrow('commit-failed');
+  expect(timesheetStore.getAllShifts()).toHaveLength(0);
 });
