@@ -16,7 +16,7 @@ import { dbService } from '@/lib/db';
 import { Vehicle } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { PasscodePrompt } from '@/components/PasscodeGate';
-import { timesheetService } from '@/lib/timesheets/timesheetService';
+import { clockInScanEmployee } from '@/lib/timesheets/employeeEntry';
 
 export default function ScanPage() {
   const router = useRouter();
@@ -120,17 +120,15 @@ export default function ScanPage() {
     openVehicle(vehicle);
   };
 
-  const openVehicle = (vehicle: Vehicle) => {
-    const activeRole = dbService.getSession()?.role || roleRef.current;
-    if (activeRole !== 'manager') {
-      const sessionUser = dbService.getSession();
-      if (sessionUser) {
-        const userName = (sessionUser as any).userName || dbService.getUser(sessionUser.userId)?.name || 'Employee';
-        void timesheetService.clockIn(sessionUser.userId, userName, 'qr', `qr-scan-${Date.now()}`);
-      }
+  const openVehicle = async (vehicle: Vehicle) => {
+    try {
+      await clockInScanEmployee();
+      const activeRole = dbService.getSession()?.role || roleRef.current;
+      const mode = activeRole === 'manager' ? '' : '&mode=employee';
+      router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}${mode}`);
+    } catch {
+      setScanError('Clock-in was not saved. Check your connection and try selecting the vehicle again.');
     }
-    const mode = activeRole === 'manager' ? '' : '&mode=employee';
-    router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}${mode}`);
   };
 
   return (

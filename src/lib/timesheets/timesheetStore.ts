@@ -7,6 +7,7 @@ import {
   deleteDoc,
   onSnapshot,
   getDocs,
+  runTransaction,
 } from 'firebase/firestore';
 
 export const TIMESHEET_STORAGE_KEYS = {
@@ -372,95 +373,149 @@ class TimesheetStore {
     void this.setupFirestoreListeners();
   }
 
+  private listenerGeneration = 0;
+  private unsubscribers: Array<() => void> = [];
+
   public async setupFirestoreListeners(): Promise<void> {
     if (!this.isCloudSyncEnabled() || this.listening || !db) return;
     this.listening = true;
-
+    const generation = ++this.listenerGeneration;
+    this.setSyncStatus('Connecting to Firebase…');
+    const confirmed = new Set<string>();
+    const fail = () => {
+      if (generation !== this.listenerGeneration) return;
+      this.listenerGeneration++;
+      this.unsubscribers.forEach(unsubscribe => unsubscribe());
+      this.unsubscribers = [];
+      this.listening = false;
+      this.setSyncStatus('Cloud sync failed. Check connection and Firebase permissions, then retry.');
+    };
     try {
-      await ensureAuth();
-
-      // Listen to timesheet_shifts
-      onSnapshot(
-        collection(db, FIRESTORE_COLLECTIONS.SHIFTS),
-        (snapshot) => {
-          if (!snapshot.empty) {
-            snapshot.forEach((d) => {
-              const shift = d.data() as ShiftRecord;
-              this.shifts.set(shift.id, shift);
-            });
-            this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.SHIFTS, Array.from(this.shifts.values()));
-            this.notifyListeners();
-          }
-        },
-        (err) => {
-          console.warn('Firestore timesheet_shifts listener (using local cache):', err.message);
-        }
-      );
-
-      // Listen to timesheet_guards
-      onSnapshot(
-        collection(db, FIRESTORE_COLLECTIONS.GUARDS),
-        (snapshot) => {
-          if (!snapshot.empty) {
-            snapshot.forEach((d) => {
-              const guard = d.data() as ActiveShiftGuard;
-              this.guards.set(guard.employeeId, guard);
-            });
-            this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.GUARDS, Array.from(this.guards.values()));
-            this.notifyListeners();
-          }
-        },
-        (err) => {
-          console.warn('Firestore timesheet_guards listener (using local cache):', err.message);
-        }
-      );
-
-      // Listen to timesheet_audit
-      onSnapshot(
-        collection(db, FIRESTORE_COLLECTIONS.AUDIT),
-        (snapshot) => {
-          if (!snapshot.empty) {
-            const eventsMap = new Map<string, AuditEvent>();
-            this.auditEvents.forEach((e) => eventsMap.set(e.id, e));
-            snapshot.forEach((d) => {
-              const evt = d.data() as AuditEvent;
-              eventsMap.set(evt.id, evt);
-            });
-            this.auditEvents = Array.from(eventsMap.values());
-            this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.AUDIT, this.auditEvents);
-            this.notifyListeners();
-          }
-        },
-        (err) => {
-          console.warn('Firestore timesheet_audit listener (using local cache):', err.message);
-        }
-      );
-
-      // Listen to timesheet_corrections
-      onSnapshot(
-        collection(db, FIRESTORE_COLLECTIONS.CORRECTIONS),
-        (snapshot) => {
-          if (!snapshot.empty) {
-            snapshot.forEach((d) => {
-              const corr = d.data() as CorrectionRequest;
-              this.correctionRequests.set(corr.id, corr);
-            });
-            this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.CORRECTIONS, Array.from(this.correctionRequests.values()));
-            this.notifyListeners();
-          }
-        },
-        (err) => {
-          console.warn('Firestore timesheet_corrections listener (using local cache):', err.message);
-        }
-      );
-    } catch (err) {
-      console.warn('Failed to setup timesheet Firestore listeners:', err);
+      if (!await ensureAuth()) throw new Error('Firebase authentication unavailable');
+      if (generation !== this.listenerGeneration) return;
+      const listeners = [
+        [FIRESTORE_COLLECTIONS.SHIFTS, TIMESHEET_STORAGE_KEYS.SHIFTS, this.shifts, 'id'],
+        [FIRESTORE_COLLECTIONS.GUARDS, TIMESHEET_STORAGE_KEYS.GUARDS, this.guards, 'employeeId'],
+        [FIRESTORE_COLLECTIONS.CORRECTIONS, TIMESHEET_STORAGE_KEYS.CORRECTIONS, this.correctionRequests, 'id'],
+      ] as const;
+      const status = (name: string, cached: boolean) => {
+        if (cached) confirmed.delete(name);
+        else confirmed.add(name);
+        this.setSyncStatus(cached ? 'Showing cached timesheets — waiting for cloud confirmation' :
+          confirmed.size === 4 ? 'Firebase Cloud Sync Active' : 'Loading cloud timesheets…');
+      };
+      // Keep callback ordering shifts, guards, audit, corrections for existing consumers/tests.
+      const subscribe = (name: string, receive: (snapshot: any) => void) => {
+        this.unsubscribers.push(onSnapshot(collection(db!, name), { includeMetadataChanges: true }, snapshot => {
+          if (generation !== this.listenerGeneration) return;
+          receive(snapshot);
+          status(name, Boolean(snapshot.metadata?.fromCache || snapshot.metadata?.hasPendingWrites));
+        }, fail));
+      };
+      const receiveMap = (key: string, map: Map<string, any>, id: string) => (snapshot: any) => {
+        if (!snapshot.metadata?.fromCache) map.clear();
+        snapshot.forEach((d: any) => { const value = d.data(); map.set(value[id], value); });
+        this.saveToLocalStorage(key, Array.from(map.values()));
+      };
+      subscribe(listeners[0][0], receiveMap(listeners[0][1], this.shifts, 'id'));
+      subscribe(listeners[1][0], receiveMap(listeners[1][1], this.guards, 'employeeId'));
+      subscribe(FIRESTORE_COLLECTIONS.AUDIT, snapshot => {
+        const events = new Map<string, AuditEvent>();
+        if (snapshot.metadata?.fromCache) this.auditEvents.forEach(event => events.set(event.id, event));
+        snapshot.forEach((d: any) => { const event = d.data() as AuditEvent; events.set(event.id, event); });
+        this.auditEvents = Array.from(events.values());
+        this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.AUDIT, this.auditEvents);
+      });
+      subscribe(listeners[2][0], receiveMap(listeners[2][1], this.correctionRequests, 'id'));
+    } catch {
+      fail();
     }
+  }
+
+  /** Guard, shift and audit commit together; callbacks must have no local side effects. */
+  public async transactPunch(
+    employeeId: string,
+    eventId: string,
+    update: (active: ShiftRecord | null) => { shift: ShiftRecord; audit?: AuditEvent },
+  ): Promise<ShiftRecord> {
+    const receiptId = `punch-${encodeURIComponent(employeeId)}:${encodeURIComponent(eventId)}`;
+    if (!this.isCloudSyncEnabled() || !db) {
+      const receipt = this.auditEvents.find(e => e.actorId === employeeId && e.eventId === eventId);
+      const previous = receipt && this.getShift(receipt.shiftId);
+      if (previous) return previous;
+      const guard = this.getActiveShiftGuard(employeeId);
+      const result = update(guard?.activeShiftId ? this.getShift(guard.activeShiftId) : null);
+      if (result.audit) {
+        this.saveShift(result.shift);
+        if (result.shift.status === 'active') this.setActiveShiftGuard(employeeId, result.shift.id);
+        else this.clearActiveShiftGuard(employeeId);
+        this.appendAuditEvent({ ...result.audit, id: receiptId });
+      }
+      return result.shift;
+    }
+    this.setSyncStatus('Saving timesheet…');
+    try {
+      if (!await ensureAuth()) throw new Error('Firebase authentication unavailable. Please retry.');
+      const result = await runTransaction(db, async transaction => {
+        const receiptRef = doc(db!, FIRESTORE_COLLECTIONS.AUDIT, receiptId);
+        const guardRef = doc(db!, FIRESTORE_COLLECTIONS.GUARDS, employeeId);
+        const receipt = await transaction.get(receiptRef);
+        if (receipt.exists()) {
+          const previous = await transaction.get(doc(db!, FIRESTORE_COLLECTIONS.SHIFTS, receipt.data().shiftId));
+          if (!previous.exists()) throw new Error('SHIFT_NOT_FOUND');
+          return { shift: previous.data() as ShiftRecord };
+        }
+        const guardDoc = await transaction.get(guardRef);
+        const guard = guardDoc.exists() ? guardDoc.data() as ActiveShiftGuard : null;
+        let active: ShiftRecord | null = null;
+        if (guard?.activeShiftId) {
+          const shiftDoc = await transaction.get(doc(db!, FIRESTORE_COLLECTIONS.SHIFTS, guard.activeShiftId));
+          if (!shiftDoc.exists()) throw new Error('Active shift record missing. Contact your manager.');
+          active = shiftDoc.data() as ShiftRecord;
+        }
+        const next = update(active);
+        if (!next.audit) return next;
+        transaction.set(doc(db!, FIRESTORE_COLLECTIONS.SHIFTS, next.shift.id), sanitizeForFirestore(next.shift));
+        transaction.set(guardRef, {
+          employeeId, activeShiftId: next.shift.status === 'active' ? next.shift.id : null,
+          revision: (guard?.revision || 0) + 1,
+        });
+        transaction.set(receiptRef, sanitizeForFirestore({ ...next.audit, id: receiptId }));
+        return next;
+      });
+      // Hydrate only acknowledged data. Never re-send a transaction through local setters.
+      this.shifts.set(result.shift.id, result.shift);
+      // A replay can refer to an older shift: do not overwrite the current guard from it.
+      this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.SHIFTS, Array.from(this.shifts.values()));
+      if (result.audit) {
+        this.guards.set(employeeId, {
+          employeeId, activeShiftId: result.shift.status === 'active' ? result.shift.id : null,
+          revision: (this.guards.get(employeeId)?.revision || 0) + 1,
+        });
+        this.auditEvents.push({ ...result.audit, id: receiptId });
+        this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.GUARDS, Array.from(this.guards.values()));
+        this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.AUDIT, this.auditEvents);
+      }
+      this.setSyncStatus('Last timesheet save confirmed');
+      return { ...result.shift };
+    } catch (error) {
+      this.setSyncStatus('Timesheet save failed. Check connection and Firebase permissions, then retry.');
+      throw error;
+    }
+  }
+
+  private syncStatus = 'Connecting to Firebase…';
+  public getSyncStatus(): string {
+    return this.isCloudSyncEnabled() ? this.syncStatus : 'Local only — cloud sync unavailable';
+  }
+  private setSyncStatus(status: string): void {
+    this.syncStatus = status;
+    this.notifyListeners();
   }
 
   private trackSync<T>(promise: Promise<T>): Promise<T> {
     this.pendingSyncs.add(promise);
-    promise.finally(() => this.pendingSyncs.delete(promise));
+    promise.then(() => this.pendingSyncs.delete(promise), () => this.pendingSyncs.delete(promise));
     return promise;
   }
 
@@ -476,6 +531,8 @@ class TimesheetStore {
       await setDoc(doc(db, FIRESTORE_COLLECTIONS.SHIFTS, shift.id), sanitizeForFirestore(shift), { merge: true });
     } catch (err) {
       console.warn('Firestore sync error for shift:', err);
+      this.setSyncStatus('Timesheet save failed. Check connection and Firebase permissions, then retry.');
+      throw err;
     }
   }
 
@@ -486,6 +543,8 @@ class TimesheetStore {
       await deleteDoc(doc(db, FIRESTORE_COLLECTIONS.SHIFTS, id));
     } catch (err) {
       console.warn('Firestore delete error for shift:', err);
+      this.setSyncStatus('Timesheet save failed. Check connection and Firebase permissions, then retry.');
+      throw err;
     }
   }
 
@@ -496,6 +555,8 @@ class TimesheetStore {
       await setDoc(doc(db, FIRESTORE_COLLECTIONS.GUARDS, guard.employeeId), sanitizeForFirestore(guard), { merge: true });
     } catch (err) {
       console.warn('Firestore sync error for guard:', err);
+      this.setSyncStatus('Timesheet save failed. Check connection and Firebase permissions, then retry.');
+      throw err;
     }
   }
 
@@ -506,6 +567,8 @@ class TimesheetStore {
       await setDoc(doc(db, FIRESTORE_COLLECTIONS.AUDIT, event.id), sanitizeForFirestore(event), { merge: true });
     } catch (err) {
       console.warn('Firestore sync error for audit event:', err);
+      this.setSyncStatus('Timesheet save failed. Check connection and Firebase permissions, then retry.');
+      throw err;
     }
   }
 
@@ -516,6 +579,8 @@ class TimesheetStore {
       await setDoc(doc(db, FIRESTORE_COLLECTIONS.CORRECTIONS, request.id), sanitizeForFirestore(request), { merge: true });
     } catch (err) {
       console.warn('Firestore sync error for correction request:', err);
+      this.setSyncStatus('Timesheet save failed. Check connection and Firebase permissions, then retry.');
+      throw err;
     }
   }
 
@@ -526,6 +591,8 @@ class TimesheetStore {
       await deleteDoc(doc(db, FIRESTORE_COLLECTIONS.CORRECTIONS, id));
     } catch (err) {
       console.warn('Firestore delete error for correction request:', err);
+      this.setSyncStatus('Timesheet save failed. Check connection and Firebase permissions, then retry.');
+      throw err;
     }
   }
 
@@ -708,6 +775,11 @@ class TimesheetStore {
   }
 
   reset(): void {
+    this.listenerGeneration++;
+    this.unsubscribers.forEach(unsubscribe => unsubscribe());
+    this.unsubscribers = [];
+    this.listening = false;
+    this.initialized = false;
     this.shifts.clear();
     this.guards.clear();
     this.auditEvents = [];

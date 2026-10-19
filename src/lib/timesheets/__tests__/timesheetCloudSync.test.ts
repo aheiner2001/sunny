@@ -6,7 +6,7 @@ const { mockSetDoc, mockDeleteDoc, mockOnSnapshot, snapshotCallbacks } = vi.hois
   return {
     mockSetDoc: vi.fn().mockResolvedValue(undefined),
     mockDeleteDoc: vi.fn().mockResolvedValue(undefined),
-    mockOnSnapshot: vi.fn((col: any, onNext: any, onError: any) => {
+    mockOnSnapshot: vi.fn((col: any, options: any, onNext: any, onError: any) => {
       callbacks.push(onNext);
       return vi.fn();
     }),
@@ -16,7 +16,7 @@ const { mockSetDoc, mockDeleteDoc, mockOnSnapshot, snapshotCallbacks } = vi.hois
 
 vi.mock('@/lib/firebase', () => ({
   db: { _isMock: true },
-  ensureAuth: vi.fn().mockResolvedValue(null),
+  ensureAuth: vi.fn().mockResolvedValue({uid: 'test'}),
 }));
 
 vi.mock('firebase/firestore', () => ({
@@ -78,7 +78,7 @@ describe('Timesheet Store Cloud Firestore Sync', () => {
     const guard: ActiveShiftGuard = {
       employeeId: 'emp-101',
       activeShiftId: 'shift-cloud-1',
-      updatedAt: '2026-10-14T14:00:00.000Z',
+      revision: 1,
     };
 
     await timesheetStore.syncGuardToCloud(guard);
@@ -249,4 +249,36 @@ describe('Timesheet Store Cloud Firestore Sync', () => {
     await timesheetStore.waitForPendingSyncs();
     expect(mockSetDoc).toHaveBeenCalled();
   });
+  it('replaces deleted remote rows even when the server snapshot is empty', async () => {
+    await timesheetStore.setupFirestoreListeners();
+    const emit = snapshotCallbacks[0];
+    emit({ forEach: (cb: any) => cb({ data: () => ({ id: 'stale', status: 'active' }) }) });
+    expect(timesheetStore.getAllShifts()).toHaveLength(1);
+    emit({ empty: true, forEach: () => {} });
+    expect(timesheetStore.getAllShifts()).toHaveLength(0);
+  });
+
+  it('shows listener errors and can restart listeners after failure', async () => {
+    await timesheetStore.setupFirestoreListeners();
+    const onError = mockOnSnapshot.mock.calls[0][3];
+    onError(new Error('permission-denied'));
+    expect(timesheetStore.getSyncStatus()).toContain('Cloud sync failed');
+    await timesheetStore.setupFirestoreListeners();
+    expect(mockOnSnapshot).toHaveBeenCalledTimes(8);
+  });
+
+  it('keeps cloud status unconfirmed until every collection has current server data', async () => {
+    await timesheetStore.setupFirestoreListeners();
+    const emit = (index: number, fromCache: boolean, hasPendingWrites = false) => snapshotCallbacks[index]({
+      metadata: { fromCache, hasPendingWrites }, forEach: () => {},
+    });
+    snapshotCallbacks.forEach((_, index) => emit(index, false));
+    expect(timesheetStore.getSyncStatus()).toBe('Firebase Cloud Sync Active');
+    emit(0, true, true);
+    emit(1, false);
+    expect(timesheetStore.getSyncStatus()).not.toBe('Firebase Cloud Sync Active');
+    emit(0, false);
+    expect(timesheetStore.getSyncStatus()).toBe('Firebase Cloud Sync Active');
+  });
+
 });

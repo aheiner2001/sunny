@@ -28,7 +28,7 @@ export function ensureAuth(): Promise<FirebaseUser | null> {
   if (typeof window === 'undefined') return Promise.resolve(null);
 
   if (!_authReadyPromise) {
-    _authReadyPromise = new Promise((resolve) => {
+    _authReadyPromise = new Promise<FirebaseUser | null>((resolve) => {
       const unsubscribe = onAuthStateChanged(auth, async (user) => {
         unsubscribe();
         if (user) {
@@ -43,6 +43,10 @@ export function ensureAuth(): Promise<FirebaseUser | null> {
           }
         }
       });
+    }).then(user => {
+      // A temporary failure must not disable every later retry until a reload.
+      if (!user) _authReadyPromise = null;
+      return user;
     });
   }
   return _authReadyPromise;

@@ -23,6 +23,7 @@ import {
   Fuel,
   LogOut,
 } from 'lucide-react';
+import { timesheetService } from '@/lib/timesheets/timesheetService';
 import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { Vehicle, ChecklistQuestion, ChecklistCategoryConfig, InspectionResponse, FleetTask, Inspection } from '@/types';
@@ -82,6 +83,19 @@ export default function InspectClient() {
   const [showDraftRecovery, setShowDraftRecovery] = useState(false);
   const [rejectedInspection, setRejectedInspection] = useState<any | null>(null);
   const [occupancyBusy, setOccupancyBusy] = useState(false);
+
+  const [punchAttempt, setPunchAttempt] = useState(0);
+  const [punchStatus, setPunchStatus] = useState<'saving' | 'saved' | 'error'>('saving');
+  useEffect(() => {
+    if (!vehicle?.id || !user?.id || user.role !== 'employee') return;
+    let cancelled = false;
+    setPunchStatus('saving');
+    // Repeated scans preserve the original active shift through the cloud guard.
+    void timesheetService.clockIn(user.id, user.name, 'qr', `inspection-${crypto.randomUUID()}`)
+      .then(() => { if (!cancelled) setPunchStatus('saved'); })
+      .catch(() => { if (!cancelled) setPunchStatus('error'); });
+    return () => { cancelled = true; };
+  }, [vehicle?.id, user?.id, user?.name, user?.role, punchAttempt]);
 
   const loadData = async () => {
     if (!vehicleId) {
@@ -447,6 +461,7 @@ export default function InspectClient() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (user?.role === 'employee' && punchStatus !== 'saved') return;
 
     if (!allRequiredAnswered) {
       return;
@@ -827,6 +842,14 @@ export default function InspectClient() {
 
   return (
     <div className="page max-w-2xl mx-auto space-y-5 pb-12">
+      {user?.role === 'employee' && punchStatus !== 'saved' && (
+        <div className="card card-pad text-sm" role="alert">
+          {punchStatus === 'saving' ? 'Saving your clock-in before inspection submission…' :
+            'Clock-in was not saved. Check your connection and retry before submitting the inspection.'}
+          {punchStatus === 'error' && <button type="button" className="btn btn-secondary btn-sm ml-2"
+            onClick={() => setPunchAttempt(attempt => attempt + 1)}>Retry clock-in</button>}
+        </div>
+      )}
       {/* Offline Sync Banner */}
       {(!isOnline || offlineCount > 0) && (
         <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 sticky top-2 z-20 shadow-sm ${

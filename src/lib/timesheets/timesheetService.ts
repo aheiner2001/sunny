@@ -22,57 +22,46 @@ export class TimesheetService {
     eventId: string,
     timestamp = new Date().toISOString()
   ): Promise<ShiftRecord> {
-    const guard = timesheetStore.getActiveShiftGuard(employeeId);
-    if (guard?.activeShiftId) {
-      const existing = timesheetStore.getShift(guard.activeShiftId);
-      if (existing && existing.status === 'active') {
-        return existing; // Idempotent: preserve existing active shift & start time
-      }
-    }
+    return timesheetStore.transactPunch(employeeId, eventId, (existing) => {
+      if (existing?.status === 'active') return { shift: existing };
 
-    const id = `shift-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const newShift: ShiftRecord = {
-      id,
-      employeeId,
-      employeeName,
-      locationId: 'loc-main',
-      status: 'active',
-      timeZone: DEFAULT_TIMEZONE,
-      startAtUtc: timestamp,
-      endAtUtc: null,
-      unpaidBreakSeconds: 0,
-      startSource: source,
-      endSource: null,
-      startEventId: eventId,
-      endEventId: null,
-      revision: 1,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      submittedAt: null,
-      approvedAt: null,
-      approvedBy: null,
-    };
+      const id = `shift-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const newShift: ShiftRecord = {
+        id,
+        employeeId,
+        employeeName,
+        locationId: 'loc-main',
+        status: 'active',
+        timeZone: DEFAULT_TIMEZONE,
+        startAtUtc: timestamp,
+        endAtUtc: null,
+        unpaidBreakSeconds: 0,
+        startSource: source,
+        endSource: null,
+        startEventId: eventId,
+        endEventId: null,
+        revision: 1,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        submittedAt: null,
+        approvedAt: null,
+        approvedBy: null,
+      };
 
-    timesheetStore.saveShift(newShift);
-    timesheetStore.setActiveShiftGuard(employeeId, id);
-
-    timesheetStore.appendAuditEvent({
-      id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      shiftId: id,
-      actorId: employeeId,
-      actorName: employeeName,
-      action: 'clock_in',
-      beforeValues: null,
-      afterValues: { ...newShift },
-      reason: null,
-      revision: 1,
-      eventId,
-      timestamp,
+      return { shift: newShift, audit: {
+        id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        shiftId: id,
+        actorId: employeeId,
+        actorName: employeeName,
+        action: 'clock_in',
+        beforeValues: null,
+        afterValues: { ...newShift },
+        reason: null,
+        revision: 1,
+        eventId,
+        timestamp,
+      } };
     });
-
-    await timesheetStore.waitForPendingSyncs();
-
-    return newShift;
   }
 
   async clockOut(
@@ -82,68 +71,46 @@ export class TimesheetService {
     unpaidBreakSeconds = 0,
     timestamp?: string
   ): Promise<ShiftRecord> {
-    const existingEnded = timesheetStore.getShiftsByEmployee(employeeId).find((s) => s.endEventId === eventId);
-    if (existingEnded) {
-      return existingEnded; // Idempotent retry on already closed shift
-    }
+    return timesheetStore.transactPunch(employeeId, eventId, (shift) => {
+      if (!shift || shift.status !== 'active') throw new Error('NO_ACTIVE_SHIFT');
 
-    const guard = timesheetStore.getActiveShiftGuard(employeeId);
-    if (!guard?.activeShiftId) {
-      throw new Error('NO_ACTIVE_SHIFT');
-    }
+      let effectiveTimestamp = timestamp ?? new Date().toISOString();
+      if (timestamp === undefined && new Date(effectiveTimestamp).getTime() <= new Date(shift.startAtUtc).getTime()) {
+        effectiveTimestamp = new Date(new Date(shift.startAtUtc).getTime() + 1000).toISOString();
+      }
 
-    const shift = timesheetStore.getShift(guard.activeShiftId);
-    if (!shift || shift.status !== 'active') {
-      throw new Error('NO_ACTIVE_SHIFT');
-    }
+      const validation = validateShiftInterval(shift.startAtUtc, effectiveTimestamp, unpaidBreakSeconds);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
 
-    if (shift.endEventId === eventId) {
-      return shift; // Idempotent retry
-    }
+      const nextRevision = shift.revision + 1;
+      const updated: ShiftRecord = {
+        ...shift,
+        status: 'pending',
+        endAtUtc: effectiveTimestamp,
+        endSource: source,
+        endEventId: eventId,
+        unpaidBreakSeconds,
+        revision: nextRevision,
+        updatedAt: effectiveTimestamp,
+        submittedAt: effectiveTimestamp,
+      };
 
-    let effectiveTimestamp = timestamp ?? new Date().toISOString();
-    if (timestamp === undefined && new Date(effectiveTimestamp).getTime() <= new Date(shift.startAtUtc).getTime()) {
-      effectiveTimestamp = new Date(new Date(shift.startAtUtc).getTime() + 1000).toISOString();
-    }
-
-    const validation = validateShiftInterval(shift.startAtUtc, effectiveTimestamp, unpaidBreakSeconds);
-    if (!validation.valid) {
-      throw new Error(validation.error);
-    }
-
-    const nextRevision = shift.revision + 1;
-    const updated: ShiftRecord = {
-      ...shift,
-      status: 'pending',
-      endAtUtc: effectiveTimestamp,
-      endSource: source,
-      endEventId: eventId,
-      unpaidBreakSeconds,
-      revision: nextRevision,
-      updatedAt: effectiveTimestamp,
-      submittedAt: effectiveTimestamp,
-    };
-
-    timesheetStore.saveShift(updated);
-    timesheetStore.clearActiveShiftGuard(employeeId);
-
-    timesheetStore.appendAuditEvent({
-      id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      shiftId: shift.id,
-      actorId: employeeId,
-      actorName: shift.employeeName,
-      action: 'clock_out',
-      beforeValues: { status: shift.status, endAtUtc: shift.endAtUtc },
-      afterValues: { status: updated.status, endAtUtc: updated.endAtUtc, unpaidBreakSeconds },
-      reason: null,
-      revision: nextRevision,
-      eventId,
-      timestamp: effectiveTimestamp,
+      return { shift: updated, audit: {
+        id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        shiftId: shift.id,
+        actorId: employeeId,
+        actorName: shift.employeeName,
+        action: 'clock_out',
+        beforeValues: { status: shift.status, endAtUtc: shift.endAtUtc },
+        afterValues: { status: updated.status, endAtUtc: updated.endAtUtc, unpaidBreakSeconds },
+        reason: null,
+        revision: nextRevision,
+        eventId,
+        timestamp: effectiveTimestamp,
+      } };
     });
-
-    await timesheetStore.waitForPendingSyncs();
-
-    return updated;
   }
 
   async saveManagerEdit(
