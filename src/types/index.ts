@@ -336,6 +336,8 @@ export interface Inspection {
   deleteRequestNote?: string | null;
   /** Morning checklist vs shop-exit return. Omitted / pretrip = morning. */
   kind?: InspectionKind;
+  /** Historical catch-up checklist, not a work-end timestamp for the submission day. */
+  missedReturnId?: string | null;
 }
 
 export type TaskStatus = 'open' | 'completed';

@@ -3561,6 +3561,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       userEmail: data.userEmail || '',
       status: alerts.length > 0 ? 'issues_found' : 'passed',
       kind: 'return',
+      missedReturnId: data.missedReturnId || null,
       startedAt: data.startedAt && Number.isFinite(Date.parse(data.startedAt)) && Date.parse(data.startedAt) <= now.getTime()
         ? new Date(data.startedAt).toISOString() : nowIso,
       startedAtRecorded: Boolean(data.startedAt && Number.isFinite(Date.parse(data.startedAt)) && Date.parse(data.startedAt) <= now.getTime()),

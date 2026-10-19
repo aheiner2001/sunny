@@ -53,3 +53,15 @@ describe('historical hours evidence', () => {
     expect(() => makeRecoveredShift(build([morning])[0], { id: 'm', name: 'M' })).toThrow();
   });
 });
+
+it('does not use a completed past missed-return checklist as today’s clock-out evidence', () => {
+  const rows = buildHistoricalEstimates([morning, returned], [], [], [
+    { completedReturnInspectionId: returned.id } as any,
+  ]);
+  expect(rows.every(row => row.state !== 'ready')).toBe(true);
+});
+it('keeps recovered source IDs covered after a manager adjusts the imported times', () => {
+  const shift = makeRecoveredShift(build()[0], { id: 'm', name: 'M' });
+  shift.startAtUtc = '2026-10-18T14:00:00Z'; shift.endAtUtc = '2026-10-18T22:00:00Z';
+  expect(build(undefined, [shift])[0].state).toBe('covered');
+});
