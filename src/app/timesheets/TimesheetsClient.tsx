@@ -124,8 +124,11 @@ export default function TimesheetsClient() {
   const [auditShift, setAuditShift] = useState<ShiftRecord | null>(null);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
 
+  const [syncStatus, setSyncStatus] = useState(() => timesheetStore.getSyncStatus());
+
   // Refresh all records from store
   const refreshData = useCallback(() => {
+    setSyncStatus(timesheetStore.getSyncStatus());
     const all = timesheetStore.getAllShifts();
     setShifts(all);
 
@@ -509,28 +512,18 @@ export default function TimesheetsClient() {
             </div>
             <div>
               <p className="font-semibold text-sm sm:text-base flex items-center gap-2">
-                <span>Timesheet Prototype (Isolated Test Environment)</span>
+                <span>Timesheets</span>
                 <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200">
-                  Firebase Cloud Sync Active
+                  {syncStatus}
                 </span>
               </p>
               <p className="text-xs text-emerald-700 dark:text-emerald-300/80">
-                Punches, approvals, corrections, and audit trails are persisted to Cloud Firestore and synchronized in real time.
+                Check cloud status before relying on these hours. Failed clock-ins and clock-outs need a retry.
               </p>
             </div>
           </div>
-          {timesheetStore.getAllShifts().length === 0 && (
-            <button
-              onClick={() => {
-                timesheetStore.seed({ syncToCloud: true });
-                refreshData();
-                setNotification({ type: 'success', message: 'Loaded prototype demo shifts into isolated test store and synced to Firebase.' });
-              }}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors whitespace-nowrap"
-            >
-              Load Demo Shifts
-            </button>
-          )}
+          <button type="button" className="btn btn-secondary btn-sm"
+            onClick={() => { void timesheetStore.setupFirestoreListeners(); }}>Retry cloud sync</button>
         </div>
 
         {/* Notification Toast */}

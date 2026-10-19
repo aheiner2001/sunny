@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 
 // A transactional document store: only publishes writes after the callback succeeds.
-const cloud = vi.hoisted(() => ({ docs: new Map<string, any>(), fail: false, queue: Promise.resolve() }));
+const cloud = vi.hoisted(() => ({ docs: new Map<string, any>(), fail: false, failAfter: false, retry: false, queue: Promise.resolve() }));
 vi.mock('@/lib/firebase', () => ({ db: { _isMock: true }, ensureAuth: vi.fn().mockResolvedValue({ uid: 'test' }) }));
 vi.mock('firebase/firestore', () => ({
   doc: (_db: unknown, col: string, id: string) => `${col}/${id}`,
@@ -11,10 +11,13 @@ vi.mock('firebase/firestore', () => ({
     const result = cloud.queue.then(async () => {
       if (cloud.fail) throw new Error('permission-denied');
       const pending = new Map<string, any>();
-      const value = await callback({
+      const transaction = {
         get: async (key: string) => ({ exists: () => cloud.docs.has(key), data: () => cloud.docs.get(key) }),
         set: (key: string, data: any) => pending.set(key, data),
-      });
+      };
+      if (cloud.retry) { await callback(transaction); pending.clear(); }
+      const value = await callback(transaction);
+      if (cloud.failAfter) throw new Error('commit-failed');
       pending.forEach((value, key) => cloud.docs.set(key, value));
       return value;
     });
@@ -24,7 +27,7 @@ vi.mock('firebase/firestore', () => ({
 }));
 import { timesheetService } from '../timesheetService';
 import { timesheetStore } from '../timesheetStore';
-beforeEach(() => { timesheetStore.reset(); cloud.docs.clear(); cloud.fail = false; cloud.queue = Promise.resolve(); });
+beforeEach(() => { timesheetStore.reset(); cloud.docs.clear(); cloud.fail = false; cloud.failAfter = false; cloud.retry = false; cloud.queue = Promise.resolve(); });
 const start = () => timesheetService.clockIn('driver', 'Driver', 'qr', 'scan-1', '2026-10-19T14:00:00Z');
 it('does not confirm a punch or cache an active shift when persistence fails', async () => {
   cloud.fail = true;
@@ -54,4 +57,19 @@ it('retries an acknowledged return without closing a later shift', async () => {
   const retry = await timesheetService.clockOut('driver', 'checklist_return', 'return-1');
   expect(retry.id).toBe(original.id);
   expect(cloud.docs.get('timesheet_guards/driver').activeShiftId).toBe(later.id);
+});
+
+it('does not publish local shifts when the commit fails after running the callback', async () => {
+  cloud.failAfter = true;
+  await expect(start()).rejects.toThrow('commit-failed');
+  expect(cloud.docs.size).toBe(0);
+  expect(timesheetStore.getAllShifts()).toHaveLength(0);
+});
+it('publishes one shift and audit if Firestore retries the transaction callback', async () => {
+  cloud.retry = true;
+  const shift = await start();
+  expect(timesheetStore.getAllShifts()).toHaveLength(1);
+  expect(timesheetStore.getAllAuditEvents()).toHaveLength(1);
+  expect(Array.from(cloud.docs.keys()).filter(key => key.startsWith('timesheet_shifts/'))).toHaveLength(1);
+  expect(cloud.docs.get('timesheet_guards/driver').activeShiftId).toBe(shift.id);
 });

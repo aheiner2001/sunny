@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Camera, X, Sparkles, AlertCircle, ArrowRight } from 'lucide-react';
+import { clockInScanEmployee } from '@/lib/timesheets/employeeEntry';
 import { dbService } from '@/lib/db';
 import { Vehicle } from '@/types';
 import { useAuth } from '@/context/AuthContext';
@@ -145,15 +146,20 @@ export function QRScannerModal({
     openVehicle(vehicle);
   };
 
-  const openVehicle = (vehicle: Vehicle) => {
-    if (onScanSuccess) {
-      onScanSuccess(vehicle);
-    } else {
-      const activeRole = dbService.getSession()?.role || roleRef.current;
-      const mode = activeRole === 'manager' ? '' : '&mode=employee';
-      router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}${mode}`);
+  const openVehicle = async (vehicle: Vehicle) => {
+    try {
+      await clockInScanEmployee();
+      if (onScanSuccess) {
+        onScanSuccess(vehicle);
+      } else {
+        const activeRole = dbService.getSession()?.role || roleRef.current;
+        const mode = activeRole === 'manager' ? '' : '&mode=employee';
+        router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}${mode}`);
+      }
+      onClose();
+    } catch {
+      setCameraError('Clock-in was not saved. Check your connection and try selecting the vehicle again.');
     }
-    onClose();
   };
 
   const handleManualSubmit = (e: React.FormEvent) => {
