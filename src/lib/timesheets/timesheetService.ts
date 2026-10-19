@@ -1,3 +1,4 @@
+import { overlapsHistoricalHours } from './historicalRecovery';
 import { timesheetStore } from './timesheetStore';
 import {
   calculateNetSeconds,
@@ -134,6 +135,10 @@ export class TimesheetService {
     if (nextEnd) {
       const val = validateShiftInterval(nextStart, nextEnd, nextBreak);
       if (!val.valid) throw new Error(val.error);
+      if (shift.recovery && overlapsHistoricalHours(shift.employeeId, nextStart, nextEnd,
+        timesheetStore.getShiftsByEmployee(shift.employeeId).filter(record => record.id !== shift.id),
+        timesheetStore.getAllCorrectionRequests().filter(request => request.shiftId !== shift.id)))
+        throw new Error('Recovered hours overlap another shift or pending request.');
       const overlap = hasShiftOverlap(timesheetStore.getShiftsByEmployee(shift.employeeId), {
         startAtUtc: nextStart,
         endAtUtc: nextEnd,
@@ -154,8 +159,7 @@ export class TimesheetService {
       managerNote: reason,
     };
 
-    timesheetStore.saveShift(updated);
-    timesheetStore.appendAuditEvent({
+    await timesheetStore.commitShiftWithAudit(updated, {
       id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       shiftId,
       actorId: actor.id,
@@ -168,8 +172,6 @@ export class TimesheetService {
       eventId: `edit-${Date.now()}`,
       timestamp: now,
     });
-
-    await timesheetStore.waitForPendingSyncs();
 
     return updated;
   }
@@ -186,6 +188,11 @@ export class TimesheetService {
     if (actor.id === shift.employeeId) throw new Error('SELF_APPROVAL_DISABLED');
     if (shift.revision !== expectedRevision) throw new Error('STALE_REVISION_CONFLICT');
     if (shift.status === 'active') throw new Error('CANNOT_APPROVE_ACTIVE_SHIFT');
+
+    if (shift.recovery && shift.endAtUtc && !updates && overlapsHistoricalHours(shift.employeeId, shift.startAtUtc, shift.endAtUtc,
+      timesheetStore.getShiftsByEmployee(shift.employeeId).filter(record => record.id !== shift.id),
+      timesheetStore.getAllCorrectionRequests().filter(request => request.shiftId !== shift.id)))
+      throw new Error('Recovered hours overlap another shift or pending request.');
 
     let base = shift;
     if (updates) {
@@ -205,8 +212,7 @@ export class TimesheetService {
       updatedAt: now,
     };
 
-    timesheetStore.saveShift(approved);
-    timesheetStore.appendAuditEvent({
+    await timesheetStore.commitShiftWithAudit(approved, {
       id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       shiftId,
       actorId: actor.id,
@@ -219,8 +225,6 @@ export class TimesheetService {
       eventId: `appr-${Date.now()}`,
       timestamp: now,
     });
-
-    await timesheetStore.waitForPendingSyncs();
 
     return approved;
   }
@@ -246,8 +250,7 @@ export class TimesheetService {
       updatedAt: now,
     };
 
-    timesheetStore.saveShift(updated);
-    timesheetStore.appendAuditEvent({
+    await timesheetStore.commitShiftWithAudit(updated, {
       id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       shiftId,
       actorId: actor.id,
@@ -260,8 +263,6 @@ export class TimesheetService {
       eventId: `ret-${Date.now()}`,
       timestamp: now,
     });
-
-    await timesheetStore.waitForPendingSyncs();
 
     return updated;
   }

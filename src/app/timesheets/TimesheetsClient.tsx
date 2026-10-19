@@ -25,6 +25,7 @@ import {
   Pencil,
   Cloud,
 } from 'lucide-react';
+import HistoricalHoursRecovery from './HistoricalHoursRecovery';
 import { useAuth } from '@/context/AuthContext';
 import { timesheetService } from '@/lib/timesheets/timesheetService';
 import { timesheetStore } from '@/lib/timesheets/timesheetStore';
@@ -831,7 +832,7 @@ export default function TimesheetsClient() {
                             <td className="py-3.5 px-4 font-semibold text-slate-800 dark:text-slate-200">
                               {shift.endAtUtc ? `${formatSecondsToHours(netSecs)} hrs` : 'In Progress'}
                             </td>
-                            <td className="py-3.5 px-4">{renderSourceBadge(shift.startSource)}</td>
+                            <td className="py-3.5 px-4">{shift.recovery ? <span className="text-xs text-amber-700 dark:text-amber-300">Estimated from inspections</span> : renderSourceBadge(shift.startSource)}</td>
                             <td className="py-3.5 px-4">{renderStatusBadge(shift.status)}</td>
                             <td className="py-3.5 px-4 text-right">
                               <div className="flex items-center justify-end gap-2">
@@ -883,7 +884,7 @@ export default function TimesheetsClient() {
                             <span className="text-slate-400 mr-1">Break:</span>
                             <span>{Math.round(shift.unpaidBreakSeconds / 60)}m</span>
                           </div>
-                          <div>{renderSourceBadge(shift.startSource)}</div>
+                          <div>{shift.recovery ? <span className="text-xs text-amber-700 dark:text-amber-300">Estimated from inspections</span> : renderSourceBadge(shift.startSource)}</div>
                         </div>
                         {shift.managerNote && (
                           <div className="p-2 rounded bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 text-xs">
@@ -917,6 +918,8 @@ export default function TimesheetsClient() {
         ) : (
           /* Manager Review View */
           <div className="space-y-4">
+            {isManager && user && <HistoricalHoursRecovery actor={{ id: user.id, name: user.name }}
+              weekStartUtc={weekStartUtc} weekEndUtc={weekEndUtc} />}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <Shield className="w-5 h-5 text-indigo-600" />
@@ -1025,7 +1028,7 @@ export default function TimesheetsClient() {
                             <td className="py-3.5 px-4 font-semibold">
                               {shift.endAtUtc ? `${formatSecondsToHours(netSecs)} hrs` : 'In Progress'}
                             </td>
-                            <td className="py-3.5 px-4">{renderSourceBadge(shift.startSource)}</td>
+                            <td className="py-3.5 px-4">{shift.recovery ? <span className="text-xs text-amber-700 dark:text-amber-300">Estimated from inspections</span> : renderSourceBadge(shift.startSource)}</td>
                             <td className="py-3.5 px-4">{renderStatusBadge(shift.status)}</td>
                             <td className="py-3.5 px-4 text-right">
                               <div className="flex items-center justify-end gap-2">
@@ -1430,6 +1433,10 @@ export default function TimesheetsClient() {
               </button>
             </div>
 
+            {managerEditShift.recovery && <p className="text-sm text-amber-700 dark:text-amber-300">
+              Estimated historical hours. Confirm the employee’s actual start, end and unpaid breaks before approval.
+              {managerEditShift.managerNote}
+            </p>}
             <form onSubmit={handleSaveManagerEdit} className="space-y-4">
               <div>
                 <label htmlFor="edit-start" className="block text-xs font-semibold text-slate-500 mb-1">

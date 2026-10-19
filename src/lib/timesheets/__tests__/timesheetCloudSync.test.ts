@@ -25,6 +25,9 @@ vi.mock('firebase/firestore', () => ({
   setDoc: mockSetDoc,
   deleteDoc: mockDeleteDoc,
   onSnapshot: mockOnSnapshot,
+  runTransaction: vi.fn(async (_db: any, callback: any) => callback({
+    get: async () => ({ exists: () => false }), set: mockSetDoc,
+  })),
   getDocs: vi.fn().mockResolvedValue({ empty: true, forEach: vi.fn() }),
 }));
 

@@ -1,4 +1,7 @@
 import type { ShiftRecord, CorrectionRequest, AuditEvent, ActiveShiftGuard } from './types';
+import type { Inspection, MissedReturn } from '@/types';
+import { buildHistoricalEstimates, overlapsHistoricalHours } from './historicalRecovery';
+import { validateShiftInterval } from './timeCalculations';
 import { db, ensureAuth } from '@/lib/firebase';
 import {
   collection,
@@ -6,8 +9,11 @@ import {
   setDoc,
   deleteDoc,
   onSnapshot,
-  getDocs,
+  getDocsFromServer,
   runTransaction,
+  getDoc,
+  query,
+  where,
 } from 'firebase/firestore';
 
 export const TIMESHEET_STORAGE_KEYS = {
@@ -504,6 +510,92 @@ class TimesheetStore {
     }
   }
 
+  /** Import a reviewed estimate without ever punching or closing the employee's current shift. */
+  public async saveRecoveredShift(shift: ShiftRecord): Promise<ShiftRecord> {
+    if (shift.status !== 'pending' || !shift.recovery || !shift.endAtUtc ||
+      shift.approvedAt || shift.approvedBy ||
+      !validateShiftInterval(shift.startAtUtc, shift.endAtUtc, shift.unpaidBreakSeconds).valid)
+      throw new Error('Invalid historical estimate.');
+    const audit: AuditEvent = {
+      id: `recovery-${shift.id}`, shiftId: shift.id, actorId: shift.recovery.recoveredBy,
+      actorName: shift.recovery.recoveredByName, action: 'recover_estimate', beforeValues: null, afterValues: { ...shift },
+      reason: shift.managerNote || 'Estimated historical hours awaiting manager review', revision: 1,
+      eventId: shift.id, timestamp: shift.createdAt,
+    };
+    const check = (shifts: ShiftRecord[], corrections: CorrectionRequest[]) => {
+      if (shifts.some(existing => existing.id === shift.id ||
+        existing.recovery?.inspectionId === shift.recovery!.inspectionId ||
+        existing.recovery?.returnInspectionId === shift.recovery!.returnInspectionId))
+        throw new Error('This inspection or return has already been recovered.');
+      if (overlapsHistoricalHours(shift.employeeId, shift.startAtUtc, shift.endAtUtc!, shifts, corrections))
+        throw new Error('Existing hours or a pending request overlap this estimate. Refresh and review them first.');
+    };
+    if (!this.isCloudSyncEnabled() || !db) {
+      check(this.getAllShifts(), this.getAllCorrectionRequests());
+      this.saveShift(shift);
+      this.appendAuditEvent(audit);
+      return { ...shift };
+    }
+    this.setSyncStatus('Saving historical estimate…');
+    try {
+      if (!await ensureAuth()) throw new Error('Firebase authentication unavailable. Please retry.');
+      const guardRef = doc(db, FIRESTORE_COLLECTIONS.GUARDS, shift.employeeId);
+      // All punch/recovery transactions update this guard revision. Reject a stale preview if it changed.
+      const beforeGuard = await getDoc(guardRef);
+      const revision = beforeGuard.exists() ? beforeGuard.data().revision || 0 : 0;
+      const [remoteShifts, remoteCorrections] = await Promise.all([
+        getDocsFromServer(query(collection(db, FIRESTORE_COLLECTIONS.SHIFTS), where('employeeId', '==', shift.employeeId))),
+        getDocsFromServer(query(collection(db, FIRESTORE_COLLECTIONS.CORRECTIONS), where('employeeId', '==', shift.employeeId))),
+      ]);
+      const [sourceSnapshot, missedSnapshot] = await Promise.all([
+        getDocsFromServer(query(collection(db, 'inspections'), where('userId', '==', shift.employeeId))),
+        getDocsFromServer(query(collection(db, 'missedReturns'), where('userId', '==', shift.employeeId))),
+      ]);
+      const evidence: Inspection[] = [], missed: MissedReturn[] = [];
+      sourceSnapshot.forEach(record => evidence.push(record.data() as Inspection));
+      missedSnapshot.forEach(record => missed.push(record.data() as MissedReturn));
+      const confirmed = buildHistoricalEstimates(evidence, [], [], missed).find(row => row.inspectionId === shift.recovery!.inspectionId);
+      if (!confirmed || confirmed.state !== 'ready' || confirmed.returnInspectionId !== shift.recovery.returnInspectionId ||
+        confirmed.startAtUtc !== shift.startAtUtc || confirmed.endAtUtc !== shift.endAtUtc)
+        throw new Error('Inspection evidence changed or cannot be confirmed. Refresh and review the source records.');
+      const shifts: ShiftRecord[] = [], corrections: CorrectionRequest[] = [];
+      remoteShifts.forEach(record => shifts.push(record.data() as ShiftRecord));
+      remoteCorrections.forEach(record => corrections.push(record.data() as CorrectionRequest));
+      check(shifts, corrections);
+      await runTransaction(db, async transaction => {
+        const target = doc(db!, FIRESTORE_COLLECTIONS.SHIFTS, shift.id);
+        const existing = await transaction.get(target);
+        const guard = await transaction.get(guardRef);
+        // Read source documents inside the transaction so rejection/deletion/time edits invalidate the import.
+        for (const sourceId of [shift.recovery!.inspectionId, shift.recovery!.returnInspectionId]) {
+          const source = await transaction.get(doc(db!, 'inspections', sourceId));
+          const expected = evidence.find(record => record.id === sourceId);
+          const fingerprint = (record: Inspection) => JSON.stringify([record.id, record.userId, record.vehicleId,
+            record.kind, record.status, record.startedAt, record.startedAtRecorded, record.submittedAt,
+            record.submittedById, record.missedReturnId]);
+          if (!source.exists() || !expected || fingerprint(source.data() as Inspection) !== fingerprint(expected))
+            throw new Error('Inspection evidence changed. Refresh and review before recovering hours.');
+        }
+        if (existing.exists()) throw new Error('This estimate has already been recovered.');
+        if ((guard.exists() ? guard.data().revision || 0 : 0) !== revision)
+          throw new Error('Timesheets changed while recovering hours. Refresh and try again.');
+        transaction.set(target, sanitizeForFirestore(shift));
+        transaction.set(doc(db!, FIRESTORE_COLLECTIONS.AUDIT, audit.id), sanitizeForFirestore(audit));
+        transaction.set(guardRef, { employeeId: shift.employeeId,
+          activeShiftId: guard.exists() ? guard.data().activeShiftId || null : null, revision: revision + 1 });
+      });
+      this.shifts.set(shift.id, { ...shift });
+      this.auditEvents.push(audit);
+      this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.SHIFTS, Array.from(this.shifts.values()));
+      this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.AUDIT, this.auditEvents);
+      this.setSyncStatus('Historical estimate saved — awaiting manager approval');
+      return { ...shift };
+    } catch (error) {
+      this.setSyncStatus('Historical estimate was not saved. Check the error and retry.');
+      throw error;
+    }
+  }
+
   private syncStatus = 'Connecting to Firebase…';
   public getSyncStatus(): string {
     return this.isCloudSyncEnabled() ? this.syncStatus : 'Local only — cloud sync unavailable';
@@ -523,12 +615,68 @@ class TimesheetStore {
     await Promise.all(Array.from(this.pendingSyncs));
   }
 
+  public async commitShiftWithAudit(shift: ShiftRecord, audit: AuditEvent): Promise<void> {
+    if (!shift.recovery || !this.isCloudSyncEnabled() || !db) {
+      this.saveShift(shift);
+      this.appendAuditEvent(audit);
+      await this.waitForPendingSyncs();
+      return;
+    }
+    this.setSyncStatus('Saving recovered hours review…');
+    try {
+      await this.syncEmployeeRecord(FIRESTORE_COLLECTIONS.SHIFTS, shift.id, shift.employeeId, shift, shift, audit);
+      this.shifts.set(shift.id, { ...shift });
+      this.auditEvents.push(audit);
+      this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.SHIFTS, Array.from(this.shifts.values()));
+      this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.AUDIT, this.auditEvents);
+      this.setSyncStatus('Recovered hours review saved');
+    } catch (error) {
+      this.setSyncStatus('Review was not saved. Refresh and retry.');
+      throw error;
+    }
+  }
+
+  private async syncEmployeeRecord(collectionName: string, id: string, employeeId: string,
+    value: ShiftRecord | CorrectionRequest, recoveredShift?: ShiftRecord, audit?: AuditEvent): Promise<void> {
+    if (!this.isCloudSyncEnabled() || !db) return;
+    if (!await ensureAuth()) throw new Error('Firebase authentication unavailable. Please retry.');
+    const guardRef = doc(db, FIRESTORE_COLLECTIONS.GUARDS, employeeId);
+    let expectedRevision: number | undefined;
+    if (recoveredShift?.endAtUtc) {
+      const before = await getDoc(guardRef);
+      expectedRevision = before.exists() ? before.data().revision || 0 : 0;
+      const [shiftDocs, correctionDocs] = await Promise.all([
+        getDocsFromServer(query(collection(db, FIRESTORE_COLLECTIONS.SHIFTS), where('employeeId', '==', employeeId))),
+        getDocsFromServer(query(collection(db, FIRESTORE_COLLECTIONS.CORRECTIONS), where('employeeId', '==', employeeId))),
+      ]);
+      const shifts: ShiftRecord[] = [], corrections: CorrectionRequest[] = [];
+      shiftDocs.forEach(record => { const shift = record.data() as ShiftRecord; if (shift.id !== id) shifts.push(shift); });
+      correctionDocs.forEach(record => { const request = record.data() as CorrectionRequest; if (request.shiftId !== id) corrections.push(request); });
+      if (overlapsHistoricalHours(employeeId, recoveredShift.startAtUtc, recoveredShift.endAtUtc, shifts, corrections))
+        throw new Error('Recovered hours overlap another shift or pending request.');
+    }
+    await runTransaction(db, async transaction => {
+      const guard = await transaction.get(guardRef);
+      if (recoveredShift) {
+        const current = await transaction.get(doc(db!, collectionName, id));
+        if (!current.exists() || current.data().revision !== recoveredShift.revision - 1)
+          throw new Error('Shift changed. Refresh before editing or approving.');
+      }
+      const revision = guard.exists() ? guard.data().revision || 0 : 0;
+      if (expectedRevision !== undefined && expectedRevision !== revision)
+        throw new Error('Timesheets changed. Refresh and review before saving recovered hours.');
+      transaction.set(doc(db!, collectionName, id), sanitizeForFirestore(value), { merge: true });
+      if (audit) transaction.set(doc(db!, FIRESTORE_COLLECTIONS.AUDIT, audit.id), sanitizeForFirestore(audit));
+      transaction.set(guardRef, { employeeId,
+        activeShiftId: guard.exists() ? guard.data().activeShiftId || null : null, revision: revision + 1 });
+    });
+  }
+
   // Cloud Sync Workers
   public async syncShiftToCloud(shift: ShiftRecord): Promise<void> {
     if (!this.isCloudSyncEnabled() || !db) return;
     try {
-      await ensureAuth();
-      await setDoc(doc(db, FIRESTORE_COLLECTIONS.SHIFTS, shift.id), sanitizeForFirestore(shift), { merge: true });
+      await this.syncEmployeeRecord(FIRESTORE_COLLECTIONS.SHIFTS, shift.id, shift.employeeId, shift, shift.recovery ? shift : undefined);
     } catch (err) {
       console.warn('Firestore sync error for shift:', err);
       this.setSyncStatus('Timesheet save failed. Check connection and Firebase permissions, then retry.');
@@ -575,8 +723,7 @@ class TimesheetStore {
   public async syncCorrectionToCloud(request: CorrectionRequest): Promise<void> {
     if (!this.isCloudSyncEnabled() || !db) return;
     try {
-      await ensureAuth();
-      await setDoc(doc(db, FIRESTORE_COLLECTIONS.CORRECTIONS, request.id), sanitizeForFirestore(request), { merge: true });
+      await this.syncEmployeeRecord(FIRESTORE_COLLECTIONS.CORRECTIONS, request.id, request.employeeId, request);
     } catch (err) {
       console.warn('Firestore sync error for correction request:', err);
       this.setSyncStatus('Timesheet save failed. Check connection and Firebase permissions, then retry.');
