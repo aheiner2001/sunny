@@ -16,7 +16,6 @@ import { dbService } from '@/lib/db';
 import { Vehicle } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { PasscodePrompt } from '@/components/PasscodeGate';
-import { clockInScanEmployee } from '@/lib/timesheets/employeeEntry';
 
 export default function ScanPage() {
   const router = useRouter();
@@ -27,8 +26,6 @@ export default function ScanPage() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState('');
   const [pendingVehicle, setPendingVehicle] = useState<Vehicle | null>(null);
-  const [punchVehicle, setPunchVehicle] = useState<Vehicle | null>(null);
-  const punchVehicleRef = useRef<Vehicle | null>(null);
   const scannerRef = useRef<any>(null);
   const roleRef = useRef(role);
 
@@ -72,7 +69,6 @@ export default function ScanPage() {
 
     return () => {
       isMounted = false;
-      punchVehicleRef.current = null;
       clearTimeout(timer);
       if (scannerRef.current) {
         try {
@@ -123,38 +119,15 @@ export default function ScanPage() {
     openVehicle(vehicle);
   };
 
-  const continueToInspection = (vehicle: Vehicle) => {
-    // Clear first so a late punch response cannot navigate a second time.
-    if (punchVehicleRef.current !== vehicle) return;
-    punchVehicleRef.current = null;
-    setPunchVehicle(null);
+  const openVehicle = (vehicle: Vehicle) => {
+    // Checklist entry owns clock-in; never start a second scanner punch.
     const activeRole = dbService.getSession()?.role || roleRef.current;
     const mode = activeRole === 'manager' ? '' : '&mode=employee';
     router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}${mode}`);
   };
 
-  const openVehicle = async (vehicle: Vehicle) => {
-    punchVehicleRef.current = vehicle;
-    setPunchVehicle(vehicle);
-    try {
-      await clockInScanEmployee();
-      continueToInspection(vehicle);
-    } catch {
-      if (punchVehicleRef.current === vehicle) {
-        setScanError('Clock-in was not saved. Continue to the inspection, then retry clock-in there or request missing hours in Timesheets.');
-      }
-    }
-  };
-
   return (
     <div className="page max-w-xl mx-auto">
-      {punchVehicle && (
-        <div className="card card-pad text-sm" role="status">
-          <p>Clock-in is being attempted. You can continue to the inspection now.</p>
-          <button type="button" className="btn btn-secondary btn-sm mt-2"
-            onClick={() => continueToInspection(punchVehicle)}>Continue to inspection</button>
-        </div>
-      )}
       {scanError ? <div className="card card-pad text-sm text-[var(--critical)]" role="alert">{scanError}</div> : null}
       <div className="spread">
         <Link href="/dashboard" className="btn btn-secondary btn-sm">

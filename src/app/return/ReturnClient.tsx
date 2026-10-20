@@ -226,18 +226,22 @@ export default function ReturnClient() {
         responses: payload,
         missedReturnId: missed?.id || null,
       });
-      const jobs = Math.max(0, Math.floor(Number(jobsCompleted) || 0));
-      await dbService.setVehicleJobsToday(vehicle.id, jobs, {
-        id: user.id,
-        name: user.name,
-      });
+      // The checklist is already saved. Neither payroll nor the job-count update
+      // may hide that success or prevent the employee's clock-out from starting.
+      setReturnedVehicle(vehicle.vehicleNumber);
       if (!isCatchUp && user.role === 'employee' && vehicle.currentUserId === user.id) {
         clockOutRetry.current = { employeeId: user.id, eventId: `return-${returnInspection.id}`, timestamp: new Date().toISOString() };
-        await finishTimesheet();
+        setTimesheetNotice({ type: 'info', message: 'Vehicle return saved. Confirming clock-out…' });
+        void finishTimesheet();
       } else {
         setTimesheetNotice({ type: 'info', message: 'Vehicle return saved. Timesheet hours were not changed for this return; review any missing hours in Timesheets.' });
       }
-      setReturnedVehicle(vehicle.vehicleNumber);
+      const jobs = Math.max(0, Math.floor(Number(jobsCompleted) || 0));
+      try {
+        await dbService.setVehicleJobsToday(vehicle.id, jobs, { id: user.id, name: user.name });
+      } catch {
+        setError('Your return checklist was saved, but the job count was not updated. Tell your manager.');
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Could not submit return.';
       setError(message);
@@ -261,6 +265,8 @@ export default function ReturnClient() {
           <CheckCircle2 className="w-10 h-10 mx-auto text-[var(--ok)]" />
           <h1 className="card-title">Returned — {returnedVehicle} available.</h1>
           <p className="hint">Occupancy is cleared. The van is ready for the next driver.</p>
+
+          {error && <p className="text-sm text-[var(--critical)]" role="alert">{error}</p>}
 
           {timesheetNotice?.type === 'success' && (
             <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 text-left">

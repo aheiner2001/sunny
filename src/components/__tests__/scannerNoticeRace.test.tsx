@@ -22,15 +22,18 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
-it.each(['success', 'failure'] as const)('preserves the clock-in warning when delayed camera startup ends in %s', async outcome => {
+it.each(['success', 'failure'] as const)('never makes camera startup or a failed punch delay inspection entry when startup ends in %s', async outcome => {
   mock.start.mockImplementation(() => outcome === 'success' ? Promise.resolve() : Promise.reject(new Error('camera-denied')));
   render(<QRScannerModal isOpen onClose={() => {}} />);
-  // Clock-in fails before the camera's 150ms initialization timer fires.
+  // Selection navigates before either asynchronous clock-in or camera startup settles.
   await act(async () => fireEvent.click(screen.getByRole('button', { name: /101/ })));
-  expect(screen.getByText(/clock-in was not saved/i)).toBeTruthy();
+  expect(mock.push).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('button', { name: 'Continue to inspection' })).toBeNull();
   await act(async () => { await vi.advanceTimersByTimeAsync(150); });
   expect(mock.start).toHaveBeenCalledTimes(1);
-  expect(screen.getByText(/clock-in was not saved/i)).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: 'Continue to inspection' }));
+  expect(mock.push).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('button', { name: 'Continue to inspection' })).toBeNull();
+
   expect(mock.push).toHaveBeenCalledWith('/inspect?id=van&mode=employee');
+  expect(mock.clockIn).not.toHaveBeenCalled();
 });

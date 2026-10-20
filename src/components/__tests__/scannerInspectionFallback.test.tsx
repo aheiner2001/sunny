@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, screen, waitFor, cleanup, act } from '@testing-library/react';
+import { render, fireEvent, screen, cleanup } from '@testing-library/react';
 import { beforeEach, afterEach, it, expect, vi, describe } from 'vitest';
 const mock = vi.hoisted(() => ({ push: vi.fn(), clockIn: vi.fn(), close: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mock.push }) }));
@@ -14,8 +14,8 @@ vi.mock('@/lib/db', () => ({ dbService: {
 vi.mock('@/lib/timesheets/timesheetService', () => ({ timesheetService: { clockIn: mock.clockIn } }));
 import { QRScannerModal } from '../QRScannerModal';
 import ScanPage from '@/app/scan/page';
-beforeEach(() => { vi.clearAllMocks(); });
-afterEach(cleanup);
+beforeEach(() => { vi.clearAllMocks(); vi.spyOn(console, 'warn').mockImplementation(() => {}); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 for (const surface of ['modal', 'page'] as const) describe(surface, () => {
   it.each(['failed', 'pending'] as const)('lets the employee open the inspection when clock-in is %s', async status => {
     let finish!: () => void;
@@ -23,27 +23,27 @@ for (const surface of ['modal', 'page'] as const) describe(surface, () => {
       new Promise<void>(resolve => { finish = resolve; }));
     render(surface === 'modal' ? <QRScannerModal isOpen onClose={mock.close} /> : <ScanPage />);
     fireEvent.click(screen.getByRole('button', { name: /101/ }));
-    await waitFor(() => expect(mock.clockIn).toHaveBeenCalled());
-    if (status === 'failed') await screen.findByText(/clock-in was not saved/i);
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue to inspection' }));
+    expect(mock.clockIn).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Continue to inspection' })).toBeNull();
     expect(mock.push).toHaveBeenCalledWith('/inspect?id=van-1&mode=employee');
     expect(mock.push).toHaveBeenCalledTimes(1);
     if (status === 'pending') {
-      await act(async () => finish());
+      expect(finish).toBeUndefined();
       expect(mock.push).toHaveBeenCalledTimes(1);
     }
     if (surface === 'modal') expect(mock.close).toHaveBeenCalledTimes(1);
   });
 });
 
-it.each(['modal', 'page'] as const)('does not navigate from a late punch after leaving the %s', async surface => {
+it.each(['modal', 'page'] as const)('starts no scanner punch that can navigate after leaving the %s', async surface => {
   let finish!: () => void;
-  mock.clockIn.mockReturnValue(new Promise<void>(resolve => { finish = resolve; }));
+  mock.clockIn.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
   const view = render(surface === 'modal' ? <QRScannerModal isOpen onClose={mock.close} /> : <ScanPage />);
   fireEvent.click(screen.getByRole('button', { name: /101/ }));
-  await waitFor(() => expect(mock.clockIn).toHaveBeenCalled());
+  expect(mock.clockIn).not.toHaveBeenCalled();
+  expect(mock.push).toHaveBeenCalledTimes(1);
   view.unmount();
-  await act(async () => finish());
-  expect(mock.push).not.toHaveBeenCalled();
-  expect(mock.close).not.toHaveBeenCalled();
+  expect(finish).toBeUndefined();
+  expect(mock.push).toHaveBeenCalledTimes(1);
+  expect(mock.close).toHaveBeenCalledTimes(surface === 'modal' ? 1 : 0);
 });

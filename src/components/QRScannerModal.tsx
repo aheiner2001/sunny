@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Camera, X, Sparkles, AlertCircle, ArrowRight } from 'lucide-react';
-import { clockInScanEmployee } from '@/lib/timesheets/employeeEntry';
 import { dbService } from '@/lib/db';
 import { Vehicle } from '@/types';
 import { useAuth } from '@/context/AuthContext';
@@ -23,11 +22,8 @@ export function QRScannerModal({
   const roleRef = useRef(role);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [punchError, setPunchError] = useState<string | null>(null);
   const [manualInput, setManualInput] = useState('');
   const [pendingVehicle, setPendingVehicle] = useState<Vehicle | null>(null);
-  const [punchVehicle, setPunchVehicle] = useState<Vehicle | null>(null);
-  const punchVehicleRef = useRef<Vehicle | null>(null);
   const scannerRef = useRef<any>(null);
   const scannerContainerId = 'qr-reader-container';
 
@@ -54,9 +50,6 @@ export function QRScannerModal({
 
   useEffect(() => {
     if (!isOpen) {
-      punchVehicleRef.current = null;
-      setPunchVehicle(null);
-      setPunchError(null);
       void stopScanner();
       return;
     }
@@ -97,7 +90,6 @@ export function QRScannerModal({
 
     return () => {
       isMounted = false;
-      punchVehicleRef.current = null;
       clearTimeout(timer);
       void stopScanner();
     };
@@ -153,10 +145,8 @@ export function QRScannerModal({
     openVehicle(vehicle);
   };
 
-  const continueToInspection = (vehicle: Vehicle) => {
-    if (punchVehicleRef.current !== vehicle) return;
-    punchVehicleRef.current = null;
-    setPunchVehicle(null);
+  const openVehicle = (vehicle: Vehicle) => {
+    // Checklist entry owns clock-in; navigation has no payroll dependency.
     if (onScanSuccess) {
       onScanSuccess(vehicle);
     } else {
@@ -165,20 +155,6 @@ export function QRScannerModal({
       router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}${mode}`);
     }
     onClose();
-  };
-
-  const openVehicle = async (vehicle: Vehicle) => {
-    punchVehicleRef.current = vehicle;
-    setPunchVehicle(vehicle);
-    setPunchError(null);
-    try {
-      await clockInScanEmployee();
-      continueToInspection(vehicle);
-    } catch {
-      if (punchVehicleRef.current === vehicle) {
-        setPunchError('Clock-in was not saved. Continue to the inspection, then retry clock-in there or request missing hours in Timesheets.');
-      }
-    }
   };
 
   const handleManualSubmit = (e: React.FormEvent) => {
@@ -197,16 +173,6 @@ export function QRScannerModal({
         aria-modal="true"
         aria-labelledby="qr-scanner-title"
       >
-        {punchError && (
-          <p className="card-pad text-sm text-[var(--critical)]" role="alert">{punchError}</p>
-        )}
-        {punchVehicle && (
-          <div className="card-pad text-sm" role="status">
-            <p>Automatic clock-in is being attempted. You can continue to the inspection now.</p>
-            <button type="button" className="btn btn-secondary btn-sm mt-2"
-              onClick={() => continueToInspection(punchVehicle)}>Continue to inspection</button>
-          </div>
-        )}
         <div className="card-head bg-ink text-ink-inverse">
           <div className="cluster">
             <span className="icon-tile bg-hivis text-ink" aria-hidden>
