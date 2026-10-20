@@ -707,7 +707,7 @@ export default function MaintenanceAnalytics() {
           </p>
         </div>
       </div>
-      <EquipmentServicePanel key={String(demo)} items={items} demo={demo} actor={equipmentActor} onSampleChange={updateSampleEquipment} onSaved={refreshData} />
+      <EquipmentServicePanel embedded key={String(demo)} items={items} demo={demo} actor={equipmentActor} onSampleChange={updateSampleEquipment} onSaved={refreshData} />
     </>),
   };
   return (
