@@ -32,7 +32,30 @@ vi.mock('firebase/firestore', () => ({
 }));
 
 // Import after mocks are established
+import { runTransaction } from 'firebase/firestore';
 import { timesheetStore, FIRESTORE_COLLECTIONS } from '../timesheetStore';
+
+const sampleShift = (): ShiftRecord => ({
+  id: 'shift-save-1',
+  employeeId: 'emp-101',
+  employeeName: 'Alice',
+  locationId: 'loc-main',
+  status: 'active',
+  timeZone: 'America/Denver',
+  startAtUtc: '2026-10-14T14:00:00.000Z',
+  endAtUtc: null,
+  unpaidBreakSeconds: 0,
+  startSource: 'qr',
+  endSource: null,
+  startEventId: 'evt-save-1',
+  endEventId: null,
+  revision: 1,
+  createdAt: '2026-10-14T14:00:00.000Z',
+  updatedAt: '2026-10-14T14:00:00.000Z',
+  submittedAt: null,
+  approvedAt: null,
+  approvedBy: null,
+});
 
 describe('Timesheet Store Cloud Firestore Sync', () => {
   beforeEach(() => {
@@ -286,6 +309,43 @@ describe('Timesheet Store Cloud Firestore Sync', () => {
     onError(new Error('network-request-failed'));
     expect(timesheetStore.getSyncStatus()).toContain('Cloud sync failed');
     expect(timesheetStore.getSyncStatus()).not.toMatch(/Console rules/i);
+  });
+
+  it('classifies permission-denied failures when syncShiftToCloud save fails', async () => {
+    vi.mocked(runTransaction).mockRejectedValueOnce({
+      code: 'permission-denied',
+      message: 'Missing or insufficient permissions.',
+    });
+    await expect(timesheetStore.syncShiftToCloud(sampleShift())).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+    expect(timesheetStore.getSyncStatus()).toContain('Timesheet save failed');
+    expect(timesheetStore.getSyncStatus()).toMatch(/permission/i);
+    expect(timesheetStore.getSyncStatus()).toMatch(/Firebase|rules|Console/i);
+  });
+
+  it('classifies connection failures when transactPunch save fails', async () => {
+    vi.mocked(runTransaction).mockRejectedValueOnce(new Error('network-request-failed'));
+    const shift = sampleShift();
+    await expect(
+      timesheetStore.transactPunch('emp-101', 'evt-save-1', () => ({
+        shift,
+        audit: {
+          id: 'aud-save-1',
+          shiftId: shift.id,
+          actorId: 'emp-101',
+          actorName: 'Alice',
+          action: 'clock_in',
+          beforeValues: null,
+          afterValues: null,
+          reason: null,
+          revision: 1,
+          eventId: 'evt-save-1',
+          timestamp: '2026-10-14T14:00:00.000Z',
+        },
+      })),
+    ).rejects.toThrow('network-request-failed');
+    expect(timesheetStore.getSyncStatus()).toBe('Timesheet save failed. Check connection, then retry.');
   });
 
   it('keeps cloud status unconfirmed until every collection has current server data', async () => {
