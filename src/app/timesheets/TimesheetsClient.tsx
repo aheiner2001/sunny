@@ -128,7 +128,11 @@ export default function TimesheetsClient() {
   const [syncStatus, setSyncStatus] = useState(() => timesheetStore.getSyncStatus());
 
   const isSyncDegraded = useMemo(
-    () => /failed|cached|\bwaiting\b|unavailable|permission/i.test(syncStatus),
+    () => /failed|cached|\bwaiting\b|unavailable|permission|was not saved/i.test(syncStatus),
+    [syncStatus],
+  );
+  const isCloudSyncFailure = useMemo(
+    () => /cloud sync failed|cloud sync unavailable|permission/i.test(syncStatus),
     [syncStatus],
   );
 
@@ -1020,7 +1024,9 @@ export default function TimesheetsClient() {
                 <div className="p-8 text-center rounded-xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/50 text-slate-600 dark:text-slate-300 space-y-2">
                   <AlertTriangle className="w-10 h-10 mx-auto text-amber-500 opacity-80" />
                   <p className="font-medium">
-                    No timesheets loaded. Cloud sync failed — retry or check Firebase permissions.
+                    {isCloudSyncFailure
+                      ? 'No timesheets loaded. Cloud sync failed — retry or check Firebase permissions.'
+                      : 'No timesheets are confirmed yet. Retry cloud sync to check for team hours.'}
                   </p>
                 </div>
               ) : (

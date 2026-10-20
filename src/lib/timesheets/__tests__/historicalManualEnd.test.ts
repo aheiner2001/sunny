@@ -1,6 +1,10 @@
 import { expect, it } from 'vitest';
 import type { Inspection } from '@/types';
-import { buildHistoricalEstimates, makeManualEndRecoveredShift } from '../historicalRecovery';
+import {
+  buildHistoricalEstimates,
+  isMissingReturnManualEndEligible,
+  makeManualEndRecoveredShift,
+} from '../historicalRecovery';
 
 const pretripOnly = [{
   id: 'pre-1', userId: 'driver', userName: 'Driver', vehicleId: 'van',
@@ -17,12 +21,28 @@ it('flags pretrip-without-return as attention with missing return', () => {
 
 it('builds a pending recovered shift from manager end time', () => {
   const [row] = buildHistoricalEstimates(pretripOnly, []);
+  expect(isMissingReturnManualEndEligible(row)).toBe(true);
   const shift = makeManualEndRecoveredShift(row, '2026-10-12T22:00:00.000Z', { id: 'm1', name: 'Manager' });
   expect(shift.status).toBe('pending');
   expect(shift.endAtUtc).toBe('2026-10-12T22:00:00.000Z');
   expect(shift.recovery?.manualEnd).toBe(true);
   expect(shift.recovery?.returnInspectionId).toBeNull();
   expect(shift.recovery?.inspectionId).toBe('pre-1');
+});
+
+it('rejects manual end recovery when multiple pretrips make the day ambiguous', () => {
+  const [row] = buildHistoricalEstimates([
+    ...pretripOnly,
+    { ...pretripOnly[0], id: 'pre-2', submittedAt: '2026-10-12T15:00:00Z' },
+  ], []);
+
+  expect(row).toMatchObject({ state: 'attention', endAtUtc: null, returnInspectionId: null });
+  expect(isMissingReturnManualEndEligible(row)).toBe(false);
+  expect(() => makeManualEndRecoveredShift(
+    row,
+    '2026-10-12T22:00:00.000Z',
+    { id: 'm1', name: 'Manager' },
+  )).toThrow(/exactly one pretrip/i);
 });
 
 it('rejects a ready estimate that already has a return', () => {

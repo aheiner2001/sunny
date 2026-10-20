@@ -17,6 +17,8 @@ export interface HistoricalEstimate {
   elapsedSeconds: number | null;
   state: 'ready' | 'attention' | 'covered';
   reason: string;
+  pretripCount: number;
+  returnCount: number;
 }
 
 const estimateEvidence = new WeakMap<HistoricalEstimate, {
@@ -64,6 +66,7 @@ export function buildHistoricalEstimates(inspections: Inspection[], shifts: Shif
       inspectionId: start?.id || null, returnInspectionId: end?.id || null,
       startAtUtc, endAtUtc, startBasis: recorded ? 'inspection started' : 'inspection submitted',
       elapsedSeconds: null, state: 'attention', reason: 'Missing inspection or matching return. Review source records manually.',
+      pretripCount: starts.length, returnCount: ends.length,
     };
     estimateEvidence.set(row, { shifts, corrections });
     if (starts.length > 1 || ends.length > 1) row.reason = 'Multiple inspections or returns. Confirm the correct pair manually.';
@@ -116,14 +119,18 @@ export function makeRecoveredShift(row: HistoricalEstimate, actor: { id: string;
   };
 }
 
+export function isMissingReturnManualEndEligible(row: HistoricalEstimate): boolean {
+  return row.state === 'attention' && row.pretripCount === 1 && row.returnCount === 0 &&
+    row.endAtUtc === null && row.returnInspectionId === null && Boolean(row.inspectionId && row.startAtUtc);
+}
+
 export function makeManualEndRecoveredShift(
   row: HistoricalEstimate,
   endAtUtc: string,
   actor: { id: string; name: string },
 ): ShiftRecord {
-  if (row.state !== 'attention' || row.endAtUtc !== null || row.returnInspectionId !== null ||
-    !row.inspectionId || !row.startAtUtc)
-    throw new Error('Only an attention estimate with a missing return can use a manual end time.');
+  if (!isMissingReturnManualEndEligible(row))
+    throw new Error('A missing return manual end requires exactly one pretrip and zero returns for the employee, vehicle, and day.');
   const startMillis = Date.parse(row.startAtUtc);
   const endMillis = Date.parse(endAtUtc);
   if (!Number.isFinite(endMillis) || endMillis <= startMillis || endMillis - startMillis > 18 * 3600000)

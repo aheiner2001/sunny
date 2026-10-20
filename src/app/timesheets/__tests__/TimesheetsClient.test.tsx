@@ -59,6 +59,17 @@ describe('TimesheetsClient (Employee View)', () => {
     expect(banner?.className).toMatch(/rose|amber/);
   });
 
+  it.each([
+    'Historical estimate was not saved. Check the error and retry.',
+    'Review was not saved. Refresh and retry.',
+  ])('styles unsaved operation status with warning tones: %s', (status) => {
+    vi.spyOn(timesheetStore, 'getSyncStatus').mockReturnValue(status);
+    render(<TimesheetsClient />);
+    const banner = screen.getByText(status).closest('.rounded-xl');
+    expect(banner?.className).toMatch(/rose|amber/);
+    expect(banner?.className).not.toMatch(/emerald/);
+  });
+
   it('renders Clock In button when employee is clocked out', () => {
     render(<TimesheetsClient />);
     expect(screen.getByRole('button', { name: /clock in/i })).toBeDefined();
@@ -381,6 +392,17 @@ describe('TimesheetsClient (Manager sync failure visibility)', () => {
       screen.getByText(/No timesheets loaded\. Cloud sync failed — retry or check Firebase permissions\./i),
     ).toBeDefined();
     expect(screen.queryByText(/No team shifts recorded for this week/i)).toBeNull();
+  });
+
+  it('uses pending-confirmation copy for an empty cached manager view', () => {
+    vi.spyOn(timesheetStore, 'getSyncStatus').mockReturnValue(
+      'Showing cached timesheets — waiting for cloud confirmation',
+    );
+
+    render(<TimesheetsClient />);
+
+    expect(screen.getByText(/No timesheets are confirmed yet.*retry cloud sync/i)).toBeDefined();
+    expect(screen.queryByText(/Cloud sync failed/i)).toBeNull();
   });
 });
 

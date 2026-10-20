@@ -3,7 +3,11 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { DateTime } from 'luxon';
 import { dbService } from '@/lib/db';
 import { timesheetStore } from '@/lib/timesheets/timesheetStore';
-import { buildHistoricalEstimates, type HistoricalEstimate } from '@/lib/timesheets/historicalRecovery';
+import {
+  buildHistoricalEstimates,
+  isMissingReturnManualEndEligible,
+  type HistoricalEstimate,
+} from '@/lib/timesheets/historicalRecovery';
 import {
   recoverHistoricalEstimate,
   recoverHistoricalEstimateWithManualEnd,
@@ -93,7 +97,7 @@ export default function HistoricalHoursRecovery({ actor, weekStartUtc, weekEndUt
                   aria-label={`Add ${row.employeeName} for review`} onClick={() => void add(row)}>
                   {saving === row.id ? 'Saving…' : 'Add for review'}
                 </button>}
-                {row.state === 'attention' && row.inspectionId && row.startAtUtc && !row.endAtUtc && <>
+                {isMissingReturnManualEndEligible(row) && <>
                   <input type="datetime-local" aria-label={`End time for ${row.employeeName}`}
                     className="input input-bordered input-sm mb-2 block" value={manualEnds[row.id] || ''}
                     onChange={event => setManualEnds(values => ({ ...values, [row.id]: event.target.value }))} />

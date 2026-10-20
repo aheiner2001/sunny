@@ -20,6 +20,8 @@ npm run test:watch
 
 Vitest stays open and reruns affected tests as files change. Press `q` to stop it.
 
+Historical recovery rows marked `attention` are evidence that cannot yet be turned into hours automatically, such as missing, duplicate, or ambiguous inspection records. A recovered row marked `pending` is different: a manager has supplied enough information to create a timesheet, but its times and unpaid breaks still require manager review before approval.
+
 ### Coverage (optional)
 
 ```powershell

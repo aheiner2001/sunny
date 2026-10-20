@@ -55,3 +55,15 @@ it('lets a manager set an end time on a missing-return row and save for review',
   ));
   expect(screen.getByRole('status').textContent).toMatch(/added max.*pending/i);
 });
+
+it('hides manual-end controls when multiple pretrips make the day ambiguous', async () => {
+  vi.mocked(dbService.getInspections).mockReturnValue([
+    evidence[0],
+    { ...evidence[0], id: 'afternoon', submittedAt: '2026-10-19T17:00:00Z' },
+  ]);
+  preview();
+
+  await screen.findByText(/multiple inspections or returns/i);
+  expect(screen.queryByLabelText('End time for Max')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Add with end time' })).toBeNull();
+});
