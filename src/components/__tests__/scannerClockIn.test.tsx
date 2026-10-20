@@ -11,24 +11,28 @@ vi.mock('@/lib/db', () => ({ dbService: {
 } }));
 vi.mock('@/lib/timesheets/timesheetService', () => ({ timesheetService: { clockIn: mocks.clockIn } }));
 import { QRScannerModal } from '../QRScannerModal';
-beforeEach(() => { vi.clearAllMocks(); mocks.clockIn.mockResolvedValue({ status: 'active' }); });
-afterEach(cleanup);
-it('waits for the employee punch before routing from the main scanner', async () => {
+beforeEach(() => { vi.clearAllMocks(); mocks.clockIn.mockResolvedValue({ status: 'active' }); vi.spyOn(console, 'warn').mockImplementation(() => {}); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+it('opens the inspection immediately while the employee punch is pending', async () => {
   let finish!: () => void;
   mocks.clockIn.mockReturnValueOnce(new Promise<void>(resolve => { finish = resolve; }));
   render(<QRScannerModal isOpen onClose={mocks.close} />);
   fireEvent.click(screen.getByRole('button', { name: /101/ }));
-  expect(mocks.push).not.toHaveBeenCalled();
-  expect(mocks.close).not.toHaveBeenCalled();
+  expect(mocks.push).toHaveBeenCalledWith('/inspect?id=van-1&mode=employee');
+  expect(mocks.close).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('button', { name: 'Continue to inspection' })).toBeNull();
   finish();
   await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/inspect?id=van-1&mode=employee'));
   expect(mocks.clockIn).toHaveBeenCalledWith('employee-1', 'Driver', 'qr', expect.any(String));
+  expect(mocks.push).toHaveBeenCalledTimes(1);
 });
-it('keeps the scanner open and explains a failed clock-in', async () => {
+it('opens the inspection even if clock-in fails', async () => {
   mocks.clockIn.mockRejectedValueOnce(new Error('permission-denied'));
   render(<QRScannerModal isOpen onClose={mocks.close} />);
   fireEvent.click(screen.getByRole('button', { name: /101/ }));
-  await screen.findByText(/clock-in was not saved/i);
-  expect(mocks.push).not.toHaveBeenCalled();
-  expect(mocks.close).not.toHaveBeenCalled();
+  await waitFor(() => expect(mocks.clockIn).toHaveBeenCalled());
+  expect(mocks.push).toHaveBeenCalledWith('/inspect?id=van-1&mode=employee');
+  expect(mocks.push).toHaveBeenCalledTimes(1);
+  expect(mocks.close).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('button', { name: 'Continue to inspection' })).toBeNull();
 });

@@ -14,8 +14,8 @@ vi.mock('@/lib/db', () => ({ dbService: {
 vi.mock('@/lib/timesheets/timesheetService', () => ({ timesheetService: { clockIn: mock.clockIn } }));
 import { QRScannerModal } from '../QRScannerModal';
 import ScanPage from '@/app/scan/page';
-beforeEach(() => { vi.clearAllMocks(); });
-afterEach(cleanup);
+beforeEach(() => { vi.clearAllMocks(); vi.spyOn(console, 'warn').mockImplementation(() => {}); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 for (const surface of ['modal', 'page'] as const) describe(surface, () => {
   it.each(['failed', 'pending'] as const)('lets the employee open the inspection when clock-in is %s', async status => {
     let finish!: () => void;
@@ -24,8 +24,7 @@ for (const surface of ['modal', 'page'] as const) describe(surface, () => {
     render(surface === 'modal' ? <QRScannerModal isOpen onClose={mock.close} /> : <ScanPage />);
     fireEvent.click(screen.getByRole('button', { name: /101/ }));
     await waitFor(() => expect(mock.clockIn).toHaveBeenCalled());
-    if (status === 'failed') await screen.findByText(/clock-in was not saved/i);
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue to inspection' }));
+    expect(screen.queryByRole('button', { name: 'Continue to inspection' })).toBeNull();
     expect(mock.push).toHaveBeenCalledWith('/inspect?id=van-1&mode=employee');
     expect(mock.push).toHaveBeenCalledTimes(1);
     if (status === 'pending') {
@@ -36,14 +35,15 @@ for (const surface of ['modal', 'page'] as const) describe(surface, () => {
   });
 });
 
-it.each(['modal', 'page'] as const)('does not navigate from a late punch after leaving the %s', async surface => {
+it.each(['modal', 'page'] as const)('does not navigate again from a late punch after leaving the %s', async surface => {
   let finish!: () => void;
   mock.clockIn.mockReturnValue(new Promise<void>(resolve => { finish = resolve; }));
   const view = render(surface === 'modal' ? <QRScannerModal isOpen onClose={mock.close} /> : <ScanPage />);
   fireEvent.click(screen.getByRole('button', { name: /101/ }));
   await waitFor(() => expect(mock.clockIn).toHaveBeenCalled());
+  expect(mock.push).toHaveBeenCalledTimes(1);
   view.unmount();
   await act(async () => finish());
-  expect(mock.push).not.toHaveBeenCalled();
-  expect(mock.close).not.toHaveBeenCalled();
+  expect(mock.push).toHaveBeenCalledTimes(1);
+  expect(mock.close).toHaveBeenCalledTimes(surface === 'modal' ? 1 : 0);
 });

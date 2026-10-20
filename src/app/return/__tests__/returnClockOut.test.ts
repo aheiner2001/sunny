@@ -277,5 +277,31 @@ describe('Return Checklist Clock-Out Integration', () => {
       expect(dbService.submitReturnInspection).toHaveBeenCalledTimes(1);
       expect(container.textContent).toContain('Shift Clocked Out');
     });
+
+    it('shows the saved return immediately while clock-out is still pending', async () => {
+      vi.spyOn(timesheetService, 'clockOut').mockReturnValue(new Promise(() => {}));
+      await act(async () => root.render(React.createElement(ReturnClient)));
+      const yes = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Yes'));
+      await act(async () => yes!.click());
+      const submit = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Submit return'));
+      await act(async () => submit!.click());
+      expect(dbService.submitReturnInspection).toHaveBeenCalledTimes(1);
+      expect(container.textContent).toContain('Returned — 101 available');
+      expect(container.textContent).toContain('Confirming clock-out');
+    });
+
+    it('still clocks out the employee when saving the separate job count fails', async () => {
+      const shift = await timesheetService.clockIn('emp-202', 'Dave', 'qr', 'jobs-fail-start');
+      vi.mocked(dbService.setVehicleJobsToday).mockRejectedValueOnce(new Error('permission-denied'));
+      await act(async () => root.render(React.createElement(ReturnClient)));
+      const yes = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Yes'));
+      await act(async () => yes!.click());
+      const submit = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Submit return'));
+      await act(async () => submit!.click());
+      expect(dbService.submitReturnInspection).toHaveBeenCalledTimes(1);
+      expect(container.textContent).toContain('Returned — 101 available');
+      expect(container.textContent).toContain('job count was not updated');
+      expect(timesheetStore.getShift(shift.id)?.status).toBe('pending');
+    });
   });
 });
