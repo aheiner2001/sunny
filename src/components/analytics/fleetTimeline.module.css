@@ -2,7 +2,7 @@
 .controls button { padding:10px 16px; border:1px solid #dce1eb; border-radius:10px; background:white; color:#475569; font-weight:600; }
 .controls button[aria-pressed=true] { color:white; background:#5260a5; border-color:#5260a5; }
 .help { color:#64748b; font-size:13px; line-height:1.6; margin:12px 0 18px; }
-.scroll { overflow:auto; max-height:75vh; border:1px solid #dce1eb; border-radius:16px; background:white; }
+.scroll { overflow:auto; max-height:75vh; border:1px solid #dce1eb; border-radius:16px; background:white; isolation:isolate; }
 .board { min-width:100%; width:max-content; }
 .grid { display:grid; }
 .headers { position:sticky; top:0; z-index:4; background:#f5f7fc; border-bottom:2px solid #dce1eb; }
