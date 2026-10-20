@@ -307,5 +307,66 @@ describe('TimesheetsClient (Employee View)', () => {
   });
 });
 
+describe('TimesheetsClient (Manager sync failure visibility)', () => {
+  beforeEach(() => {
+    timesheetStore.reset();
+    mockAuthUser = {
+      id: 'mgr-9',
+      name: 'Manager Morgan',
+      email: 'morgan@sunny.com',
+      role: 'manager',
+    };
+    mockAuthRole = 'manager';
+  });
+
+  it('lists cached team shifts while sync is degraded and avoids success-only banner styling', () => {
+    timesheetStore.saveShift({
+      id: 'shift-cached-1',
+      employeeId: 'emp-alice',
+      employeeName: 'Alice',
+      locationId: 'loc-main',
+      status: 'pending',
+      timeZone: 'America/Denver',
+      startAtUtc: '2026-10-14T14:00:00.000Z',
+      endAtUtc: '2026-10-14T20:00:00.000Z',
+      unpaidBreakSeconds: 0,
+      startSource: 'qr',
+      endSource: 'checklist_return',
+      startEventId: 'evt-a1',
+      endEventId: 'evt-a2',
+      revision: 1,
+      createdAt: '2026-10-14T14:00:00.000Z',
+      updatedAt: '2026-10-14T20:00:00.000Z',
+      submittedAt: '2026-10-14T20:00:00.000Z',
+      approvedAt: null,
+      approvedBy: null,
+    });
+    vi.spyOn(timesheetStore, 'getSyncStatus').mockReturnValue(
+      'Showing cached timesheets — waiting for cloud confirmation',
+    );
+
+    render(<TimesheetsClient />);
+
+    expect(screen.getByText('Alice')).toBeDefined();
+    const badge = screen.getByText(/waiting for cloud confirmation/i);
+    const banner = badge.closest('.rounded-xl');
+    expect(banner?.className).toMatch(/rose|amber|slate/);
+    expect(banner?.className).not.toMatch(/emerald/);
+  });
+
+  it('shows sync-failure empty state instead of a quiet empty week when no shifts loaded', () => {
+    vi.spyOn(timesheetStore, 'getSyncStatus').mockReturnValue(
+      'Cloud sync failed: Firebase permission denied. Verify Console rules for timesheet collections, then retry.',
+    );
+
+    render(<TimesheetsClient />);
+
+    expect(
+      screen.getByText(/No timesheets loaded\. Cloud sync failed — retry or check Firebase permissions\./i),
+    ).toBeDefined();
+    expect(screen.queryByText(/No team shifts recorded for this week/i)).toBeNull();
+  });
+});
+
 beforeAll(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-14T22:00:00Z')); });
 afterAll(() => vi.useRealTimers());

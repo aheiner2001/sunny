@@ -127,8 +127,13 @@ export default function TimesheetsClient() {
 
   const [syncStatus, setSyncStatus] = useState(() => timesheetStore.getSyncStatus());
 
+  const isSyncDegraded = useMemo(
+    () => /failed|cached|waiting|unavailable|permission/i.test(syncStatus),
+    [syncStatus],
+  );
+
   const syncBannerClasses = useMemo(() => {
-    if (/failed|unavailable|permission/i.test(syncStatus)) {
+    if (isSyncDegraded) {
       return {
         container:
           'bg-rose-500/10 border border-amber-500/30 text-rose-900 dark:text-rose-200',
@@ -138,7 +143,7 @@ export default function TimesheetsClient() {
         subtitle: 'text-rose-700 dark:text-rose-300/80',
       };
     }
-    if (/Active|confirmed/i.test(syncStatus)) {
+    if (/Firebase Cloud Sync Active|timesheet save confirmed|Recovered hours review saved/i.test(syncStatus)) {
       return {
         container:
           'bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-200',
@@ -155,7 +160,7 @@ export default function TimesheetsClient() {
       badge: 'bg-slate-100 text-slate-800 dark:bg-slate-800/60 dark:text-slate-200',
       subtitle: 'text-slate-700 dark:text-slate-300/80',
     };
-  }, [syncStatus]);
+  }, [syncStatus, isSyncDegraded]);
 
   // Refresh all records from store
   const refreshData = useCallback(() => {
@@ -1011,10 +1016,19 @@ export default function TimesheetsClient() {
             </div>
 
             {teamWeekShifts.length === 0 ? (
-              <div className="p-8 text-center rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 space-y-2">
-                <CheckCircle2 className="w-10 h-10 mx-auto text-slate-400 opacity-60" />
-                <p className="font-medium">No team shifts recorded for this week.</p>
-              </div>
+              isSyncDegraded ? (
+                <div className="p-8 text-center rounded-xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/50 text-slate-600 dark:text-slate-300 space-y-2">
+                  <AlertTriangle className="w-10 h-10 mx-auto text-amber-500 opacity-80" />
+                  <p className="font-medium">
+                    No timesheets loaded. Cloud sync failed — retry or check Firebase permissions.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-8 text-center rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 space-y-2">
+                  <CheckCircle2 className="w-10 h-10 mx-auto text-slate-400 opacity-60" />
+                  <p className="font-medium">No team shifts recorded for this week.</p>
+                </div>
+              )
             ) : filteredTeamShifts.length === 0 ? (
               <div className="p-8 text-center rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 space-y-2">
                 <AlertCircle className="w-10 h-10 mx-auto text-slate-400 opacity-60" />
