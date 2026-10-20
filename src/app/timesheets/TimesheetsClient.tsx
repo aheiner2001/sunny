@@ -128,7 +128,7 @@ export default function TimesheetsClient() {
   const [syncStatus, setSyncStatus] = useState(() => timesheetStore.getSyncStatus());
 
   const isSyncDegraded = useMemo(
-    () => /failed|cached|waiting|unavailable|permission/i.test(syncStatus),
+    () => /failed|cached|\bwaiting\b|unavailable|permission/i.test(syncStatus),
     [syncStatus],
   );
 

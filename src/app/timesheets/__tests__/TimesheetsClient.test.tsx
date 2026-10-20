@@ -354,6 +354,22 @@ describe('TimesheetsClient (Manager sync failure visibility)', () => {
     expect(banner?.className).not.toMatch(/emerald/);
   });
 
+  it('does not treat "awaiting" sync status as degraded', () => {
+    vi.spyOn(timesheetStore, 'getSyncStatus').mockReturnValue(
+      'Historical estimate saved — awaiting manager approval',
+    );
+
+    render(<TimesheetsClient />);
+
+    expect(screen.getByText(/No team shifts recorded for this week/i)).toBeDefined();
+    expect(
+      screen.queryByText(/No timesheets loaded\. Cloud sync failed/i),
+    ).toBeNull();
+    const badge = screen.getByText(/awaiting manager approval/i);
+    const banner = badge.closest('.rounded-xl');
+    expect(banner?.className).not.toMatch(/rose|amber/);
+  });
+
   it('shows sync-failure empty state instead of a quiet empty week when no shifts loaded', () => {
     vi.spyOn(timesheetStore, 'getSyncStatus').mockReturnValue(
       'Cloud sync failed: Firebase permission denied. Verify Console rules for timesheet collections, then retry.',
