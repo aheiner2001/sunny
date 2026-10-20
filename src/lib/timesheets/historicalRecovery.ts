@@ -19,6 +19,11 @@ export interface HistoricalEstimate {
   reason: string;
 }
 
+const estimateEvidence = new WeakMap<HistoricalEstimate, {
+  shifts: ShiftRecord[];
+  corrections: CorrectionRequest[];
+}>();
+
 export function overlapsHistoricalHours(employeeId: string, start: string, end: string,
   shifts: ShiftRecord[], corrections: CorrectionRequest[]): boolean {
   const a = Date.parse(start), b = Date.parse(end);
@@ -60,7 +65,11 @@ export function buildHistoricalEstimates(inspections: Inspection[], shifts: Shif
       startAtUtc, endAtUtc, startBasis: recorded ? 'inspection started' : 'inspection submitted',
       elapsedSeconds: null, state: 'attention', reason: 'Missing inspection or matching return. Review source records manually.',
     };
+    estimateEvidence.set(row, { shifts, corrections });
     if (starts.length > 1 || ends.length > 1) row.reason = 'Multiple inspections or returns. Confirm the correct pair manually.';
+    else if (start && !end) {
+      row.reason = 'No return submitted for this day. Enter an end time to add hours for review.';
+    }
     else if (start && end && startAtUtc && endAtUtc) {
       const duration = Date.parse(endAtUtc) - Date.parse(startAtUtc);
       if (duration <= 0 || duration > 18 * 3600000 ||
@@ -71,7 +80,7 @@ export function buildHistoricalEstimates(inspections: Inspection[], shifts: Shif
       } else {
         row.elapsedSeconds = calculateNetSeconds(startAtUtc, endAtUtc);
         row.state = shifts.some(shift => shift.recovery?.inspectionId === row.inspectionId ||
-          shift.recovery?.returnInspectionId === row.returnInspectionId) ||
+          (row.returnInspectionId !== null && shift.recovery?.returnInspectionId === row.returnInspectionId)) ||
           overlapsHistoricalHours(row.employeeId, startAtUtc, endAtUtc, shifts, corrections) ? 'covered' : 'ready';
         row.reason = row.state === 'covered' ? 'Existing timesheet or pending hours request overlaps this period.' :
           'Estimated — needs manager review. Unpaid breaks have not been deducted.';
@@ -104,5 +113,37 @@ export function makeRecoveredShift(row: HistoricalEstimate, actor: { id: string;
     managerNote: `Estimated from ${row.startBasis} and return submission by ${actor.name}. Unpaid breaks have not been deducted. Verify times and breaks before approval.`,
     recovery: { estimated: true, inspectionId: row.inspectionId, returnInspectionId: row.returnInspectionId,
       recoveredBy: actor.id, recoveredByName: actor.name, recoveredAt: now, startBasis: row.startBasis },
+  };
+}
+
+export function makeManualEndRecoveredShift(
+  row: HistoricalEstimate,
+  endAtUtc: string,
+  actor: { id: string; name: string },
+): ShiftRecord {
+  if (!row.inspectionId || !row.startAtUtc)
+    throw new Error('Inspection evidence needs a start time before hours can be added.');
+  if (row.state === 'covered')
+    throw new Error('Existing hours overlap this inspection.');
+  const startMillis = Date.parse(row.startAtUtc);
+  const endMillis = Date.parse(endAtUtc);
+  if (!Number.isFinite(endMillis) || endMillis <= startMillis || endMillis - startMillis > 18 * 3600000)
+    throw new Error('End time must be after the start and no more than 18 hours later.');
+  const evidence = estimateEvidence.get(row);
+  if (evidence && overlapsHistoricalHours(row.employeeId, row.startAtUtc, endAtUtc,
+    evidence.shifts, evidence.corrections))
+    throw new Error('Existing hours or a pending request overlap this estimate.');
+  const now = new Date().toISOString();
+  return {
+    id: row.id, employeeId: row.employeeId, employeeName: row.employeeName, locationId: 'loc-main',
+    status: 'pending', timeZone: DEFAULT_TIMEZONE, startAtUtc: row.startAtUtc, endAtUtc,
+    unpaidBreakSeconds: 0, startSource: 'manual', endSource: 'manual',
+    startEventId: `historical-${row.inspectionId}`, endEventId: `historical-manual-${row.inspectionId}`,
+    revision: 1, createdAt: now, updatedAt: now, submittedAt: now, approvedAt: null, approvedBy: null,
+    managerNote: `Manager ${actor.name} entered the end time because no return was submitted. Unpaid breaks have not been deducted. Verify times and breaks before approval.`,
+    recovery: {
+      estimated: true, inspectionId: row.inspectionId, returnInspectionId: null, manualEnd: true,
+      recoveredBy: actor.id, recoveredByName: actor.name, recoveredAt: now, startBasis: row.startBasis,
+    },
   };
 }

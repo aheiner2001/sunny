@@ -34,6 +34,6 @@ it('adds an estimate only as pending, with source IDs and no active shift guard'
 it('flags incomplete history and offers no automatic import', async () => {
   vi.mocked(dbService.getInspections).mockReturnValue([evidence[0]]);
   preview();
-  await screen.findByText(/missing inspection or matching return/i);
+  await screen.findByText(/no return submitted.*enter an end time/i);
   expect(screen.queryByRole('button', { name: /add.*for review/i })).toBeNull();
 });

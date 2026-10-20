@@ -1,0 +1,43 @@
+import { expect, it } from 'vitest';
+import type { Inspection } from '@/types';
+import { buildHistoricalEstimates, makeManualEndRecoveredShift } from '../historicalRecovery';
+
+const pretripOnly = [{
+  id: 'pre-1', userId: 'driver', userName: 'Driver', vehicleId: 'van',
+  vehicleNumber: '5', submittedAt: '2026-10-12T14:00:00Z', kind: 'pretrip',
+  status: 'passed', startedAt: '2026-10-12T13:50:00Z', startedAtRecorded: true,
+}] as Inspection[];
+
+it('flags pretrip-without-return as attention with missing return', () => {
+  const [row] = buildHistoricalEstimates(pretripOnly, []);
+  expect(row.state).toBe('attention');
+  expect(row.endAtUtc).toBeNull();
+  expect(row.reason).toMatch(/return|Missing/i);
+});
+
+it('builds a pending recovered shift from manager end time', () => {
+  const [row] = buildHistoricalEstimates(pretripOnly, []);
+  const shift = makeManualEndRecoveredShift(row, '2026-10-12T22:00:00.000Z', { id: 'm1', name: 'Manager' });
+  expect(shift.status).toBe('pending');
+  expect(shift.endAtUtc).toBe('2026-10-12T22:00:00.000Z');
+  expect(shift.recovery?.manualEnd).toBe(true);
+  expect(shift.recovery?.returnInspectionId).toBeNull();
+  expect(shift.recovery?.inspectionId).toBe('pre-1');
+});
+
+it('rejects manual end at or before start', () => {
+  const [row] = buildHistoricalEstimates(pretripOnly, []);
+  expect(() => makeManualEndRecoveredShift(row, '2026-10-12T13:00:00.000Z', { id: 'm1', name: 'Manager' }))
+    .toThrow(/end time/i);
+});
+
+it('rejects manual end when period overlaps an existing shift', () => {
+  const existing = makeManualEndRecoveredShift(
+    buildHistoricalEstimates(pretripOnly, [])[0],
+    '2026-10-12T22:00:00.000Z',
+    { id: 'm1', name: 'Manager' },
+  );
+  const [row] = buildHistoricalEstimates(pretripOnly, [existing]);
+  expect(() => makeManualEndRecoveredShift(row, '2026-10-12T21:00:00.000Z', { id: 'm1', name: 'Manager' }))
+    .toThrow(/overlap/i);
+});

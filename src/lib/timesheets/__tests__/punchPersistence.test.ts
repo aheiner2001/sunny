@@ -98,7 +98,7 @@ it('publishes one shift and audit if Firestore retries the transaction callback'
 });
 
 
-import { makeRecoveredShift, buildHistoricalEstimates } from '../historicalRecovery';
+import { makeManualEndRecoveredShift, makeRecoveredShift, buildHistoricalEstimates } from '../historicalRecovery';
 import type { Inspection } from '@/types';
 const recovered = () => makeRecoveredShift(buildHistoricalEstimates([
   { id: 'old-inspection', userId: 'driver', userName: 'Driver', vehicleId: 'van', submittedAt: '2026-10-12T14:00:00Z', kind: 'pretrip', status: 'passed' },
@@ -123,6 +123,27 @@ it('rejects duplicate recovery across browsers', async () => {
   timesheetStore.reset();
   await expect(timesheetStore.saveRecoveredShift(recovered())).rejects.toThrow();
   expect(Array.from(cloud.docs.keys()).filter(key => key.startsWith('timesheet_shifts/'))).toHaveLength(1);
+});
+it('allows separate manual-end recoveries whose return ids are both null', async () => {
+  const makeManual = (id: string, startAt: string, endAt: string) => {
+    const inspection = {
+      id, userId: 'driver', userName: 'Driver', vehicleId: 'van', kind: 'pretrip',
+      status: 'passed', submittedAt: startAt,
+    } as Inspection;
+    cloud.docs.set(`inspections/${id}`, inspection);
+    return makeManualEndRecoveredShift(
+      buildHistoricalEstimates([inspection], [])[0],
+      endAt,
+      { id: 'manager', name: 'Manager' },
+    );
+  };
+  await timesheetStore.saveRecoveredShift(
+    makeManual('manual-one', '2026-10-10T14:00:00Z', '2026-10-10T22:00:00Z'),
+  );
+  timesheetStore.reset();
+  await expect(timesheetStore.saveRecoveredShift(
+    makeManual('manual-two', '2026-10-11T14:00:00Z', '2026-10-11T22:00:00Z'),
+  )).resolves.toMatchObject({ recovery: { inspectionId: 'manual-two', returnInspectionId: null } });
 });
 it('rejects overlap with remotely stored active hours', async () => {
   seedEvidence();

@@ -550,7 +550,8 @@ class TimesheetStore {
     const check = (shifts: ShiftRecord[], corrections: CorrectionRequest[]) => {
       if (shifts.some(existing => existing.id === shift.id ||
         existing.recovery?.inspectionId === shift.recovery!.inspectionId ||
-        existing.recovery?.returnInspectionId === shift.recovery!.returnInspectionId))
+        (shift.recovery!.returnInspectionId !== null &&
+          existing.recovery?.returnInspectionId === shift.recovery!.returnInspectionId)))
         throw new Error('This inspection or return has already been recovered.');
       if (overlapsHistoricalHours(shift.employeeId, shift.startAtUtc, shift.endAtUtc!, shifts, corrections))
         throw new Error('Existing hours or a pending request overlap this estimate. Refresh and review them first.');
@@ -580,8 +581,13 @@ class TimesheetStore {
       sourceSnapshot.forEach(record => evidence.push(record.data() as Inspection));
       missedSnapshot.forEach(record => missed.push(record.data() as MissedReturn));
       const confirmed = buildHistoricalEstimates(evidence, [], [], missed).find(row => row.inspectionId === shift.recovery!.inspectionId);
-      if (!confirmed || confirmed.state !== 'ready' || confirmed.returnInspectionId !== shift.recovery.returnInspectionId ||
-        confirmed.startAtUtc !== shift.startAtUtc || confirmed.endAtUtc !== shift.endAtUtc)
+      const evidenceMatches = shift.recovery.manualEnd
+        ? confirmed?.state === 'attention' && confirmed.returnInspectionId === null &&
+          confirmed.startAtUtc === shift.startAtUtc
+        : confirmed?.state === 'ready' &&
+          confirmed.returnInspectionId === shift.recovery.returnInspectionId &&
+          confirmed.startAtUtc === shift.startAtUtc && confirmed.endAtUtc === shift.endAtUtc;
+      if (!confirmed || !evidenceMatches)
         throw new Error('Inspection evidence changed or cannot be confirmed. Refresh and review the source records.');
       const shifts: ShiftRecord[] = [], corrections: CorrectionRequest[] = [];
       remoteShifts.forEach(record => shifts.push(record.data() as ShiftRecord));
@@ -592,7 +598,9 @@ class TimesheetStore {
         const existing = await transaction.get(target);
         const guard = await transaction.get(guardRef);
         // Read source documents inside the transaction so rejection/deletion/time edits invalidate the import.
-        for (const sourceId of [shift.recovery!.inspectionId, shift.recovery!.returnInspectionId]) {
+        const sourceIds = [shift.recovery!.inspectionId, shift.recovery!.returnInspectionId]
+          .filter((sourceId): sourceId is string => sourceId !== null);
+        for (const sourceId of sourceIds) {
           const source = await transaction.get(doc(db!, 'inspections', sourceId));
           const expected = evidence.find(record => record.id === sourceId);
           const fingerprint = (record: Inspection) => JSON.stringify([record.id, record.userId, record.vehicleId,

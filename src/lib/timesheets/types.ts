@@ -49,7 +49,8 @@ export interface ShiftRecord {
   recovery?: {
     estimated: true;
     inspectionId: string;
-    returnInspectionId: string;
+    returnInspectionId: string | null;
+    manualEnd?: true;
     recoveredBy: string;
     recoveredByName: string;
     recoveredAt: string;
