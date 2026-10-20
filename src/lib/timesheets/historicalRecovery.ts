@@ -131,24 +131,26 @@ export function makeManualEndRecoveredShift(
 ): ShiftRecord {
   if (!isMissingReturnManualEndEligible(row))
     throw new Error('A missing return manual end requires exactly one pretrip and zero returns for the employee, vehicle, and day.');
-  const startMillis = Date.parse(row.startAtUtc);
+  const startAtUtc = row.startAtUtc!;
+  const inspectionId = row.inspectionId!;
+  const startMillis = Date.parse(startAtUtc);
   const endMillis = Date.parse(endAtUtc);
   if (!Number.isFinite(endMillis) || endMillis <= startMillis || endMillis - startMillis > 18 * 3600000)
     throw new Error('End time must be after the start and no more than 18 hours later.');
   const evidence = estimateEvidence.get(row);
-  if (evidence && overlapsHistoricalHours(row.employeeId, row.startAtUtc, endAtUtc,
+  if (evidence && overlapsHistoricalHours(row.employeeId, startAtUtc, endAtUtc,
     evidence.shifts, evidence.corrections))
     throw new Error('Existing hours or a pending request overlap this estimate.');
   const now = new Date().toISOString();
   return {
     id: row.id, employeeId: row.employeeId, employeeName: row.employeeName, locationId: 'loc-main',
-    status: 'pending', timeZone: DEFAULT_TIMEZONE, startAtUtc: row.startAtUtc, endAtUtc,
+    status: 'pending', timeZone: DEFAULT_TIMEZONE, startAtUtc, endAtUtc,
     unpaidBreakSeconds: 0, startSource: 'manual', endSource: 'manual',
-    startEventId: `historical-${row.inspectionId}`, endEventId: `historical-manual-${row.inspectionId}`,
+    startEventId: `historical-${inspectionId}`, endEventId: `historical-manual-${inspectionId}`,
     revision: 1, createdAt: now, updatedAt: now, submittedAt: now, approvedAt: null, approvedBy: null,
     managerNote: `Manager ${actor.name} entered the end time because no return was submitted. Unpaid breaks have not been deducted. Verify times and breaks before approval.`,
     recovery: {
-      estimated: true, inspectionId: row.inspectionId, returnInspectionId: null, manualEnd: true,
+      estimated: true, inspectionId, returnInspectionId: null, manualEnd: true,
       recoveredBy: actor.id, recoveredByName: actor.name, recoveredAt: now, startBasis: row.startBasis,
     },
   };
