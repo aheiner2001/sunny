@@ -23,6 +23,7 @@ export function QRScannerModal({
   const roleRef = useRef(role);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [punchError, setPunchError] = useState<string | null>(null);
   const [manualInput, setManualInput] = useState('');
   const [pendingVehicle, setPendingVehicle] = useState<Vehicle | null>(null);
   const [punchVehicle, setPunchVehicle] = useState<Vehicle | null>(null);
@@ -55,6 +56,7 @@ export function QRScannerModal({
     if (!isOpen) {
       punchVehicleRef.current = null;
       setPunchVehicle(null);
+      setPunchError(null);
       void stopScanner();
       return;
     }
@@ -168,12 +170,13 @@ export function QRScannerModal({
   const openVehicle = async (vehicle: Vehicle) => {
     punchVehicleRef.current = vehicle;
     setPunchVehicle(vehicle);
+    setPunchError(null);
     try {
       await clockInScanEmployee();
       continueToInspection(vehicle);
     } catch {
       if (punchVehicleRef.current === vehicle) {
-        setCameraError('Clock-in was not saved. Continue to the inspection, then retry clock-in there or request missing hours in Timesheets.');
+        setPunchError('Clock-in was not saved. Continue to the inspection, then retry clock-in there or request missing hours in Timesheets.');
       }
     }
   };
@@ -194,6 +197,9 @@ export function QRScannerModal({
         aria-modal="true"
         aria-labelledby="qr-scanner-title"
       >
+        {punchError && (
+          <p className="card-pad text-sm text-[var(--critical)]" role="alert">{punchError}</p>
+        )}
         {punchVehicle && (
           <div className="card-pad text-sm" role="status">
             <p>Automatic clock-in is being attempted. You can continue to the inspection now.</p>
