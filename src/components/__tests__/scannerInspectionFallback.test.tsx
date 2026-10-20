@@ -37,7 +37,7 @@ for (const surface of ['modal', 'page'] as const) describe(surface, () => {
 
 it.each(['modal', 'page'] as const)('starts no scanner punch that can navigate after leaving the %s', async surface => {
   let finish!: () => void;
-  mock.clockIn.mockReturnValue(new Promise<void>(resolve => { finish = resolve; }));
+  mock.clockIn.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
   const view = render(surface === 'modal' ? <QRScannerModal isOpen onClose={mock.close} /> : <ScanPage />);
   fireEvent.click(screen.getByRole('button', { name: /101/ }));
   expect(mock.clockIn).not.toHaveBeenCalled();
