@@ -41,3 +41,9 @@ Implemented domain support for recovering a missing-return historical estimate w
 - RED: both invalid-row regressions failed against the prior permissive guard.
 - GREEN: `npx vitest run src/lib/timesheets/__tests__/historicalManualEnd.test.ts src/lib/timesheets/__tests__/punchPersistence.test.ts src/lib/timesheets/__tests__/historicalRecoveryService.test.ts` passed 3 files and 24 tests.
 - IDE lint diagnostics for the changed source and tests: no errors. `git diff --check`: passed.
+
+## Regression follow-up (18h / invalid end / missing evidence)
+
+- Added domain regressions: manual end more than 18 hours after start; unparseable `endAtUtc`.
+- Added service regression: `recoverHistoricalEstimateWithManualEnd` throws when inspection evidence is gone and does not persist.
+- GREEN: `npx vitest run src/lib/timesheets/__tests__/historicalManualEnd.test.ts src/lib/timesheets/__tests__/historicalRecoveryService.test.ts` — 2 files, 10 tests passed.

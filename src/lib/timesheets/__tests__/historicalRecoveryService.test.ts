@@ -66,3 +66,13 @@ it('rebuilds manual-end recovery from current evidence and forwards the end time
   }));
   expect(result.endAtUtc).toBe('2026-10-12T22:00:00.000Z');
 });
+
+it('throws when inspection evidence is missing', async () => {
+  mocks.getInspections.mockReturnValue([]);
+  await expect(recoverHistoricalEstimateWithManualEnd(
+    'pre-1',
+    '2026-10-12T22:00:00.000Z',
+    { id: 'manager', name: 'Manager' },
+  )).rejects.toThrow(/inspection evidence/i);
+  expect(mocks.saveRecoveredShift).not.toHaveBeenCalled();
+});

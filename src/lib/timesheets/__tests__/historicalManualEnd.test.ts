@@ -65,6 +65,18 @@ it('rejects manual end at or before start', () => {
     .toThrow(/end time/i);
 });
 
+it('rejects manual end more than 18 hours after start', () => {
+  const [row] = buildHistoricalEstimates(pretripOnly, []);
+  expect(() => makeManualEndRecoveredShift(row, '2026-10-13T08:00:00.001Z', { id: 'm1', name: 'Manager' }))
+    .toThrow(/end time/i);
+});
+
+it('rejects unparseable manual end time', () => {
+  const [row] = buildHistoricalEstimates(pretripOnly, []);
+  expect(() => makeManualEndRecoveredShift(row, 'not-a-valid-timestamp', { id: 'm1', name: 'Manager' }))
+    .toThrow(/end time/i);
+});
+
 it('rejects manual end when period overlaps an existing shift', () => {
   const existing = makeManualEndRecoveredShift(
     buildHistoricalEstimates(pretripOnly, [])[0],
