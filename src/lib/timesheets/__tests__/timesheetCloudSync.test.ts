@@ -362,4 +362,15 @@ describe('Timesheet Store Cloud Firestore Sync', () => {
     expect(timesheetStore.getSyncStatus()).toBe('Firebase Cloud Sync Active');
   });
 
+  it('does not wipe local shifts while a server snapshot still has pending writes', async () => {
+    timesheetStore.saveShift(sampleShift());
+    expect(timesheetStore.getShift('shift-save-1')).not.toBeNull();
+    await timesheetStore.setupFirestoreListeners();
+    snapshotCallbacks[0]({
+      metadata: { fromCache: false, hasPendingWrites: true },
+      forEach: () => {},
+    });
+    expect(timesheetStore.getShift('shift-save-1')).not.toBeNull();
+  });
+
 });
