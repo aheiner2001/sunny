@@ -25,6 +25,16 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 
+describe('inspection form-entry clock-in contract', () => {
+  it('clocks in when the inspection form mounts for an employee', async () => {
+    mock.clockIn.mockResolvedValue({ status: 'active' });
+    render(<InspectClient />);
+    await waitFor(() => expect(mock.clockIn).toHaveBeenCalledWith(
+      'employee-1', 'Driver', 'qr', expect.any(String),
+    ));
+  });
+});
+
 describe('inspection submission is independent of timesheet persistence', () => {
   it.each(['failed', 'pending', 'saved'] as const)('submits a valid inspection while clock-in is %s', async status => {
     mock.clockIn.mockImplementation(() => status === 'failed' ? Promise.reject(new Error('permission-denied')) :
