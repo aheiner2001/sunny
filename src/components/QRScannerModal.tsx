@@ -3,7 +3,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Camera, X, Sparkles, AlertCircle, ArrowRight } from 'lucide-react';
-import { clockInScanEmployee } from '@/lib/timesheets/employeeEntry';
 import { dbService } from '@/lib/db';
 import { Vehicle } from '@/types';
 import { useAuth } from '@/context/AuthContext';
@@ -147,11 +146,7 @@ export function QRScannerModal({
   };
 
   const openVehicle = (vehicle: Vehicle) => {
-    // Start the punch, but never await payroll storage before opening a checklist.
-    // InspectClient independently confirms/retries it; the cloud guard prevents duplicates.
-    void clockInScanEmployee().catch(error => {
-      console.warn('Automatic clock-in was not confirmed; inspection access is unaffected.', error);
-    });
+    // Checklist entry owns clock-in; navigation has no payroll dependency.
     if (onScanSuccess) {
       onScanSuccess(vehicle);
     } else {

@@ -35,4 +35,5 @@ it.each(['success', 'failure'] as const)('never makes camera startup or a failed
   expect(screen.queryByRole('button', { name: 'Continue to inspection' })).toBeNull();
 
   expect(mock.push).toHaveBeenCalledWith('/inspect?id=van&mode=employee');
+  expect(mock.clockIn).not.toHaveBeenCalled();
 });

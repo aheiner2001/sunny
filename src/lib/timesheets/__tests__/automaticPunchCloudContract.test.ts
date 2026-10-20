@@ -56,17 +56,13 @@ import { timesheetStore } from '../timesheetStore';
 beforeEach(() => { timesheetStore.reset(); cloud.docs.clear(); cloud.fail = false; cloud.failAfter = false; cloud.retry = false; cloud.afterReads = null; cloud.queue = Promise.resolve(); cloud.listeners.clear(); vi.mocked(ensureAuth).mockResolvedValue({ uid: 'test' } as any); });
 
 
-vi.mock('@/lib/db', () => ({ dbService: {
-  getSession: () => ({ userId: 'driver', role: 'employee', userName: 'Driver' }),
-  getUser: () => ({ id: 'driver', role: 'employee', name: 'Driver' }),
-} }));
-import { clockInScanEmployee } from '../employeeEntry';
 import { ensureAuth } from '@/lib/firebase';
+const enterChecklist = () => timesheetService.clockIn('driver', 'Driver', 'qr', 'inspection-entry', '2026-10-20T14:00:00Z');
 
-it('persists a scan punch to the server before confirming it locally', async () => {
+it('persists a checklist-entry punch to the server before confirming it locally', async () => {
   let authenticate!: (user: any) => void;
   vi.mocked(ensureAuth).mockReturnValueOnce(new Promise(resolve => { authenticate = resolve; }));
-  const pending = clockInScanEmployee();
+  const pending = enterChecklist();
   expect(cloud.docs.size).toBe(0);
   expect(timesheetStore.getAllShifts()).toHaveLength(0);
   authenticate({ uid: 'test' });
@@ -93,14 +89,14 @@ it('closes the same cloud shift from a fresh browser and persists pending approv
   expect(Array.from(cloud.docs.values()).filter(value => value.action === 'clock_out')).toHaveLength(1);
 });
 
-it('does not create fake synced hours after a denied scan write and allows retry', async () => {
+it('does not create fake synced hours after a denied checklist-entry write and allows retry', async () => {
   cloud.fail = true;
-  await expect(clockInScanEmployee()).rejects.toThrow('permission-denied');
+  await expect(enterChecklist()).rejects.toThrow('permission-denied');
   expect(cloud.docs.size).toBe(0);
   expect(timesheetStore.getAllShifts()).toHaveLength(0);
   expect(timesheetStore.getSyncStatus()).toContain('save failed');
   cloud.fail = false;
-  await clockInScanEmployee();
+  await enterChecklist();
   expect(timesheetStore.getAllShifts()).toHaveLength(1);
   expect(timesheetStore.getSyncStatus()).toBe('Last timesheet save confirmed');
 });
@@ -117,7 +113,7 @@ it('keeps the remote shift active if the clock-out commit is rejected', async ()
 
 it('requires authentication before writing and never confirms an unauthenticated punch', async () => {
   vi.mocked(ensureAuth).mockResolvedValueOnce(null);
-  await expect(clockInScanEmployee()).rejects.toThrow('authentication unavailable');
+  await expect(enterChecklist()).rejects.toThrow('authentication unavailable');
   expect(cloud.docs.size).toBe(0);
   expect(timesheetStore.getAllShifts()).toHaveLength(0);
 });

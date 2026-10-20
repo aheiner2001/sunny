@@ -16,7 +16,6 @@ import { dbService } from '@/lib/db';
 import { Vehicle } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { PasscodePrompt } from '@/components/PasscodeGate';
-import { clockInScanEmployee } from '@/lib/timesheets/employeeEntry';
 
 export default function ScanPage() {
   const router = useRouter();
@@ -121,10 +120,7 @@ export default function ScanPage() {
   };
 
   const openVehicle = (vehicle: Vehicle) => {
-    // Vehicle selection must never wait for a timesheet write.
-    void clockInScanEmployee().catch(error => {
-      console.warn('Automatic clock-in was not confirmed; inspection access is unaffected.', error);
-    });
+    // Checklist entry owns clock-in; never start a second scanner punch.
     const activeRole = dbService.getSession()?.role || roleRef.current;
     const mode = activeRole === 'manager' ? '' : '&mode=employee';
     router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}${mode}`);

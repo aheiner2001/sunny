@@ -75,7 +75,7 @@ describe('QR Scan Clock-In Flow', () => {
       vi.restoreAllMocks();
     });
 
-    it('triggers timesheetService.clockIn when employee selects/scans a vehicle', async () => {
+    it('routes immediately and leaves clock-in to the inspection checklist', async () => {
       currentRole = 'employee';
       vi.spyOn(dbService, 'getSession').mockReturnValue({
         userId: 'emp-202',
@@ -109,13 +109,7 @@ describe('QR Scan Clock-In Flow', () => {
         vehicleButton!.click();
       });
 
-      expect(clockInSpy).toHaveBeenCalledTimes(1);
-      expect(clockInSpy).toHaveBeenCalledWith(
-        'emp-202',
-        'Sarah Connor',
-        'qr',
-        expect.stringMatching(/^qr-scan-/)
-      );
+      expect(clockInSpy).not.toHaveBeenCalled();
       expect(mockPush).toHaveBeenCalledWith('/inspect?id=veh-1&mode=employee');
     });
 

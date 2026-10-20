@@ -1,7 +1,7 @@
 # Immediate inspection entry and timesheet verification
 
 ## Required behavior
-Vehicle selection, a vehicle QR, and New Inspection must open the checklist without awaiting a timesheet write. There is no Continue to inspection step. Signed-in employees are automatically clocked in in the background at scanner selection and at checklist entry. The transactional guard preserves one active shift. Valid inspection submission remains independent of payroll storage. Successfully submitting the current vehicle return starts clock-out; a past catch-up return or a manager returning someone else's vehicle does not close a personal shift.
+Vehicle selection, a vehicle QR, and New Inspection must open the checklist without awaiting a timesheet write. There is no Continue to inspection step. Signed-in employees are automatically clocked in in the background at checklist entry. Scanners do not issue a separate punch, preventing a delayed scanner request from reopening an already-ended shift. The transactional guard preserves one active shift. Valid inspection submission remains independent of payroll storage. Successfully submitting the current vehicle return starts clock-out; a past catch-up return or a manager returning someone else's vehicle does not close a personal shift.
 
 ## Why the previous changes were insufficient
 The scanner still awaited clockInScanEmployee before navigation. A Continue fallback reduced the dead end but retained the dependency and an extra action. This revision removes both. Return handling also updated the separate job count before starting clock-out, allowing a job-count failure to skip time capture. Clock-out now starts immediately after the saved checklist, and the successful return screen does not wait for payroll.
@@ -50,4 +50,4 @@ References:
 - https://firebase.google.com/docs/auth/web/anonymous-auth
 
 ## Test changes
-Only scanner tests that explicitly required waiting, a Continue button, or scanner-level clock-in warnings are updated for the newly requested immediate-navigation behavior. Existing inspection validation, clock calculations, return protections and persistence tests remain; new return tests and a cloud contract suite extend them. No assertions are skipped or disabled.
+Only scanner tests that explicitly required waiting, scanner-side punching, a Continue button, or scanner-level clock-in warnings are updated for the newly requested immediate-navigation behavior. Existing inspection validation, clock calculations, return protections and persistence tests remain; new return tests and a cloud contract suite extend them. No assertions are skipped or disabled.
