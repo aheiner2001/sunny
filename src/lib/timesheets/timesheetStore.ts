@@ -444,7 +444,9 @@ class TimesheetStore {
         }, fail));
       };
       const receiveMap = (key: string, map: Map<string, any>, id: string) => (snapshot: any) => {
-        if (!snapshot.metadata?.fromCache) map.clear();
+        // Server snapshots with pending local writes can briefly look empty; clearing here
+        // wipes a just-confirmed punch before the write is visible in the listener payload.
+        if (!snapshot.metadata?.fromCache && !snapshot.metadata?.hasPendingWrites) map.clear();
         snapshot.forEach((d: any) => { const value = d.data(); map.set(value[id], value); });
         this.saveToLocalStorage(key, Array.from(map.values()));
       };

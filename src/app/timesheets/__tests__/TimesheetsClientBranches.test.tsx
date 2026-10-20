@@ -91,7 +91,7 @@ describe('TimesheetsClient Branch & Edge Case Coverage', () => {
     fireEvent.change(screen.getByLabelText(/end time/i), { target: { value: '2026-10-14T16:00' } });
     fireEvent.change(screen.getByLabelText(/reason/i), { target: { value: 'Forgot punch' } });
 
-    fireEvent.click(screen.getByRole('button', { name: /submit request/i }));
+    fireEvent.click(screen.getByRole('button', { name: /submit for manager review/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/backend submission failed/i)).toBeDefined();
@@ -100,6 +100,10 @@ describe('TimesheetsClient Branch & Edge Case Coverage', () => {
   });
 
   it('handles shift correction modal inputs, cancel via top X, and error handling', async () => {
+    const start = new Date();
+    start.setHours(9, 0, 0, 0);
+    const end = new Date();
+    end.setHours(17, 0, 0, 0);
     timesheetStore.saveShift({
       id: 'shift-corr-edit',
       employeeId: 'u-1',
@@ -107,24 +111,23 @@ describe('TimesheetsClient Branch & Edge Case Coverage', () => {
       locationId: 'loc-main',
       status: 'pending',
       timeZone: 'America/Denver',
-      startAtUtc: '2026-10-14T14:00:00.000Z',
-      endAtUtc: '2026-10-14T20:00:00.000Z',
+      startAtUtc: start.toISOString(),
+      endAtUtc: end.toISOString(),
       unpaidBreakSeconds: 900,
       startSource: 'checklist_return',
       endSource: 'checklist_return',
       startEventId: 'evt-s1',
       endEventId: 'evt-e1',
       revision: 1,
-      createdAt: '2026-10-14T14:00:00.000Z',
-      updatedAt: '2026-10-14T20:00:00.000Z',
-      submittedAt: '2026-10-14T20:00:00.000Z',
+      createdAt: start.toISOString(),
+      updatedAt: end.toISOString(),
+      submittedAt: end.toISOString(),
       approvedAt: null,
       approvedBy: null,
     });
 
     render(<TimesheetsClient />);
-    const correctBtns = screen.getAllByRole('button', { name: /request correction/i });
-    fireEvent.click(correctBtns[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /request correction/i })[0]);
 
     // Test form inputs
     const startInput = screen.getByLabelText(/start time/i);
@@ -144,7 +147,7 @@ describe('TimesheetsClient Branch & Edge Case Coverage', () => {
     expect(screen.queryByRole('heading', { name: /request shift correction/i })).toBeNull();
 
     // Reopen and trigger error
-    fireEvent.click(correctBtns[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /request correction/i })[0]);
     const spy = vi.spyOn(timesheetService, 'requestCorrection').mockRejectedValueOnce(new Error('Correction rejected'));
     fireEvent.change(screen.getByLabelText(/reason/i), { target: { value: 'Typo correction' } });
     fireEvent.click(screen.getByRole('button', { name: /submit request/i }));

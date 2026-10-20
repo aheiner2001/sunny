@@ -173,7 +173,7 @@ describe('TimesheetsClient (Employee View)', () => {
     fireEvent.change(endInput, { target: { value: '2026-10-14T16:00' } });
     fireEvent.change(reasonInput, { target: { value: 'Forgot to scan QR code on arrival' } });
 
-    const submitBtn = screen.getByRole('button', { name: /submit request/i });
+    const submitBtn = screen.getByRole('button', { name: /submit for manager review/i });
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
@@ -295,7 +295,7 @@ describe('TimesheetsClient (Employee View)', () => {
     fireEvent.click(screen.getByRole('button', { name: /clock in/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/network offline/i)).toBeDefined();
+      expect(screen.getByText(/connection problem/i)).toBeDefined();
     });
     clockInSpy.mockRestore();
 
@@ -312,9 +312,76 @@ describe('TimesheetsClient (Employee View)', () => {
     fireEvent.click(screen.getByRole('button', { name: /confirm clock out/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/clock-out service unavailable/i)).toBeDefined();
+      expect(screen.getByText(/Clock-out service unavailable/i)).toBeDefined();
     });
     clockOutSpy.mockRestore();
+  });
+
+  it('explains an already-active shift instead of a silent clock-in', async () => {
+    const existing = {
+      id: 'shift-existing',
+      employeeId: 'u-1',
+      employeeName: 'Trainee Tom',
+      locationId: 'loc-main',
+      status: 'active' as const,
+      timeZone: 'America/Denver',
+      startAtUtc: '2026-10-14T14:00:00.000Z',
+      endAtUtc: null,
+      unpaidBreakSeconds: 0,
+      startSource: 'manual' as const,
+      endSource: null,
+      startEventId: 'evt-existing',
+      endEventId: null,
+      revision: 1,
+      createdAt: '2026-10-14T14:00:00.000Z',
+      updatedAt: '2026-10-14T14:00:00.000Z',
+      submittedAt: null,
+      approvedAt: null,
+      approvedBy: null,
+    };
+    const spy = vi.spyOn(timesheetService, 'clockIn').mockResolvedValueOnce(existing);
+    render(<TimesheetsClient />);
+    fireEvent.click(screen.getByRole('button', { name: /clock in/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/already have an active shift/i)).toBeDefined();
+    });
+    spy.mockRestore();
+  });
+
+  it('opens a clean table view and exports CSV for the week', async () => {
+    const start = new Date();
+    start.setMinutes(start.getMinutes() - 120);
+    const end = new Date();
+    end.setMinutes(end.getMinutes() - 60);
+    await timesheetService.clockIn('u-1', 'Trainee Tom', 'manual', 'evt-csv', start.toISOString());
+    await timesheetService.clockOut('u-1', 'manual', 'evt-csv-out', 0, end.toISOString());
+    let exported: Blob | undefined;
+    vi.stubGlobal('URL', {
+      createObjectURL: (blob: Blob) => {
+        exported = blob;
+        return 'blob:timesheet';
+      },
+      revokeObjectURL: () => {},
+    });
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      render(<TimesheetsClient />);
+      fireEvent.click(screen.getByRole('button', { name: /view in table/i }));
+      expect(screen.getByRole('dialog', { name: /timesheet table/i })).toBeDefined();
+      fireEvent.click(screen.getAllByRole('button', { name: /export csv/i })[0]);
+      await waitFor(() => expect(exported).toBeDefined());
+      const text = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = reject;
+        reader.readAsText(exported!);
+      });
+      expect(text).toContain('Employee');
+      expect(text).toContain('Trainee Tom');
+    } finally {
+      clickSpy.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 });
 
