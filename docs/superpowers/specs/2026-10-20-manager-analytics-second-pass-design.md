@@ -61,7 +61,7 @@ Identity setup checklist moves into the Vehicles drill-in / setup flow (or a com
 
 Maintenance data is stored on Firestore `vehicles` and `equipment` documents via `dbService` (fields such as `maintenance`, `maintenanceReadings`, `serviceHistory`, `maintenanceAppointments`, `imageUrl`, `maintenanceRules`, `operatingHours`). Sample mode does not write live fleet data. Analytics layout prefs stay in localStorage.
 
-**Tests:** Extend/add Vitest coverage that maintenance writes call Firestore `setDoc`/`updateDoc`/`arrayUnion` paths (mocked) and that failed cloud writes do not claim success (align with `maintenancePersistence.test.ts`). Document `npm test` commands in a short note under `docs/` or an appendix in the testing guide.
+**Tests:** Extend/add Vitest coverage that maintenance writes call Firestore `setDoc`/`updateDoc`/`arrayUnion` paths (mocked) and that failed cloud writes do not claim success (align with `maintenancePersistence.test.ts`). How to run: [`docs/october20-second-pass-testing.md`](../../../october20-second-pass-testing.md).
 
 ## Success criteria
 
