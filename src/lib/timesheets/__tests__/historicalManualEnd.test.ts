@@ -25,6 +25,40 @@ it('builds a pending recovered shift from manager end time', () => {
   expect(shift.recovery?.inspectionId).toBe('pre-1');
 });
 
+it('rejects a ready estimate that already has a return', () => {
+  const [row] = buildHistoricalEstimates([
+    ...pretripOnly,
+    {
+      id: 'return-1', userId: 'driver', userName: 'Driver', vehicleId: 'van',
+      vehicleNumber: '5', submittedAt: '2026-10-12T22:00:00Z', kind: 'return',
+      status: 'passed',
+    } as Inspection,
+  ], []);
+
+  expect(row.state).toBe('ready');
+  expect(() => makeManualEndRecoveredShift(row, '2026-10-12T23:00:00.000Z', { id: 'm1', name: 'Manager' }))
+    .toThrow(/missing return/i);
+});
+
+it('rejects an attention estimate that still has return evidence', () => {
+  const [row] = buildHistoricalEstimates([
+    ...pretripOnly,
+    {
+      id: 'late-return', userId: 'driver', userName: 'Driver', vehicleId: 'van',
+      vehicleNumber: '5', submittedAt: '2026-10-12T22:00:00Z', kind: 'return',
+      status: 'passed', submittedById: 'manager',
+    } as Inspection,
+  ], []);
+
+  expect(row).toMatchObject({
+    state: 'attention',
+    returnInspectionId: 'late-return',
+    endAtUtc: '2026-10-12T22:00:00.000Z',
+  });
+  expect(() => makeManualEndRecoveredShift(row, '2026-10-12T23:00:00.000Z', { id: 'm1', name: 'Manager' }))
+    .toThrow(/missing return/i);
+});
+
 it('rejects manual end at or before start', () => {
   const [row] = buildHistoricalEstimates(pretripOnly, []);
   expect(() => makeManualEndRecoveredShift(row, '2026-10-12T13:00:00.000Z', { id: 'm1', name: 'Manager' }))

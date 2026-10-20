@@ -32,3 +32,12 @@ Implemented domain support for recovering a missing-return historical estimate w
 
 - `npx tsc --noEmit` still reports an existing test fixture error in `timesheetCloudSync.test.ts` where `AuditEvent.afterValues` is null. Task 3's nullable source-ID compiler error was resolved.
 - Vitest emits the repository's existing Vite native-config warning.
+
+## Important/High Review Follow-up
+
+- Tightened `makeManualEndRecoveredShift` to accept only attention rows with a pretrip/start and no return ID or end time.
+- Added regressions rejecting ready rows and attention rows that retain return evidence.
+- Added focused service coverage proving `recoverHistoricalEstimateWithManualEnd` rebuilds from current evidence and forwards the manager-entered end time.
+- RED: both invalid-row regressions failed against the prior permissive guard.
+- GREEN: `npx vitest run src/lib/timesheets/__tests__/historicalManualEnd.test.ts src/lib/timesheets/__tests__/punchPersistence.test.ts src/lib/timesheets/__tests__/historicalRecoveryService.test.ts` passed 3 files and 24 tests.
+- IDE lint diagnostics for the changed source and tests: no errors. `git diff --check`: passed.

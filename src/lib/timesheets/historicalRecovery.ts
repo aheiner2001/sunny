@@ -121,10 +121,9 @@ export function makeManualEndRecoveredShift(
   endAtUtc: string,
   actor: { id: string; name: string },
 ): ShiftRecord {
-  if (!row.inspectionId || !row.startAtUtc)
-    throw new Error('Inspection evidence needs a start time before hours can be added.');
-  if (row.state === 'covered')
-    throw new Error('Existing hours overlap this inspection.');
+  if (row.state !== 'attention' || row.endAtUtc !== null || row.returnInspectionId !== null ||
+    !row.inspectionId || !row.startAtUtc)
+    throw new Error('Only an attention estimate with a missing return can use a manual end time.');
   const startMillis = Date.parse(row.startAtUtc);
   const endMillis = Date.parse(endAtUtc);
   if (!Number.isFinite(endMillis) || endMillis <= startMillis || endMillis - startMillis > 18 * 3600000)
