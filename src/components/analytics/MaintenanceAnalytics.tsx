@@ -428,7 +428,17 @@ export default function MaintenanceAnalytics() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const widgets: Record<AnalyticsWidgetId, React.ReactNode> = {
-    metrics: (<div className={styles.metrics}>
+    metrics: (<>
+      <div className={`${styles.sectionHeader} ${styles.metricsIntro}`}>
+        <div>
+          <h2>Fleet metrics</h2>
+          <p className={styles.sectionHint}>
+            Counts for trucks in view, due services, setup gaps, and equipment
+            reviews.
+          </p>
+        </div>
+      </div>
+      <div className={styles.metrics}>
         {[
           {
             label: "Trucks in view",
@@ -464,11 +474,13 @@ export default function MaintenanceAnalytics() {
             <small>{m.note}</small>
           </div>
         ))}
-      </div>),
+      </div></>),
     vehicles: (<><div className={styles.sectionHeader}>
               <div>
-                <span className={styles.eyebrow}>VEHICLE COMPARISON</span>
-                <h2>Your trucks, side by side.</h2>
+                <h2>Vehicle overview</h2>
+                <p className={styles.sectionHint}>
+                  Compare trucks side by side and log service from each card.
+                </p>
               </div>
               <label className={styles.search}>
                 <Search size={16} />
@@ -646,8 +658,10 @@ export default function MaintenanceAnalytics() {
               <section className={styles.panel}>
                 <div className={styles.sectionHeader}>
                   <div>
-                    <span className={styles.eyebrow}>PLANNING WORKLOAD</span>
-                    <h2>Estimated services by month</h2>
+                    <h2>Service outlook</h2>
+                    <p className={styles.sectionHint}>
+                      Estimated services by month from current baselines.
+                    </p>
                   </div>
                   <span className={styles.softBadge}>Projected</span>
                 </div>
@@ -663,13 +677,10 @@ export default function MaintenanceAnalytics() {
                 )}
               </section>
               <section className={`${styles.panel} ${styles.nextSteps}`}>
-                <span className={styles.eyebrow}>
-                  BUILD A RELIABLE BASELINE
-                </span>
-                <h2>
-                  Three small steps.
-                  <br />A clearer year ahead.
-                </h2>
+                <h2>Build a reliable baseline</h2>
+                <p className={styles.sectionHint}>
+                  Three small steps for a clearer year ahead.
+                </p>
                 {[
                   "Confirm each truck’s configuration and applicable oil limits.",
                   "Record the last completed oil change and current mileage.",
@@ -687,7 +698,17 @@ export default function MaintenanceAnalytics() {
                 </p>
               </section>
             </div>),
-    equipment: <EquipmentServicePanel key={String(demo)} items={items} demo={demo} actor={equipmentActor} onSampleChange={updateSampleEquipment} onSaved={refreshData} />,
+    equipment: (<>
+      <div className={styles.sectionHeader}>
+        <div>
+          <h2>Equipment service</h2>
+          <p className={styles.sectionHint}>
+            Record operating hours, verified rules, and completed tool service.
+          </p>
+        </div>
+      </div>
+      <EquipmentServicePanel key={String(demo)} items={items} demo={demo} actor={equipmentActor} onSampleChange={updateSampleEquipment} onSaved={refreshData} />
+    </>),
   };
   return (
     <div className={styles.page}>
@@ -861,10 +882,9 @@ export default function MaintenanceAnalytics() {
           <section className={styles.timelineSection}>
             <div className={styles.sectionHeader}>
               <div>
-                <span className={styles.eyebrow}>THE ROAD AHEAD</span>
-                <h2>A year of better planning.</h2>
-                <p className={styles.muted}>
-                  Compare trucks on shared calendar or mileage scales. Later dates
+                <h2>Maintenance timeline</h2>
+                <p className={styles.sectionHint}>
+                  Compare trucks on shared calendar or mileage scales; later dates
                   assume earlier services are completed.
                 </p>
               </div>
@@ -900,13 +920,10 @@ export default function MaintenanceAnalytics() {
           <section>
             <div className={styles.sectionHeader}>
               <div>
-                <span className={styles.eyebrow}>
-                  TOOLS THAT KEEP YOU MOVING
-                </span>
-                <h2>Equipment life at a glance.</h2>
-                <p className={styles.muted}>
-                  Existing usage and time-based review thresholds. These are
-                  lifespan estimates, not manufacturer service schedules.
+                <h2>Equipment life</h2>
+                <p className={styles.sectionHint}>
+                  Usage and time-based replacement thresholds — lifespan estimates,
+                  not manufacturer service schedules.
                 </p>
               </div>
               {!demo && (

@@ -619,7 +619,12 @@ function SettingsPageContent() {
       </div>
 
       <Link href="/settings/analytics" className="card card-pad spread hover:border-ink-muted transition-colors">
-        <div><strong>Manager Analytics</strong><p className="hint mt-1">Compare trucks, track oil services, and plan equipment reviews.</p></div>
+        <div>
+          <strong>Manager Analytics</strong>
+          <p className="hint mt-1">
+            Plan oil and equipment service, review due work, and export maintenance data.
+          </p>
+        </div>
         <Gauge className="w-6 h-6 shrink-0" aria-hidden />
       </Link>
 
