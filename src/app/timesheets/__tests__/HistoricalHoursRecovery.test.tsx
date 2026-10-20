@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { dbService } from '@/lib/db';
 import { timesheetStore } from '@/lib/timesheets/timesheetStore';
+import * as historicalRecoveryService from '@/lib/timesheets/historicalRecoveryService';
 import HistoricalHoursRecovery from '../HistoricalHoursRecovery';
 import type { Inspection } from '@/types';
 vi.mock('@/lib/firebase', () => ({ db: null, ensureAuth: vi.fn() }));
@@ -36,4 +37,21 @@ it('flags incomplete history and offers no automatic import', async () => {
   preview();
   await screen.findByText(/no return submitted.*enter an end time/i);
   expect(screen.queryByRole('button', { name: /add.*for review/i })).toBeNull();
+});
+it('lets a manager set an end time on a missing-return row and save for review', async () => {
+  vi.mocked(dbService.getInspections).mockReturnValue([evidence[0]]);
+  const recover = vi.spyOn(historicalRecoveryService, 'recoverHistoricalEstimateWithManualEnd');
+  preview();
+
+  fireEvent.change(await screen.findByLabelText('End time for Max'), {
+    target: { value: '2026-10-19T17:30' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Add with end time' }));
+
+  await waitFor(() => expect(recover).toHaveBeenCalledWith(
+    'morning',
+    '2026-10-19T23:30:00.000Z',
+    { id: 'manager', name: 'Manager' },
+  ));
+  expect(screen.getByRole('status').textContent).toMatch(/added max.*pending/i);
 });

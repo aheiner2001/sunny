@@ -4,7 +4,10 @@ import { DateTime } from 'luxon';
 import { dbService } from '@/lib/db';
 import { timesheetStore } from '@/lib/timesheets/timesheetStore';
 import { buildHistoricalEstimates, type HistoricalEstimate } from '@/lib/timesheets/historicalRecovery';
-import { recoverHistoricalEstimate } from '@/lib/timesheets/historicalRecoveryService';
+import {
+  recoverHistoricalEstimate,
+  recoverHistoricalEstimateWithManualEnd,
+} from '@/lib/timesheets/historicalRecoveryService';
 import { DEFAULT_TIMEZONE } from '@/lib/timesheets/timeCalculations';
 
 export default function HistoricalHoursRecovery({ actor, weekStartUtc, weekEndUtc }: {
@@ -14,6 +17,7 @@ export default function HistoricalHoursRecovery({ actor, weekStartUtc, weekEndUt
   const [rows, setRows] = useState<HistoricalEstimate[]>([]);
   const [saving, setSaving] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [manualEnds, setManualEnds] = useState<Record<string, string>>({});
   const refresh = useCallback(() => {
     try {
       const estimates = buildHistoricalEstimates(dbService.getInspections(), timesheetStore.getAllShifts(),
@@ -40,6 +44,22 @@ export default function HistoricalHoursRecovery({ actor, weekStartUtc, weekEndUt
     setMessage('');
     try {
       await recoverHistoricalEstimate(row.inspectionId, actor);
+      setMessage(`Added ${row.employeeName}’s estimated hours as pending. Use Edit to verify times and unpaid breaks before approving.`);
+      refresh();
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Estimate was not saved. Please retry.'); }
+    finally { setSaving(null); }
+  };
+  const addWithManualEnd = async (row: HistoricalEstimate) => {
+    if (!row.inspectionId || saving) return;
+    const endAtUtc = DateTime.fromISO(manualEnds[row.id] || '', { zone: DEFAULT_TIMEZONE }).toUTC().toISO();
+    if (!endAtUtc) {
+      setMessage('Enter a valid end time.');
+      return;
+    }
+    setSaving(row.id);
+    setMessage('');
+    try {
+      await recoverHistoricalEstimateWithManualEnd(row.inspectionId, endAtUtc, actor);
       setMessage(`Added ${row.employeeName}’s estimated hours as pending. Use Edit to verify times and unpaid breaks before approving.`);
       refresh();
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Estimate was not saved. Please retry.'); }
@@ -73,6 +93,15 @@ export default function HistoricalHoursRecovery({ actor, weekStartUtc, weekEndUt
                   aria-label={`Add ${row.employeeName} for review`} onClick={() => void add(row)}>
                   {saving === row.id ? 'Saving…' : 'Add for review'}
                 </button>}
+                {row.state === 'attention' && row.inspectionId && row.startAtUtc && !row.endAtUtc && <>
+                  <input type="datetime-local" aria-label={`End time for ${row.employeeName}`}
+                    className="input input-bordered input-sm mb-2 block" value={manualEnds[row.id] || ''}
+                    onChange={event => setManualEnds(values => ({ ...values, [row.id]: event.target.value }))} />
+                  <button type="button" className="btn btn-secondary btn-sm"
+                    disabled={saving !== null || !manualEnds[row.id]} onClick={() => void addWithManualEnd(row)}>
+                    {saving === row.id ? 'Saving…' : 'Add with end time'}
+                  </button>
+                </>}
               </td>
             </tr>)}</tbody>
           </table></div>}
