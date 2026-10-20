@@ -270,6 +270,24 @@ describe('Timesheet Store Cloud Firestore Sync', () => {
     expect(mockOnSnapshot).toHaveBeenCalledTimes(8);
   });
 
+  it('classifies permission-denied listener errors separately from generic failures', async () => {
+    timesheetStore.reset();
+    await timesheetStore.setupFirestoreListeners();
+    const onError = mockOnSnapshot.mock.calls[0][3];
+    onError({ code: 'permission-denied', message: 'Missing or insufficient permissions.' });
+    expect(timesheetStore.getSyncStatus()).toMatch(/permission/i);
+    expect(timesheetStore.getSyncStatus()).toMatch(/Firebase|rules|Console/i);
+  });
+
+  it('keeps a generic cloud-sync failure message for non-permission errors', async () => {
+    timesheetStore.reset();
+    await timesheetStore.setupFirestoreListeners();
+    const onError = mockOnSnapshot.mock.calls[0][3];
+    onError(new Error('network-request-failed'));
+    expect(timesheetStore.getSyncStatus()).toContain('Cloud sync failed');
+    expect(timesheetStore.getSyncStatus()).not.toMatch(/Console rules/i);
+  });
+
   it('keeps cloud status unconfirmed until every collection has current server data', async () => {
     await timesheetStore.setupFirestoreListeners();
     const emit = (index: number, fromCache: boolean, hasPendingWrites = false) => snapshotCallbacks[index]({

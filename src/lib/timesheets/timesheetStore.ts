@@ -31,6 +31,31 @@ export const FIRESTORE_COLLECTIONS = {
   CORRECTIONS: 'timesheet_corrections',
 };
 
+function isFirestorePermissionError(error: unknown): boolean {
+  if (!error) return false;
+  if (typeof error === 'object') {
+    const err = error as { code?: string; message?: string };
+    if (err.code === 'permission-denied') return true;
+    if (err.message && /permission/i.test(err.message)) return true;
+  }
+  if (error instanceof Error && /permission/i.test(error.message)) return true;
+  return false;
+}
+
+function cloudSyncFailureMessage(error?: unknown): string {
+  if (isFirestorePermissionError(error)) {
+    return 'Cloud sync failed: Firebase permission denied. Verify Console rules for timesheet collections, then retry.';
+  }
+  return 'Cloud sync failed. Check connection, then retry.';
+}
+
+function timesheetSaveFailureMessage(error?: unknown): string {
+  if (isFirestorePermissionError(error)) {
+    return 'Timesheet save failed: Firebase permission denied. Verify Console rules for timesheet collections, then retry.';
+  }
+  return 'Timesheet save failed. Check connection, then retry.';
+}
+
 /**
  * Sanitizes data structures before sending to Cloud Firestore.
  * Converts any `undefined` values to `null` to avoid Firestore rejection.
@@ -388,13 +413,13 @@ class TimesheetStore {
     const generation = ++this.listenerGeneration;
     this.setSyncStatus('Connecting to Firebase…');
     const confirmed = new Set<string>();
-    const fail = () => {
+    const fail = (error?: unknown) => {
       if (generation !== this.listenerGeneration) return;
       this.listenerGeneration++;
       this.unsubscribers.forEach(unsubscribe => unsubscribe());
       this.unsubscribers = [];
       this.listening = false;
-      this.setSyncStatus('Cloud sync failed. Check connection and Firebase permissions, then retry.');
+      this.setSyncStatus(cloudSyncFailureMessage(error));
     };
     try {
       if (!await ensureAuth()) throw new Error('Firebase authentication unavailable');
@@ -433,8 +458,8 @@ class TimesheetStore {
         this.saveToLocalStorage(TIMESHEET_STORAGE_KEYS.AUDIT, this.auditEvents);
       });
       subscribe(listeners[2][0], receiveMap(listeners[2][1], this.correctionRequests, 'id'));
-    } catch {
-      fail();
+    } catch (error) {
+      fail(error);
     }
   }
 
@@ -505,7 +530,7 @@ class TimesheetStore {
       this.setSyncStatus('Last timesheet save confirmed');
       return { ...result.shift };
     } catch (error) {
-      this.setSyncStatus('Timesheet save failed. Check connection and Firebase permissions, then retry.');
+      this.setSyncStatus(timesheetSaveFailureMessage(error));
       throw error;
     }
   }
@@ -679,7 +704,7 @@ class TimesheetStore {
       await this.syncEmployeeRecord(FIRESTORE_COLLECTIONS.SHIFTS, shift.id, shift.employeeId, shift, shift.recovery ? shift : undefined);
     } catch (err) {
       console.warn('Firestore sync error for shift:', err);
-      this.setSyncStatus('Timesheet save failed. Check connection and Firebase permissions, then retry.');
+      this.setSyncStatus(timesheetSaveFailureMessage(err));
       throw err;
     }
   }
@@ -691,7 +716,7 @@ class TimesheetStore {
       await deleteDoc(doc(db, FIRESTORE_COLLECTIONS.SHIFTS, id));
     } catch (err) {
       console.warn('Firestore delete error for shift:', err);
-      this.setSyncStatus('Timesheet save failed. Check connection and Firebase permissions, then retry.');
+      this.setSyncStatus(timesheetSaveFailureMessage(err));
       throw err;
     }
   }
@@ -703,7 +728,7 @@ class TimesheetStore {
       await setDoc(doc(db, FIRESTORE_COLLECTIONS.GUARDS, guard.employeeId), sanitizeForFirestore(guard), { merge: true });
     } catch (err) {
       console.warn('Firestore sync error for guard:', err);
-      this.setSyncStatus('Timesheet save failed. Check connection and Firebase permissions, then retry.');
+      this.setSyncStatus(timesheetSaveFailureMessage(err));
       throw err;
     }
   }
@@ -715,7 +740,7 @@ class TimesheetStore {
       await setDoc(doc(db, FIRESTORE_COLLECTIONS.AUDIT, event.id), sanitizeForFirestore(event), { merge: true });
     } catch (err) {
       console.warn('Firestore sync error for audit event:', err);
-      this.setSyncStatus('Timesheet save failed. Check connection and Firebase permissions, then retry.');
+      this.setSyncStatus(timesheetSaveFailureMessage(err));
       throw err;
     }
   }
@@ -726,7 +751,7 @@ class TimesheetStore {
       await this.syncEmployeeRecord(FIRESTORE_COLLECTIONS.CORRECTIONS, request.id, request.employeeId, request);
     } catch (err) {
       console.warn('Firestore sync error for correction request:', err);
-      this.setSyncStatus('Timesheet save failed. Check connection and Firebase permissions, then retry.');
+      this.setSyncStatus(timesheetSaveFailureMessage(err));
       throw err;
     }
   }
@@ -738,7 +763,7 @@ class TimesheetStore {
       await deleteDoc(doc(db, FIRESTORE_COLLECTIONS.CORRECTIONS, id));
     } catch (err) {
       console.warn('Firestore delete error for correction request:', err);
-      this.setSyncStatus('Timesheet save failed. Check connection and Firebase permissions, then retry.');
+      this.setSyncStatus(timesheetSaveFailureMessage(err));
       throw err;
     }
   }

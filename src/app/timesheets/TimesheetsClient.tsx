@@ -127,6 +127,36 @@ export default function TimesheetsClient() {
 
   const [syncStatus, setSyncStatus] = useState(() => timesheetStore.getSyncStatus());
 
+  const syncBannerClasses = useMemo(() => {
+    if (/failed|unavailable|permission/i.test(syncStatus)) {
+      return {
+        container:
+          'bg-rose-500/10 border border-amber-500/30 text-rose-900 dark:text-rose-200',
+        iconWrap: 'bg-rose-500/20 text-rose-600 dark:text-rose-300',
+        badge:
+          'bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200',
+        subtitle: 'text-rose-700 dark:text-rose-300/80',
+      };
+    }
+    if (/Active|confirmed/i.test(syncStatus)) {
+      return {
+        container:
+          'bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-200',
+        iconWrap: 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300',
+        badge:
+          'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200',
+        subtitle: 'text-emerald-700 dark:text-emerald-300/80',
+      };
+    }
+    return {
+      container:
+        'bg-slate-500/10 border border-slate-500/30 text-slate-900 dark:text-slate-200',
+      iconWrap: 'bg-slate-500/20 text-slate-600 dark:text-slate-300',
+      badge: 'bg-slate-100 text-slate-800 dark:bg-slate-800/60 dark:text-slate-200',
+      subtitle: 'text-slate-700 dark:text-slate-300/80',
+    };
+  }, [syncStatus]);
+
   // Refresh all records from store
   const refreshData = useCallback(() => {
     setSyncStatus(timesheetStore.getSyncStatus());
@@ -506,19 +536,23 @@ export default function TimesheetsClient() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-4 sm:p-6 lg:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Firebase Cloud Sync Banner */}
-        <div className="flex items-center justify-between gap-4 p-3 sm:p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 dark:text-emerald-200 shadow-sm">
+        <div
+          className={`flex items-center justify-between gap-4 p-3 sm:p-4 rounded-xl shadow-sm ${syncBannerClasses.container}`}
+        >
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-300">
+            <div className={`p-2 rounded-lg ${syncBannerClasses.iconWrap}`}>
               <Cloud className="w-5 h-5" />
             </div>
             <div>
               <p className="font-semibold text-sm sm:text-base flex items-center gap-2">
                 <span>Timesheets</span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200">
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded text-2xs font-semibold ${syncBannerClasses.badge}`}
+                >
                   {syncStatus}
                 </span>
               </p>
-              <p className="text-xs text-emerald-700 dark:text-emerald-300/80">
+              <p className={`text-xs ${syncBannerClasses.subtitle}`}>
                 Check cloud status before relying on these hours. Failed clock-ins and clock-outs need a retry.
               </p>
             </div>

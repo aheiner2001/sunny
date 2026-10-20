@@ -34,6 +34,31 @@ describe('TimesheetsClient (Employee View)', () => {
     expect(screen.getByText(/local only — cloud sync unavailable/i)).toBeDefined();
   });
 
+  it('styles sync banner with warning tones when cloud sync is unavailable', () => {
+    render(<TimesheetsClient />);
+    const badge = screen.getByText(/local only — cloud sync unavailable/i);
+    const banner = badge.closest('.rounded-xl');
+    expect(banner?.className).toMatch(/rose|amber/);
+  });
+
+  it('styles sync banner emerald when cloud sync is active', () => {
+    vi.spyOn(timesheetStore, 'getSyncStatus').mockReturnValue('Firebase Cloud Sync Active');
+    render(<TimesheetsClient />);
+    const badge = screen.getByText(/Firebase Cloud Sync Active/i);
+    const banner = badge.closest('.rounded-xl');
+    expect(banner?.className).toMatch(/emerald/);
+  });
+
+  it('styles sync banner with warning tones for permission sync failures', () => {
+    vi.spyOn(timesheetStore, 'getSyncStatus').mockReturnValue(
+      'Cloud sync failed: Firebase permission denied. Verify Console rules for timesheet collections, then retry.',
+    );
+    render(<TimesheetsClient />);
+    const badge = screen.getByText(/permission denied/i);
+    const banner = badge.closest('.rounded-xl');
+    expect(banner?.className).toMatch(/rose|amber/);
+  });
+
   it('renders Clock In button when employee is clocked out', () => {
     render(<TimesheetsClient />);
     expect(screen.getByRole('button', { name: /clock in/i })).toBeDefined();
