@@ -461,7 +461,7 @@ export default function InspectClient() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (user?.role === 'employee' && punchStatus !== 'saved') return;
+    // Timesheet persistence must never gate inspection validation or submission.
 
     if (!allRequiredAnswered) {
       return;
@@ -844,8 +844,8 @@ export default function InspectClient() {
     <div className="page max-w-2xl mx-auto space-y-5 pb-12">
       {user?.role === 'employee' && punchStatus !== 'saved' && (
         <div className="card card-pad text-sm" role="alert">
-          {punchStatus === 'saving' ? 'Saving your clock-in before inspection submission…' :
-            'Clock-in was not saved. Check your connection and retry before submitting the inspection.'}
+          {punchStatus === 'saving' ? 'Saving your clock-in. You can continue filling out and submitting this inspection.' :
+            'Clock-in was not saved. You can still submit this inspection. Retry clock-in or request missing hours in Timesheets.'}
           {punchStatus === 'error' && <button type="button" className="btn btn-secondary btn-sm ml-2"
             onClick={() => setPunchAttempt(attempt => attempt + 1)}>Retry clock-in</button>}
         </div>
