@@ -337,7 +337,7 @@ describe('Timesheet Store Cloud Firestore Sync', () => {
           actorName: 'Alice',
           action: 'clock_in',
           beforeValues: null,
-          afterValues: null,
+          afterValues: { id: shift.id, status: shift.status },
           reason: null,
           revision: 1,
           eventId: 'evt-save-1',
