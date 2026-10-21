@@ -83,7 +83,7 @@ export default function ReturnClient() {
   const [error, setError] = useState<string | null>(null);
   const [returnedVehicle, setReturnedVehicle] = useState<string | null>(null);
   const [timesheetNotice, setTimesheetNotice] = useState<{
-    type: 'success' | 'no_active_shift' | 'error';
+    type: 'success' | 'no_active_shift' | 'error' | 'info';
     message: string;
   } | null>(null);
   const [jobsCompleted, setJobsCompleted] = useState('0');
@@ -97,7 +97,7 @@ export default function ReturnClient() {
     setQuestions(activeChecklistQuestions(normalizeReturnQuestions(config.returnQuestions)));
     if (missedId) {
       const row = dbService.getMissedReturns().find((m) => m.id === missedId) || null;
-      setMissed(row && row.status === 'pending' ? row : row);
+      setMissed(row && row.status === 'pending' ? row : null);
     } else {
       setMissed(null);
     }
@@ -166,6 +166,27 @@ export default function ReturnClient() {
     router.replace('/home');
   };
 
+  const clockOutRetry = useRef<{ employeeId: string; eventId: string; timestamp: string } | null>(null);
+  const [isRetryingPunch, setIsRetryingPunch] = useState(false);
+  const finishTimesheet = async () => {
+    const punch = clockOutRetry.current;
+    if (!punch || isRetryingPunch) return;
+    setIsRetryingPunch(true);
+    try {
+      await timesheetService.clockOut(punch.employeeId, 'checklist_return', punch.eventId, 0, punch.timestamp);
+      setTimesheetNotice({ type: 'success', message: 'Shift ended and submitted for manager review.' });
+      clockOutRetry.current = null;
+    } catch (error) {
+      if (error instanceof Error && error.message === 'NO_ACTIVE_SHIFT') {
+        setTimesheetNotice({ type: 'no_active_shift', message: 'No active shift was open to clock out. You can request missing shift hours in Timesheets.' });
+      } else {
+        setTimesheetNotice({ type: 'error', message: 'The vehicle return was saved, but clock-out was not confirmed. Check your connection and retry clock-out.' });
+      }
+    } finally {
+      setIsRetryingPunch(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !vehicle || !allRequiredAnswered || isSubmitting) return;
@@ -196,7 +217,7 @@ export default function ReturnClient() {
           equipmentName: q.equipmentName,
         };
       });
-      await dbService.submitReturnInspection({
+      const { inspection: returnInspection } = await dbService.submitReturnInspection({
         vehicleId: vehicle.id,
         startedAt: inspectionStartedAt,
         userId: user.id,
@@ -205,34 +226,22 @@ export default function ReturnClient() {
         responses: payload,
         missedReturnId: missed?.id || null,
       });
-      const jobs = Math.max(0, Math.floor(Number(jobsCompleted) || 0));
-      await dbService.setVehicleJobsToday(vehicle.id, jobs, {
-        id: user.id,
-        name: user.name,
-      });
-      try {
-        await timesheetService.clockOut(user.id, 'checklist_return', `return-${Date.now()}`);
-        setTimesheetNotice({
-          type: 'success',
-          message: 'Shift ended and submitted for manager review.',
-        });
-      } catch (clockErr: any) {
-        // If NO_ACTIVE_SHIFT, van return still succeeds; driver is alerted
-        if (clockErr?.message === 'NO_ACTIVE_SHIFT') {
-          console.info('Return inspection submitted without an open active shift.');
-          setTimesheetNotice({
-            type: 'no_active_shift',
-            message: 'No active shift was open to clock out. You can request missing shift hours in Timesheets.',
-          });
-        } else {
-          console.warn('Timesheet clock-out error:', clockErr);
-          setTimesheetNotice({
-            type: 'error',
-            message: 'Failed to record clock-out punch.',
-          });
-        }
-      }
+      // The checklist is already saved. Neither payroll nor the job-count update
+      // may hide that success or prevent the employee's clock-out from starting.
       setReturnedVehicle(vehicle.vehicleNumber);
+      if (!isCatchUp && user.role === 'employee' && vehicle.currentUserId === user.id) {
+        clockOutRetry.current = { employeeId: user.id, eventId: `return-${returnInspection.id}`, timestamp: new Date().toISOString() };
+        setTimesheetNotice({ type: 'info', message: 'Vehicle return saved. Confirming clock-out…' });
+        void finishTimesheet();
+      } else {
+        setTimesheetNotice({ type: 'info', message: 'Vehicle return saved. Timesheet hours were not changed for this return; review any missing hours in Timesheets.' });
+      }
+      const jobs = Math.max(0, Math.floor(Number(jobsCompleted) || 0));
+      try {
+        await dbService.setVehicleJobsToday(vehicle.id, jobs, { id: user.id, name: user.name });
+      } catch {
+        setError('Your return checklist was saved, but the job count was not updated. Tell your manager.');
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Could not submit return.';
       setError(message);
@@ -257,6 +266,8 @@ export default function ReturnClient() {
           <h1 className="card-title">Returned — {returnedVehicle} available.</h1>
           <p className="hint">Occupancy is cleared. The van is ready for the next driver.</p>
 
+          {error && <p className="text-sm text-[var(--critical)]" role="alert">{error}</p>}
+
           {timesheetNotice?.type === 'success' && (
             <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 text-left">
               <span className="font-bold">Shift Clocked Out:</span> {timesheetNotice.message}
@@ -275,9 +286,12 @@ export default function ReturnClient() {
             </div>
           )}
 
+          {timesheetNotice?.type === 'info' && <p className="text-sm">{timesheetNotice.message}</p>}
           {timesheetNotice?.type === 'error' && (
             <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800 text-left">
               <span className="font-bold">Timesheet Notice:</span> {timesheetNotice.message}
+              <button type="button" className="btn btn-secondary btn-sm ml-2" disabled={isRetryingPunch}
+                onClick={() => void finishTimesheet()}>{isRetryingPunch ? 'Retrying…' : 'Retry clock-out'}</button>
             </div>
           )}
 

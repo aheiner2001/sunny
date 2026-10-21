@@ -178,6 +178,9 @@ export default function MaintenanceAnalytics() {
     [sampleEquipment, setSampleEquipment] = useState<Equipment[]>([]),
     [query, setQuery] = useState(""),
     [tab, setTab] = useState<"overview" | "timeline" | "equipment">("overview");
+  const [overviewPane, setOverviewPane] = useState<"summary" | "priority" | "vehicles" | "equipment">(
+    "summary",
+  );
   const [editor, setEditor] = useState<{ id: string; mode: EditorMode; ruleId?:string; step?:number; original?:VehicleServiceRecord; appointment?:MaintenanceAppointment } | null>(
       null,
     ),
@@ -305,7 +308,11 @@ export default function MaintenanceAnalytics() {
   const equipmentActor = demo ? {id: "synthetic-manager", name: "Synthetic sample manager"} : {id: managerId, name: user?.name || "Manager"};
   const updateSampleEquipment = (updated: Equipment) => setSampleEquipment(current => current.map(item => item.id === updated.id ? updated : item));
   const focusedEquipment = equipmentFocus ? [...items].sort((a,b) => Number(b.id === equipmentFocus) - Number(a.id === equipmentFocus)) : items;
-  const openEquipment = (id: string) => {setEquipmentFocus(id);setTab("equipment");};
+  const openEquipment = (id: string) => {
+    setEquipmentFocus(id);
+    setTab("overview");
+    setOverviewPane("equipment");
+  };
   const lowTools = items.filter((e) => {
     const s = computeLifespanStatus(e, now);
     return s === "getting_low" || s === "due_for_review";
@@ -428,7 +435,17 @@ export default function MaintenanceAnalytics() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const widgets: Record<AnalyticsWidgetId, React.ReactNode> = {
-    metrics: (<div className={styles.metrics}>
+    metrics: (<>
+      <div className={`${styles.sectionHeader} ${styles.metricsIntro}`}>
+        <div>
+          <h2>Fleet metrics</h2>
+          <p className={styles.sectionHint}>
+            Counts for trucks in view, due services, setup gaps, and equipment
+            reviews.
+          </p>
+        </div>
+      </div>
+      <div className={styles.metrics}>
         {[
           {
             label: "Trucks in view",
@@ -464,11 +481,13 @@ export default function MaintenanceAnalytics() {
             <small>{m.note}</small>
           </div>
         ))}
-      </div>),
+      </div></>),
     vehicles: (<><div className={styles.sectionHeader}>
               <div>
-                <span className={styles.eyebrow}>VEHICLE COMPARISON</span>
-                <h2>Your trucks, side by side.</h2>
+                <h2>Vehicle overview</h2>
+                <p className={styles.sectionHint}>
+                  Compare trucks side by side and log service from each card.
+                </p>
               </div>
               <label className={styles.search}>
                 <Search size={16} />
@@ -487,20 +506,20 @@ export default function MaintenanceAnalytics() {
                 )[0];
                 const stale =
                   !latest || latest.date < dateOnly(addDays(now, -14));
-                const progress =
-                  oil.lastService && v.maintenance?.oilIntervalMiles
-                    ? Math.max(
-                        0,
-                        Math.min(
-                          100,
-                          (((v.odometer ?? 0) - oil.lastService.odometer) /
-                            (v.maintenance.rules?.find(r=>r.id==='oil')?.intervalMiles || v.maintenance.oilIntervalMiles)) *
-                            100,
-                        ),
-                      )
-                    : 0;
+                const identityGaps = setupIssues(v).filter(issue =>
+                  /vehicle make|vehicle model|model year|engine\/configuration|operating conditions/i.test(issue),
+                );
+                const setupCount =
+                  identityGaps.length +
+                  forecasts.reduce((n, f) => n + (f.status === "needs_setup" ? Math.max(1, f.missing.length) : 0), 0);
+                const primaryLabel =
+                  oil.status === "needs_setup" || setupCount > 0
+                    ? "Complete setup"
+                    : oil.status === "overdue" || oil.status === "due_soon"
+                      ? "Log service"
+                      : "Open vehicle";
                 return (
-                  <article key={v.id} className={styles.truckCard}>
+                  <article key={v.id} className={`${styles.truckCard} ${styles.truckCardCompact}`}>
                     <div className={styles.cardTop}>
                       <span className={styles.truckName}>
                         {v.vehicleNumber}
@@ -518,95 +537,125 @@ export default function MaintenanceAnalytics() {
                         .filter(Boolean)
                         .join(" ") || v.name}
                     </p>
-                    {v.imageUrl ? <img src={v.imageUrl} onError={imageErrorFallback} alt={`${v.vehicleNumber} vehicle`} className={styles.truckGraphic} style={{objectFit: "contain"}} /> : <TruckGraphic />}
-                    <label className={styles.photoUpload}>Vehicle photo<input aria-label={`Upload ${v.vehicleNumber} photo`} type="file" accept="image/jpeg,image/png,image/webp" disabled={photoBusy!==null} onChange={e=>{const file=e.target.files?.[0];if(file)void uploadPhoto(v,file);e.target.value="";}}/>{photoBusy===v.id?"Saving photo…":"JPEG, PNG or WebP · up to 5MB"}</label>
-                    {v.imageUrl && <button className={styles.setupLink} aria-label={`Remove ${v.vehicleNumber} photo`} disabled={photoBusy !== null} onClick={() => void removeOrRestorePhoto(v)}>Remove photo</button>}
-                    {removedPhotos[v.id] && <button className={styles.setupLink} aria-label={`Restore ${v.vehicleNumber} photo`} disabled={photoBusy !== null} onClick={() => void removeOrRestorePhoto(v, true)}>Restore removed photo</button>}
-                    <div className={styles.reading}>
-                      <span>Recorded odometer</span>
-                      <strong>
-                        {v.odometer?.toLocaleString() ?? "—"} <small>mi</small>
-                      </strong>
-                      <small>
-                        {latest
-                          ? `Reading dated ${latest.date}`
-                          : "No dated mileage reading"}
-                        {stale ? " · Needs a fresh check" : ""}
-                      </small>
-                    </div>
-                    <div className={styles.oilHeading}>
-                      <span>
-                        <Droplets size={15} />
-                        Oil & filter
-                      </span>
-                      <strong>
-                        {oil.remainingMiles != null
-                          ? `${Math.max(0, oil.remainingMiles).toLocaleString()} mi left`
-                          : "Baseline needed"}
-                      </strong>
-                    </div>
-                    <div className={styles.progress}>
-                      <div
-                        style={{ width: `${progress}%` }}
-                        className={
-                          oil.status === "overdue" ? styles.progressOverdue : ""
-                        }
+                    {v.imageUrl ? (
+                      <img
+                        src={v.imageUrl}
+                        onError={imageErrorFallback}
+                        alt={`${v.vehicleNumber} vehicle`}
+                        className={styles.truckGraphic}
+                        style={{ objectFit: "contain", maxHeight: 96 }}
                       />
+                    ) : null}
+                    <div className={styles.compactFacts}>
+                      <div>
+                        <span>Odometer </span>
+                        <strong>{v.odometer?.toLocaleString() ?? "—"} mi</strong>
+                        <div>
+                          {latest ? `Reading ${latest.date}` : "No dated reading"}
+                          {stale ? " · Needs check" : ""}
+                        </div>
+                      </div>
+                      <div>
+                        <span>Oil & filter </span>
+                        <strong>
+                          {oil.remainingMiles != null
+                            ? `${Math.max(0, oil.remainingMiles).toLocaleString()} mi left`
+                            : oil.dueDate || "Baseline needed"}
+                        </strong>
+                      </div>
                     </div>
-                    <dl className={styles.truckFacts}>
-                      <div>
-                        <dt>Last oil change</dt>
-                        <dd>{oil.lastService?.date ?? "Not recorded"}</dd>
-                      </div>
-                      <div>
-                        <dt>Next planning date</dt>
-                        <dd>{oil.dueDate ?? "Not available"}</dd>
-                      </div>
-                      <div>
-                        <dt>Mileage limit</dt>
-                        <dd>
-                          {oil.dueOdometer?.toLocaleString() ?? "—"}
-                          {oil.dueOdometer ? " mi" : ""}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Configuration</dt>
-                        <dd>{v.maintenance?.engine || "Needs setup"}</dd>
-                      </div>
-                    </dl>
-                    <p className={styles.cardHint}>{oil.reason}</p>
-                    {forecasts.map(f=><section key={f.ruleId} className={styles.ruleForecast} aria-label={`${f.title} forecast`}><div className={styles.cardTop}><strong>{f.title}</strong><span className={`${styles.badge} ${styles[f.status]}`}>{labels[f.status]}</span></div><p>{f.reason}</p><p>Source: {f.source.startsWith('https://')?<a href={f.source} target="_blank" rel="noreferrer">Review manual ↗</a>:f.source || 'Not verified'}</p><ul>{f.basis.map(b=><li key={b}>{b}</li>)}</ul>{f.dueDate&&<p>Estimate: {f.dueDate}{f.dueOdometer!=null?` · ${f.dueOdometer.toLocaleString()} mi limit`:''}</p>}{f.missing.map(issue=>{const action=issueAction(issue,f.ruleId,v.maintenance?.rules?.some(rule=>rule.id===f.ruleId) || f.ruleId!=='oil');return <p key={issue}>{issue} <button className={styles.setupLink} onClick={()=>edit(v.id,action.mode,f.ruleId,action.step)}>{action.label} →</button></p>;})}</section>)}
-                    {setupIssues(v).filter(issue=>/vehicle make|vehicle model|model year|engine\/configuration|operating conditions/i.test(issue)).map(issue=><p key={issue} className={styles.muted}>{issue} <button className={styles.setupLink} onClick={()=>edit(v.id,'profile',undefined,1)}>Add identity detail →</button></p>)}
+                    {setupCount > 0 && (
+                      <button
+                        type="button"
+                        className={styles.setupCount}
+                        onClick={() => edit(v.id, "profile", undefined, 1)}
+                      >
+                        {setupCount} setup item{setupCount === 1 ? "" : "s"}
+                      </button>
+                    )}
+                    <label className={styles.photoUpload}>
+                      Vehicle photo
+                      <input
+                        aria-label={`Upload ${v.vehicleNumber} photo`}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        disabled={photoBusy !== null}
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) void uploadPhoto(v, file);
+                          e.target.value = "";
+                        }}
+                      />
+                      {photoBusy === v.id ? "Saving photo…" : "JPEG, PNG or WebP · up to 5MB"}
+                    </label>
+                    {v.imageUrl && (
+                      <button
+                        className={styles.setupLink}
+                        aria-label={`Remove ${v.vehicleNumber} photo`}
+                        disabled={photoBusy !== null}
+                        onClick={() => void removeOrRestorePhoto(v)}
+                      >
+                        Remove photo
+                      </button>
+                    )}
+                    {removedPhotos[v.id] && (
+                      <button
+                        className={styles.setupLink}
+                        aria-label={`Restore ${v.vehicleNumber} photo`}
+                        disabled={photoBusy !== null}
+                        onClick={() => void removeOrRestorePhoto(v, true)}
+                      >
+                        Restore removed photo
+                      </button>
+                    )}
                     <div className={styles.cardActions}>
                       <button
+                        type="button"
                         className={styles.primary}
-                        onClick={() => edit(v.id,"service")}
+                        onClick={() =>
+                          edit(
+                            v.id,
+                            primaryLabel === "Log service" ? "service" : "profile",
+                            primaryLabel === "Log service" ? "oil" : undefined,
+                            primaryLabel === "Complete setup" ? 1 : undefined,
+                          )
+                        }
                       >
-                        <Plus size={15} />
-                        Log service
+                        {primaryLabel === "Log service" ? <Plus size={15} /> : null}
+                        {primaryLabel}
                       </button>
-                      <button
-                        className={styles.secondary}
-                        onClick={() => edit(v.id,"reading")}
-                      >
+                      <button type="button" className={styles.secondary} onClick={() => edit(v.id, "reading")}>
                         <Gauge size={15} />
                         Mileage
                       </button>
                     </div>
-                    <button className={styles.secondary} onClick={()=>edit(v.id,"appointment")}>Book appointment</button>
-                    <button
-                      className={styles.setupLink}
-                      onClick={() => edit(v.id,"profile")}
-                    >
-                      Vehicle & schedule setup <ArrowUpRight size={14} />
-                    </button>
                     <details className={styles.history}>
                       <summary>
-                        Service history ({v.serviceHistory?.length || 0})
+                        More · history ({v.serviceHistory?.length || 0}) · appointments (
+                        {v.maintenanceAppointments?.length || 0})
                       </summary>
+                      <div className={styles.cardActions} style={{ marginTop: 8 }}>
+                        <button type="button" className={styles.secondary} onClick={() => edit(v.id, "appointment")}>
+                          Book appointment
+                        </button>
+                        <button type="button" className={styles.setupLink} onClick={() => edit(v.id, "profile")}>
+                          Full vehicle setup <ArrowUpRight size={14} />
+                        </button>
+                      </div>
+                      {forecasts.map(f => (
+                        <section key={f.ruleId} className={styles.ruleForecast} aria-label={`${f.title} forecast`}>
+                          <div className={styles.cardTop}>
+                            <strong>{f.title}</strong>
+                            <span className={`${styles.badge} ${styles[f.status]}`}>{labels[f.status]}</span>
+                          </div>
+                          <p>{f.reason}</p>
+                          {!!f.basis.length && <p className={styles.muted}>{f.basis.join("; ")}</p>}
+                        </section>
+                      ))}
+                      <p className={styles.muted} style={{ marginTop: 10 }}>Service history</p>
                       {[...(v.serviceHistory || [])]
                         .sort((a, b) => b.date.localeCompare(a.date))
-                        .map((s) => (
+                        .map(s => (
                           <div key={s.id}>
                             <strong>{s.title}</strong>
                             <span>
@@ -616,15 +665,50 @@ export default function MaintenanceAnalytics() {
                               {s.recordedBy}
                               {s.notes ? ` · ${s.notes}` : ""}
                             </small>
-                            {s.supersedesId&&<small>Correction of {s.supersedesId} · {s.correctionReason} · actor {s.recordedBy} · {s.recordedAt}</small>}
-                            {effectiveServices(v.serviceHistory || []).some(active=>active.id===s.id)?<button className={styles.setupLink} onClick={()=>{setMessage('');setEditor({id:v.id,mode:'correction',original:s});}}>Append correction →</button>:<small>Superseded; retained for audit</small>}
+                            {s.supersedesId && (
+                              <small>
+                                Correction of {s.supersedesId} · {s.correctionReason} · actor {s.recordedBy} ·{" "}
+                                {s.recordedAt}
+                              </small>
+                            )}
+                            {effectiveServices(v.serviceHistory || []).some(active => active.id === s.id) ? (
+                              <button
+                                className={styles.setupLink}
+                                onClick={() => {
+                                  setMessage("");
+                                  setEditor({ id: v.id, mode: "correction", original: s });
+                                }}
+                              >
+                                Append correction →
+                              </button>
+                            ) : (
+                              <small>Superseded; retained for audit</small>
+                            )}
                           </div>
                         ))}
-                      {!v.serviceHistory?.length && (
-                        <p>No completed services recorded.</p>
-                      )}
+                      {!v.serviceHistory?.length && <p>No completed services recorded.</p>}
+                      <p className={styles.muted} style={{ marginTop: 10 }}>
+                        Appointments ({v.maintenanceAppointments?.length || 0})
+                      </p>
+                      {(v.maintenanceAppointments || []).map(a => (
+                        <div key={a.id}>
+                          <strong>{a.title}</strong>
+                          <span>
+                            {a.date} · {a.status}
+                          </span>
+                          {a.serviceRecordId && <small>Completed service: {a.serviceRecordId}</small>}
+                          <button
+                            className={styles.setupLink}
+                            onClick={() => {
+                              setMessage("");
+                              setEditor({ id: v.id, mode: "appointment", appointment: a });
+                            }}
+                          >
+                            Review booking / cancel / link completion →
+                          </button>
+                        </div>
+                      ))}
                     </details>
-                    <details className={styles.history}><summary>Appointments ({v.maintenanceAppointments?.length || 0})</summary>{(v.maintenanceAppointments || []).map(a=><div key={a.id}><strong>{a.title}</strong><span>{a.date} · {a.status}</span>{a.serviceRecordId&&<small>Completed service: {a.serviceRecordId}</small>}<button className={styles.setupLink} onClick={()=>{setMessage('');setEditor({id:v.id,mode:'appointment',appointment:a});}}>Review booking / cancel / link completion →</button></div>)}</details>
                   </article>
                 );
               })}
@@ -646,8 +730,10 @@ export default function MaintenanceAnalytics() {
               <section className={styles.panel}>
                 <div className={styles.sectionHeader}>
                   <div>
-                    <span className={styles.eyebrow}>PLANNING WORKLOAD</span>
-                    <h2>Estimated services by month</h2>
+                    <h2>Service outlook</h2>
+                    <p className={styles.sectionHint}>
+                      Estimated services by month from current baselines.
+                    </p>
                   </div>
                   <span className={styles.softBadge}>Projected</span>
                 </div>
@@ -663,13 +749,10 @@ export default function MaintenanceAnalytics() {
                 )}
               </section>
               <section className={`${styles.panel} ${styles.nextSteps}`}>
-                <span className={styles.eyebrow}>
-                  BUILD A RELIABLE BASELINE
-                </span>
-                <h2>
-                  Three small steps.
-                  <br />A clearer year ahead.
-                </h2>
+                <h2>Build a reliable baseline</h2>
+                <p className={styles.sectionHint}>
+                  Three small steps for a clearer year ahead.
+                </p>
                 {[
                   "Confirm each truck’s configuration and applicable oil limits.",
                   "Record the last completed oil change and current mileage.",
@@ -687,7 +770,17 @@ export default function MaintenanceAnalytics() {
                 </p>
               </section>
             </div>),
-    equipment: <EquipmentServicePanel key={String(demo)} items={items} demo={demo} actor={equipmentActor} onSampleChange={updateSampleEquipment} onSaved={refreshData} />,
+    equipment: (<>
+      <div className={styles.sectionHeader}>
+        <div>
+          <h2>Equipment service</h2>
+          <p className={styles.sectionHint}>
+            Record operating hours, verified rules, and completed tool service.
+          </p>
+        </div>
+      </div>
+      <EquipmentServicePanel embedded key={`${demo}-${equipmentFocus}`} items={focusedEquipment} demo={demo} actor={equipmentActor} onSampleChange={updateSampleEquipment} onSaved={refreshData} />
+    </>),
   };
   return (
     <div className={styles.page}>
@@ -799,72 +892,187 @@ export default function MaintenanceAnalytics() {
       <div id="analytics-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
         {tab === "overview" && (
           <>
-            <AnalyticsPreferences key={managerId} preferences={preferences} onChange={changePreferences} onReset={resetPreferences} />
-            {storageMessage && <p role="status" className={styles.notice}>{storageMessage}</p>}
-            <MaintenanceActions rows={fleetRows} onEdit={edit}/>
-            {!!identitySetup.length && (
-              <section className={styles.panel} aria-label="Vehicle identity setup">
-                <h2>Vehicle identity setup</h2>
-                <ul className={styles.priorityList}>
-                  {identitySetup.map(({vehicle, issues}) => (
-                    <li key={vehicle.id}>
-                      <strong>{vehicle.vehicleNumber}</strong>
-                      {issues.map(issue => <p key={issue}>{issue} <button className={styles.setupLink} onClick={() => edit(vehicle.id, "profile", undefined, 1)}>Add identity detail →</button></p>)}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-            {!!equipmentWork.length && (
-              <section className={styles.panel} aria-label="Equipment maintenance actions">
-                <h2>Equipment maintenance actions</h2>
-                <ul className={styles.priorityList}>
-                  {equipmentWork.map(({item, forecasts}) => (
-                    <li key={item.id}>
-                      <strong>{item.name}</strong>
-                      {forecasts.length ? forecasts.map(f => (
-                        <div key={f.ruleId}>
-                          <p>{f.title} · {labels[f.status]}</p>
-                          <p>{f.reason}</p>
-                          <p>Source: {f.source || "Unknown / unverified"}</p>
-                        </div>
-                      )) : <p>Needs setup · Service schedule and history are unknown. No interval is assumed.</p>}
-                      <button className={styles.secondary} onClick={() => openEquipment(item.id)}>Review equipment service →</button>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-            {!!lowTools.length && (
-              <section className={styles.panel} aria-label="Equipment replacement reviews">
-                <h2>Equipment replacement reviews</h2>
-                <p className={styles.muted}>Replacement lifespan is separate from operating-hour and calendar service.</p>
-                <ul className={styles.priorityList}>
-                  {lowTools.map(item => (
-                    <li key={item.id}>
-                      <strong>{item.name} · {computeLifespanStatus(item, now) === "due_for_review" ? "Review now" : "Getting low"}</strong>
-                      {demo ? <button className={styles.secondary} onClick={() => openEquipment(item.id)}>Review sample equipment life →</button> : <Link className={styles.secondary} href="/equipment">Review replacement lifespan →</Link>}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-            {photoError && <p role="alert" className={styles.error}>{photoError}</p>}
-            <div className={styles.overviewWidgets}>
-              {preferences.order.filter(id => !preferences.hidden.includes(id)).map(id => (
-                <section key={id} data-analytics-widget={id}>{widgets[id]}</section>
+            <div className={styles.subTabs} role="tablist" aria-label="Fleet overview sections">
+              {(
+                [
+                  ["summary", "Summary"],
+                  ["priority", "Priority"],
+                  ["vehicles", "Vehicles"],
+                  ["equipment", "Equipment"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={overviewPane === id}
+                  className={`${styles.subTab} ${overviewPane === id ? styles.subTabActive : ""}`}
+                  onClick={() => setOverviewPane(id)}
+                >
+                  {label}
+                </button>
               ))}
             </div>
+            {overviewPane === "summary" && (
+              <>
+                <AnalyticsPreferences
+                  key={managerId}
+                  preferences={preferences}
+                  onChange={changePreferences}
+                  onReset={resetPreferences}
+                />
+                {storageMessage && (
+                  <p role="status" className={styles.notice}>
+                    {storageMessage}
+                  </p>
+                )}
+                {(fleetRows.some(r => r.forecasts.some(f => f.status !== "scheduled")) ||
+                  identitySetup.length > 0) && (
+                  <section className={`${styles.panel} ${styles.identityBanner}`} aria-label="Overview shortcuts">
+                    <div>
+                      <h2>This week at a glance</h2>
+                      <p className={styles.sectionHint}>
+                        Open Priority for due work, or Vehicles for compact truck cards and setup.
+                      </p>
+                    </div>
+                    <div className={styles.cardActions}>
+                      <button type="button" className={styles.primary} onClick={() => setOverviewPane("priority")}>
+                        Open Priority
+                      </button>
+                      <button type="button" className={styles.secondary} onClick={() => setOverviewPane("vehicles")}>
+                        Open Vehicles
+                      </button>
+                    </div>
+                  </section>
+                )}
+                <div className={styles.overviewWidgets}>
+                  {preferences.order
+                    .filter(id => !preferences.hidden.includes(id) && (id === "metrics" || id === "outlook"))
+                    .map(id => (
+                      <section key={id} data-analytics-widget={id}>
+                        {widgets[id]}
+                      </section>
+                    ))}
+                </div>
+              </>
+            )}
+            {overviewPane === "priority" && (
+              <>
+                <MaintenanceActions rows={fleetRows} onEdit={edit} />
+                {!!identitySetup.length && (
+                  <section className={styles.panel} aria-label="Vehicle identity setup">
+                    <h2>Vehicle identity setup</h2>
+                    <p className={styles.sectionHint}>
+                      One next step per truck. Open setup to finish make, model, year, engine, and conditions.
+                    </p>
+                    <ul className={styles.priorityList}>
+                      {identitySetup.map(({ vehicle, issues }) => (
+                        <li key={vehicle.id}>
+                          <div className={styles.cardTop}>
+                            <strong>{vehicle.vehicleNumber}</strong>
+                            <span className={styles.setupCount}>{issues.length} missing</span>
+                          </div>
+                          <p className={styles.muted}>{issues[0]}</p>
+                          <button
+                            type="button"
+                            className={styles.primary}
+                            onClick={() => edit(vehicle.id, "profile", undefined, 1)}
+                          >
+                            Add identity detail →
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+              </>
+            )}
+            {overviewPane === "vehicles" && (
+              <>
+                {photoError && (
+                  <p role="alert" className={styles.error}>
+                    {photoError}
+                  </p>
+                )}
+                <div className={styles.overviewWidgets}>
+                  {!preferences.hidden.includes("vehicles") && (
+                    <section data-analytics-widget="vehicles">{widgets.vehicles}</section>
+                  )}
+                </div>
+              </>
+            )}
+            {overviewPane === "equipment" && (
+              <>
+                {!!equipmentWork.length && (
+                  <section className={styles.panel} aria-label="Equipment maintenance actions">
+                    <h2>Equipment maintenance actions</h2>
+                    <ul className={styles.priorityList}>
+                      {equipmentWork.map(({ item, forecasts }) => (
+                        <li key={item.id}>
+                          <strong>{item.name}</strong>
+                          {forecasts.length ? (
+                            forecasts.map(f => (
+                              <div key={f.ruleId}>
+                                <p>
+                                  {f.title} · {labels[f.status]}
+                                </p>
+                                <p>{f.reason}</p>
+                              </div>
+                            ))
+                          ) : (
+                            <p>Needs setup · Service schedule and history are unknown. No interval is assumed.</p>
+                          )}
+                          <button className={styles.secondary} onClick={() => openEquipment(item.id)}>
+                            Review equipment service →
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+                {!!lowTools.length && (
+                  <section className={styles.panel} aria-label="Equipment replacement reviews">
+                    <h2>Equipment replacement reviews</h2>
+                    <p className={styles.muted}>
+                      Replacement lifespan is separate from operating-hour and calendar service.
+                    </p>
+                    <ul className={styles.priorityList}>
+                      {lowTools.map(item => (
+                        <li key={item.id}>
+                          <strong>
+                            {item.name} ·{" "}
+                            {computeLifespanStatus(item, now) === "due_for_review" ? "Review now" : "Getting low"}
+                          </strong>
+                          {demo ? (
+                            <button className={styles.secondary} onClick={() => openEquipment(item.id)}>
+                              Review sample equipment life →
+                            </button>
+                          ) : (
+                            <Link className={styles.secondary} href="/equipment">
+                              Review replacement lifespan →
+                            </Link>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+                <div className={styles.overviewWidgets}>
+                  {(!preferences.hidden.includes("equipment") || !!equipmentFocus) && (
+                    <section data-analytics-widget="equipment">{widgets.equipment}</section>
+                  )}
+                </div>
+              </>
+            )}
           </>
         )}
         {tab === "timeline" && (
           <section className={styles.timelineSection}>
             <div className={styles.sectionHeader}>
               <div>
-                <span className={styles.eyebrow}>THE ROAD AHEAD</span>
-                <h2>A year of better planning.</h2>
-                <p className={styles.muted}>
-                  Compare trucks on shared calendar or mileage scales. Later dates
+                <h2>Maintenance timeline</h2>
+                <p className={styles.sectionHint}>
+                  Compare trucks on shared calendar or mileage scales; later dates
                   assume earlier services are completed.
                 </p>
               </div>
@@ -900,13 +1108,10 @@ export default function MaintenanceAnalytics() {
           <section>
             <div className={styles.sectionHeader}>
               <div>
-                <span className={styles.eyebrow}>
-                  TOOLS THAT KEEP YOU MOVING
-                </span>
-                <h2>Equipment life at a glance.</h2>
-                <p className={styles.muted}>
-                  Existing usage and time-based review thresholds. These are
-                  lifespan estimates, not manufacturer service schedules.
+                <h2>Equipment life</h2>
+                <p className={styles.sectionHint}>
+                  Usage and time-based replacement thresholds — lifespan estimates,
+                  not manufacturer service schedules.
                 </p>
               </div>
               {!demo && (

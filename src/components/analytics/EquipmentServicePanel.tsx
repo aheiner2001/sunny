@@ -5,14 +5,14 @@ import { dbService } from '@/lib/db';
 import { dateOnly } from '@/lib/maintenance';
 import { forecastEquipmentMaintenance, validateEquipmentHours, validateEquipmentRule, validateEquipmentService } from '@/lib/equipmentMaintenance';
 import styles from './equipmentPreferences.module.css';
-export interface EquipmentServicePanelProps { items: Equipment[]; demo: boolean; actor: { id: string; name: string }; onSampleChange: (updated: Equipment) => void; onSaved?: () => void; }
+export interface EquipmentServicePanelProps { items: Equipment[]; demo: boolean; actor: { id: string; name: string }; onSampleChange: (updated: Equipment) => void; onSaved?: () => void; embedded?: boolean; }
 type RuleDraft = { id: string; title: string; hours: string; months: string; source: string; confirmed: boolean; baselineDate: string; baselineHours: string };
 const optionalNumber = (value: string) => value.trim() ? Number(value) : undefined;
 const newId = () => typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `equipment-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 export default function EquipmentServicePanel(props: EquipmentServicePanelProps) {
   const [selected, setSelected] = useState(props.items[0]?.id || '');
   const item = props.items.find(x => x.id === selected) || props.items[0];
-  return <section className={styles.panel} aria-label="Equipment service"><h3>Equipment service</h3><p className={styles.note}>Service uses actual operating hours and calendar rules from verified sources. Replacement lifespan and jobs completed are separate.</p>
+  return <section className={styles.panel} aria-label="Equipment service">{!props.embedded && <><h3>Equipment service</h3><p className={styles.note}>Service uses actual operating hours and calendar rules from verified sources. Replacement lifespan and jobs completed are separate.</p></>}
     {!item ? <p>No equipment in this view.</p> : <><label>Equipment<select aria-label="Equipment" value={item.id} onChange={event => setSelected(event.target.value)}>{props.items.map(e => <option key={e.id} value={e.id}>{e.name}{e.assetTag ? ` (${e.assetTag})` : ''}</option>)}</select></label><EquipmentEditor key={`${item.id}-${props.demo}`} {...props} item={item} /></>}
   </section>;
 }

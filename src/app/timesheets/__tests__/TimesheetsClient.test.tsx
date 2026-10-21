@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { beforeAll, afterAll, describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import TimesheetsClient from '../TimesheetsClient';
@@ -30,13 +30,45 @@ describe('TimesheetsClient (Employee View)', () => {
     mockAuthRole = 'employee';
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
+  it('renders actual cloud availability', () => {
+    render(<TimesheetsClient />);
+    expect(screen.getByText(/local only — cloud sync unavailable/i)).toBeDefined();
   });
 
-  it('renders prototype indicator banner', () => {
+  it('styles sync banner with warning tones when cloud sync is unavailable', () => {
     render(<TimesheetsClient />);
-    expect(screen.getByText(/timesheet prototype \(isolated test environment\)/i)).toBeDefined();
+    const badge = screen.getByText(/local only — cloud sync unavailable/i);
+    const banner = badge.closest('.rounded-xl');
+    expect(banner?.className).toMatch(/rose|amber/);
+  });
+
+  it('styles sync banner emerald when cloud sync is active', () => {
+    vi.spyOn(timesheetStore, 'getSyncStatus').mockReturnValue('Firebase Cloud Sync Active');
+    render(<TimesheetsClient />);
+    const badge = screen.getByText(/Firebase Cloud Sync Active/i);
+    const banner = badge.closest('.rounded-xl');
+    expect(banner?.className).toMatch(/emerald/);
+  });
+
+  it('styles sync banner with warning tones for permission sync failures', () => {
+    vi.spyOn(timesheetStore, 'getSyncStatus').mockReturnValue(
+      'Cloud sync failed: Firebase permission denied. Verify Console rules for timesheet collections, then retry.',
+    );
+    render(<TimesheetsClient />);
+    const badge = screen.getByText(/permission denied/i);
+    const banner = badge.closest('.rounded-xl');
+    expect(banner?.className).toMatch(/rose|amber/);
+  });
+
+  it.each([
+    'Historical estimate was not saved. Check the error and retry.',
+    'Review was not saved. Refresh and retry.',
+  ])('styles unsaved operation status with warning tones: %s', (status) => {
+    vi.spyOn(timesheetStore, 'getSyncStatus').mockReturnValue(status);
+    render(<TimesheetsClient />);
+    const banner = screen.getByText(status).closest('.rounded-xl');
+    expect(banner?.className).toMatch(/rose|amber/);
+    expect(banner?.className).not.toMatch(/emerald/);
   });
 
   it('renders Clock In button when employee is clocked out', () => {
@@ -142,7 +174,7 @@ describe('TimesheetsClient (Employee View)', () => {
     fireEvent.change(endInput, { target: { value: '2026-10-14T16:00' } });
     fireEvent.change(reasonInput, { target: { value: 'Forgot to scan QR code on arrival' } });
 
-    const submitBtn = screen.getByRole('button', { name: /submit request/i });
+    const submitBtn = screen.getByRole('button', { name: /submit for manager review/i });
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
@@ -195,17 +227,11 @@ describe('TimesheetsClient (Employee View)', () => {
     });
   });
 
-  it('supports loading demo shifts and dismissing toast notifications', async () => {
+  it('offers a cloud retry without inserting demonstration payroll data', () => {
     render(<TimesheetsClient />);
-    const loadDemoBtn = screen.getByRole('button', { name: /load demo shifts/i });
-    fireEvent.click(loadDemoBtn);
-
-    expect(screen.getByText(/loaded prototype demo shifts/i)).toBeDefined();
-
-    // Dismiss toast notification
-    const dismissBtn = screen.getByRole('button', { name: /dismiss/i });
-    fireEvent.click(dismissBtn);
-    expect(screen.queryByText(/loaded prototype demo shifts/i)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /retry cloud sync/i }));
+    expect(screen.queryByRole('button', { name: /load demo shifts/i })).toBeNull();
+    expect(timesheetStore.getAllShifts()).toHaveLength(0);
   });
 
   it('supports cancelling modals without submitting', async () => {
@@ -270,7 +296,7 @@ describe('TimesheetsClient (Employee View)', () => {
     fireEvent.click(screen.getByRole('button', { name: /clock in/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/network offline/i)).toBeDefined();
+      expect(screen.getByText(/connection problem/i)).toBeDefined();
     });
     clockInSpy.mockRestore();
 
@@ -287,7 +313,7 @@ describe('TimesheetsClient (Employee View)', () => {
     fireEvent.click(screen.getByRole('button', { name: /confirm clock out/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/clock-out service unavailable/i)).toBeDefined();
+      expect(screen.getByText(/Clock-out service unavailable/i)).toBeDefined();
     });
     clockOutSpy.mockRestore();
   });
@@ -309,4 +335,162 @@ describe('TimesheetsClient (Employee View)', () => {
 
     expect(timesheetStore.getActiveShiftGuard('u-1')?.activeShiftId).not.toBeNull();
   });
+
+  it('explains an already-active shift instead of a silent clock-in', async () => {
+    const existing = {
+      id: 'shift-existing',
+      employeeId: 'u-1',
+      employeeName: 'Trainee Tom',
+      locationId: 'loc-main',
+      status: 'active' as const,
+      timeZone: 'America/Denver',
+      startAtUtc: '2026-10-14T14:00:00.000Z',
+      endAtUtc: null,
+      unpaidBreakSeconds: 0,
+      startSource: 'manual' as const,
+      endSource: null,
+      startEventId: 'evt-existing',
+      endEventId: null,
+      revision: 1,
+      createdAt: '2026-10-14T14:00:00.000Z',
+      updatedAt: '2026-10-14T14:00:00.000Z',
+      submittedAt: null,
+      approvedAt: null,
+      approvedBy: null,
+    };
+    const spy = vi.spyOn(timesheetService, 'clockIn').mockResolvedValueOnce(existing);
+    render(<TimesheetsClient />);
+    fireEvent.click(screen.getByRole('button', { name: /clock in/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/already have an active shift/i)).toBeDefined();
+    });
+    spy.mockRestore();
+  });
+
+  it('opens a clean table view and exports CSV for the week', async () => {
+    const start = new Date();
+    start.setMinutes(start.getMinutes() - 120);
+    const end = new Date();
+    end.setMinutes(end.getMinutes() - 60);
+    await timesheetService.clockIn('u-1', 'Trainee Tom', 'manual', 'evt-csv', start.toISOString());
+    await timesheetService.clockOut('u-1', 'manual', 'evt-csv-out', 0, end.toISOString());
+    let exported: Blob | undefined;
+    vi.stubGlobal('URL', {
+      createObjectURL: (blob: Blob) => {
+        exported = blob;
+        return 'blob:timesheet';
+      },
+      revokeObjectURL: () => {},
+    });
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      render(<TimesheetsClient />);
+      fireEvent.click(screen.getByRole('button', { name: /view in table/i }));
+      expect(screen.getByRole('dialog', { name: /timesheet table/i })).toBeDefined();
+      fireEvent.click(screen.getAllByRole('button', { name: /export csv/i })[0]);
+      await waitFor(() => expect(exported).toBeDefined());
+      const text = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = reject;
+        reader.readAsText(exported!);
+      });
+      expect(text).toContain('Employee');
+      expect(text).toContain('Trainee Tom');
+    } finally {
+      clickSpy.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
 });
+
+describe('TimesheetsClient (Manager sync failure visibility)', () => {
+  beforeEach(() => {
+    timesheetStore.reset();
+    mockAuthUser = {
+      id: 'mgr-9',
+      name: 'Manager Morgan',
+      email: 'morgan@sunny.com',
+      role: 'manager',
+    };
+    mockAuthRole = 'manager';
+  });
+
+  it('lists cached team shifts while sync is degraded and avoids success-only banner styling', () => {
+    timesheetStore.saveShift({
+      id: 'shift-cached-1',
+      employeeId: 'emp-alice',
+      employeeName: 'Alice',
+      locationId: 'loc-main',
+      status: 'pending',
+      timeZone: 'America/Denver',
+      startAtUtc: '2026-10-14T14:00:00.000Z',
+      endAtUtc: '2026-10-14T20:00:00.000Z',
+      unpaidBreakSeconds: 0,
+      startSource: 'qr',
+      endSource: 'checklist_return',
+      startEventId: 'evt-a1',
+      endEventId: 'evt-a2',
+      revision: 1,
+      createdAt: '2026-10-14T14:00:00.000Z',
+      updatedAt: '2026-10-14T20:00:00.000Z',
+      submittedAt: '2026-10-14T20:00:00.000Z',
+      approvedAt: null,
+      approvedBy: null,
+    });
+    vi.spyOn(timesheetStore, 'getSyncStatus').mockReturnValue(
+      'Showing cached timesheets — waiting for cloud confirmation',
+    );
+
+    render(<TimesheetsClient />);
+
+    expect(screen.getByText('Alice')).toBeDefined();
+    const badge = screen.getByText(/waiting for cloud confirmation/i);
+    const banner = badge.closest('.rounded-xl');
+    expect(banner?.className).toMatch(/rose|amber|slate/);
+    expect(banner?.className).not.toMatch(/emerald/);
+  });
+
+  it('does not treat "awaiting" sync status as degraded', () => {
+    vi.spyOn(timesheetStore, 'getSyncStatus').mockReturnValue(
+      'Historical estimate saved — awaiting manager approval',
+    );
+
+    render(<TimesheetsClient />);
+
+    expect(screen.getByText(/No team shifts recorded for this week/i)).toBeDefined();
+    expect(
+      screen.queryByText(/No timesheets loaded\. Cloud sync failed/i),
+    ).toBeNull();
+    const badge = screen.getByText(/awaiting manager approval/i);
+    const banner = badge.closest('.rounded-xl');
+    expect(banner?.className).not.toMatch(/rose|amber/);
+  });
+
+  it('shows sync-failure empty state instead of a quiet empty week when no shifts loaded', () => {
+    vi.spyOn(timesheetStore, 'getSyncStatus').mockReturnValue(
+      'Cloud sync failed: Firebase permission denied. Verify Console rules for timesheet collections, then retry.',
+    );
+
+    render(<TimesheetsClient />);
+
+    expect(
+      screen.getByText(/No timesheets loaded\. Cloud sync failed — retry or check Firebase permissions\./i),
+    ).toBeDefined();
+    expect(screen.queryByText(/No team shifts recorded for this week/i)).toBeNull();
+  });
+
+  it('uses pending-confirmation copy for an empty cached manager view', () => {
+    vi.spyOn(timesheetStore, 'getSyncStatus').mockReturnValue(
+      'Showing cached timesheets — waiting for cloud confirmation',
+    );
+
+    render(<TimesheetsClient />);
+
+    expect(screen.getByText(/No timesheets are confirmed yet.*retry cloud sync/i)).toBeDefined();
+    expect(screen.queryByText(/Cloud sync failed/i)).toBeNull();
+  });
+});
+
+beforeAll(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-14T22:00:00Z')); });
+afterAll(() => vi.useRealTimers());

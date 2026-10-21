@@ -1,3 +1,4 @@
+import { overlapsHistoricalHours } from './historicalRecovery';
 import { timesheetStore } from './timesheetStore';
 import {
   calculateNetSeconds,
@@ -24,11 +25,11 @@ export class TimesheetService {
     timestamp = new Date().toISOString(),
     options?: { allowEvening?: boolean }
   ): Promise<ShiftRecord> {
-    const guard = timesheetStore.getActiveShiftGuard(employeeId);
-    if (guard?.activeShiftId) {
-      const existing = timesheetStore.getShift(guard.activeShiftId);
+    const existingGuard = timesheetStore.getActiveShiftGuard(employeeId);
+    if (existingGuard?.activeShiftId) {
+      const existing = timesheetStore.getShift(existingGuard.activeShiftId);
       if (existing && existing.status === 'active') {
-        return existing; // Idempotent: preserve existing active shift & start time
+        return existing;
       }
     }
 
@@ -36,49 +37,46 @@ export class TimesheetService {
       throw new Error('LATE_CLOCK_IN_WARNING');
     }
 
-    const id = `shift-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const newShift: ShiftRecord = {
-      id,
-      employeeId,
-      employeeName,
-      locationId: 'loc-main',
-      status: 'active',
-      timeZone: DEFAULT_TIMEZONE,
-      startAtUtc: timestamp,
-      endAtUtc: null,
-      unpaidBreakSeconds: 0,
-      startSource: source,
-      endSource: null,
-      startEventId: eventId,
-      endEventId: null,
-      revision: 1,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      submittedAt: null,
-      approvedAt: null,
-      approvedBy: null,
-    };
+    return timesheetStore.transactPunch(employeeId, eventId, (existing) => {
+      if (existing?.status === 'active') return { shift: existing };
 
-    timesheetStore.saveShift(newShift);
-    timesheetStore.setActiveShiftGuard(employeeId, id);
+      const id = `shift-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const newShift: ShiftRecord = {
+        id,
+        employeeId,
+        employeeName,
+        locationId: 'loc-main',
+        status: 'active',
+        timeZone: DEFAULT_TIMEZONE,
+        startAtUtc: timestamp,
+        endAtUtc: null,
+        unpaidBreakSeconds: 0,
+        startSource: source,
+        endSource: null,
+        startEventId: eventId,
+        endEventId: null,
+        revision: 1,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        submittedAt: null,
+        approvedAt: null,
+        approvedBy: null,
+      };
 
-    timesheetStore.appendAuditEvent({
-      id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      shiftId: id,
-      actorId: employeeId,
-      actorName: employeeName,
-      action: 'clock_in',
-      beforeValues: null,
-      afterValues: { ...newShift },
-      reason: null,
-      revision: 1,
-      eventId,
-      timestamp,
+      return { shift: newShift, audit: {
+        id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        shiftId: id,
+        actorId: employeeId,
+        actorName: employeeName,
+        action: 'clock_in',
+        beforeValues: null,
+        afterValues: { ...newShift },
+        reason: null,
+        revision: 1,
+        eventId,
+        timestamp,
+      } };
     });
-
-    await timesheetStore.waitForPendingSyncs();
-
-    return newShift;
   }
 
   async clockOut(
@@ -88,68 +86,46 @@ export class TimesheetService {
     unpaidBreakSeconds = 0,
     timestamp?: string
   ): Promise<ShiftRecord> {
-    const existingEnded = timesheetStore.getShiftsByEmployee(employeeId).find((s) => s.endEventId === eventId);
-    if (existingEnded) {
-      return existingEnded; // Idempotent retry on already closed shift
-    }
+    return timesheetStore.transactPunch(employeeId, eventId, (shift) => {
+      if (!shift || shift.status !== 'active') throw new Error('NO_ACTIVE_SHIFT');
 
-    const guard = timesheetStore.getActiveShiftGuard(employeeId);
-    if (!guard?.activeShiftId) {
-      throw new Error('NO_ACTIVE_SHIFT');
-    }
+      let effectiveTimestamp = timestamp ?? new Date().toISOString();
+      if (timestamp === undefined && new Date(effectiveTimestamp).getTime() <= new Date(shift.startAtUtc).getTime()) {
+        effectiveTimestamp = new Date(new Date(shift.startAtUtc).getTime() + 1000).toISOString();
+      }
 
-    const shift = timesheetStore.getShift(guard.activeShiftId);
-    if (!shift || shift.status !== 'active') {
-      throw new Error('NO_ACTIVE_SHIFT');
-    }
+      const validation = validateShiftInterval(shift.startAtUtc, effectiveTimestamp, unpaidBreakSeconds);
+      if (!validation.valid) {
+        throw new Error(validation.error);
+      }
 
-    if (shift.endEventId === eventId) {
-      return shift; // Idempotent retry
-    }
+      const nextRevision = shift.revision + 1;
+      const updated: ShiftRecord = {
+        ...shift,
+        status: 'pending',
+        endAtUtc: effectiveTimestamp,
+        endSource: source,
+        endEventId: eventId,
+        unpaidBreakSeconds,
+        revision: nextRevision,
+        updatedAt: effectiveTimestamp,
+        submittedAt: effectiveTimestamp,
+      };
 
-    let effectiveTimestamp = timestamp ?? new Date().toISOString();
-    if (timestamp === undefined && new Date(effectiveTimestamp).getTime() <= new Date(shift.startAtUtc).getTime()) {
-      effectiveTimestamp = new Date(new Date(shift.startAtUtc).getTime() + 1000).toISOString();
-    }
-
-    const validation = validateShiftInterval(shift.startAtUtc, effectiveTimestamp, unpaidBreakSeconds);
-    if (!validation.valid) {
-      throw new Error(validation.error);
-    }
-
-    const nextRevision = shift.revision + 1;
-    const updated: ShiftRecord = {
-      ...shift,
-      status: 'pending',
-      endAtUtc: effectiveTimestamp,
-      endSource: source,
-      endEventId: eventId,
-      unpaidBreakSeconds,
-      revision: nextRevision,
-      updatedAt: effectiveTimestamp,
-      submittedAt: effectiveTimestamp,
-    };
-
-    timesheetStore.saveShift(updated);
-    timesheetStore.clearActiveShiftGuard(employeeId);
-
-    timesheetStore.appendAuditEvent({
-      id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      shiftId: shift.id,
-      actorId: employeeId,
-      actorName: shift.employeeName,
-      action: 'clock_out',
-      beforeValues: { status: shift.status, endAtUtc: shift.endAtUtc },
-      afterValues: { status: updated.status, endAtUtc: updated.endAtUtc, unpaidBreakSeconds },
-      reason: null,
-      revision: nextRevision,
-      eventId,
-      timestamp: effectiveTimestamp,
+      return { shift: updated, audit: {
+        id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        shiftId: shift.id,
+        actorId: employeeId,
+        actorName: shift.employeeName,
+        action: 'clock_out',
+        beforeValues: { status: shift.status, endAtUtc: shift.endAtUtc },
+        afterValues: { status: updated.status, endAtUtc: updated.endAtUtc, unpaidBreakSeconds },
+        reason: null,
+        revision: nextRevision,
+        eventId,
+        timestamp: effectiveTimestamp,
+      } };
     });
-
-    await timesheetStore.waitForPendingSyncs();
-
-    return updated;
   }
 
   async saveManagerEdit(
@@ -173,6 +149,10 @@ export class TimesheetService {
     if (nextEnd) {
       const val = validateShiftInterval(nextStart, nextEnd, nextBreak);
       if (!val.valid) throw new Error(val.error);
+      if (shift.recovery && overlapsHistoricalHours(shift.employeeId, nextStart, nextEnd,
+        timesheetStore.getShiftsByEmployee(shift.employeeId).filter(record => record.id !== shift.id),
+        timesheetStore.getAllCorrectionRequests().filter(request => request.shiftId !== shift.id)))
+        throw new Error('Recovered hours overlap another shift or pending request.');
       const overlap = hasShiftOverlap(timesheetStore.getShiftsByEmployee(shift.employeeId), {
         startAtUtc: nextStart,
         endAtUtc: nextEnd,
@@ -193,8 +173,7 @@ export class TimesheetService {
       managerNote: reason,
     };
 
-    timesheetStore.saveShift(updated);
-    timesheetStore.appendAuditEvent({
+    await timesheetStore.commitShiftWithAudit(updated, {
       id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       shiftId,
       actorId: actor.id,
@@ -207,8 +186,6 @@ export class TimesheetService {
       eventId: `edit-${Date.now()}`,
       timestamp: now,
     });
-
-    await timesheetStore.waitForPendingSyncs();
 
     return updated;
   }
@@ -225,6 +202,11 @@ export class TimesheetService {
     if (actor.id === shift.employeeId) throw new Error('SELF_APPROVAL_DISABLED');
     if (shift.revision !== expectedRevision) throw new Error('STALE_REVISION_CONFLICT');
     if (shift.status === 'active') throw new Error('CANNOT_APPROVE_ACTIVE_SHIFT');
+
+    if (shift.recovery && shift.endAtUtc && !updates && overlapsHistoricalHours(shift.employeeId, shift.startAtUtc, shift.endAtUtc,
+      timesheetStore.getShiftsByEmployee(shift.employeeId).filter(record => record.id !== shift.id),
+      timesheetStore.getAllCorrectionRequests().filter(request => request.shiftId !== shift.id)))
+      throw new Error('Recovered hours overlap another shift or pending request.');
 
     let base = shift;
     if (updates) {
@@ -244,8 +226,7 @@ export class TimesheetService {
       updatedAt: now,
     };
 
-    timesheetStore.saveShift(approved);
-    timesheetStore.appendAuditEvent({
+    await timesheetStore.commitShiftWithAudit(approved, {
       id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       shiftId,
       actorId: actor.id,
@@ -258,8 +239,6 @@ export class TimesheetService {
       eventId: `appr-${Date.now()}`,
       timestamp: now,
     });
-
-    await timesheetStore.waitForPendingSyncs();
 
     return approved;
   }
@@ -285,8 +264,7 @@ export class TimesheetService {
       updatedAt: now,
     };
 
-    timesheetStore.saveShift(updated);
-    timesheetStore.appendAuditEvent({
+    await timesheetStore.commitShiftWithAudit(updated, {
       id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       shiftId,
       actorId: actor.id,
@@ -299,8 +277,6 @@ export class TimesheetService {
       eventId: `ret-${Date.now()}`,
       timestamp: now,
     });
-
-    await timesheetStore.waitForPendingSyncs();
 
     return updated;
   }

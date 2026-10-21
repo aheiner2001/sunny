@@ -23,6 +23,7 @@ import {
   Fuel,
   LogOut,
 } from 'lucide-react';
+import { timesheetService } from '@/lib/timesheets/timesheetService';
 import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { Vehicle, ChecklistQuestion, ChecklistCategoryConfig, InspectionResponse, FleetTask, Inspection } from '@/types';
@@ -39,7 +40,6 @@ import { occupancyKind, formatCheckoutStarted, vehicleInspectedOnLocalDay } from
 import { RecentInspectors } from '@/components/RecentInspectors';
 import { RejectedInspectionBanner } from '@/components/RejectedInspectionBanner';
 import { SignaturePad } from '@/components/SignaturePad';
-import { timesheetService } from '@/lib/timesheets/timesheetService';
 import { timesheetStore } from '@/lib/timesheets/timesheetStore';
 import { isEveningTime, DEFAULT_TIMEZONE } from '@/lib/timesheets/timeCalculations';
 
@@ -85,6 +85,19 @@ export default function InspectClient() {
   const [showDraftRecovery, setShowDraftRecovery] = useState(false);
   const [rejectedInspection, setRejectedInspection] = useState<any | null>(null);
   const [occupancyBusy, setOccupancyBusy] = useState(false);
+
+  const [punchAttempt, setPunchAttempt] = useState(0);
+  const [punchStatus, setPunchStatus] = useState<'saving' | 'saved' | 'error'>('saving');
+  useEffect(() => {
+    if (!vehicle?.id || !user?.id || user.role !== 'employee') return;
+    let cancelled = false;
+    setPunchStatus('saving');
+    // Repeated scans preserve the original active shift through the cloud guard.
+    void timesheetService.clockIn(user.id, user.name, 'qr', `inspection-${crypto.randomUUID()}`)
+      .then(() => { if (!cancelled) setPunchStatus('saved'); })
+      .catch(() => { if (!cancelled) setPunchStatus('error'); });
+    return () => { cancelled = true; };
+  }, [vehicle?.id, user?.id, user?.name, user?.role, punchAttempt]);
 
   const loadData = async () => {
     if (!vehicleId) {
@@ -450,6 +463,7 @@ export default function InspectClient() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Timesheet persistence must never gate inspection validation or submission.
 
     if (!allRequiredAnswered) {
       return;
@@ -478,7 +492,6 @@ export default function InspectClient() {
       );
       return;
     }
-
     const currentOdo = vehicle.odometer || 0;
     const parsedOdo = hasOdometer ? Number(odometer) : null;
     if (collectOdometer && parsedOdo !== null && parsedOdo < currentOdo) {
@@ -508,7 +521,7 @@ export default function InspectClient() {
               q.equipmentFamily
             );
             const pickId = equipmentPicks[q.id];
-            const chosen = pickId ? matches.find(e => e.id === pickId) : undefined;
+            const chosen = pickId ? matches.find(e => e.id === pickId) : matches[0];
             if (chosen) {
               linked = {
                 equipmentId: chosen.id,
@@ -617,6 +630,26 @@ export default function InspectClient() {
         dbService.saveOfflineInspection(offlineInspection);
         setOfflineCount(dbService.getOfflineInspections().length);
 
+        try {
+          const v = dbService.getVehicle(vehicle.id);
+          if (v) {
+            const checkedOut = {
+              ...v,
+              currentUserId: payload.userId,
+              currentUserName: payload.userName,
+              checkedOutAt: nowIso,
+              status: 'in_use' as const,
+              lastInspectionId: offlineInspection.id,
+              lastInspectionStatus: offlineInspection.status,
+              lastInspectionAt: nowIso,
+            };
+            await dbService.updateVehicle(checkedOut);
+            setVehicle(checkedOut);
+          }
+        } catch {
+          // ignore offline state refresh error
+        }
+
         const offlineResult = {
           inspection: { ...offlineInspection, isOfflineQueued: true },
           newIssues: flaggedList
@@ -637,6 +670,8 @@ export default function InspectClient() {
         );
         
         setSubmittedInspection(result);
+        const refreshedVehicle = dbService.getVehicle(vehicle.id);
+        if (refreshedVehicle) setVehicle(refreshedVehicle);
         
         // Clear rejection and draft
         const rejectedKey = `sunny_inspection_rejected_${vehicleId}_${user?.id}`;
@@ -647,6 +682,8 @@ export default function InspectClient() {
         const result = await dbService.submitInspection(payload);
 
         setSubmittedInspection(result);
+        const refreshedVehicle = dbService.getVehicle(vehicle.id);
+        if (refreshedVehicle) setVehicle(refreshedVehicle);
         
         // Clear draft
         const draftKey = `sunny_inspection_draft_${vehicleId}`;
@@ -827,6 +864,14 @@ export default function InspectClient() {
 
   return (
     <div className="page max-w-2xl mx-auto space-y-5 pb-12">
+      {user?.role === 'employee' && punchStatus !== 'saved' && (
+        <div className="card card-pad text-sm" role="alert">
+          {punchStatus === 'saving' ? 'Saving your clock-in. You can continue filling out and submitting this inspection.' :
+            'Clock-in was not saved. You can still submit this inspection. Retry clock-in or request missing hours in Timesheets.'}
+          {punchStatus === 'error' && <button type="button" className="btn btn-secondary btn-sm ml-2"
+            onClick={() => setPunchAttempt(attempt => attempt + 1)}>Retry clock-in</button>}
+        </div>
+      )}
       {/* Offline Sync Banner */}
       {(!isOnline || offlineCount > 0) && (
         <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 sticky top-2 z-20 shadow-sm ${
@@ -1163,8 +1208,8 @@ export default function InspectClient() {
           {role === 'manager' && (
             <label className="block mt-3 text-sm font-bold">Inspection for
               <select className="select mt-1" value={managerSubjectId} onChange={e => setManagerSubjectId(e.target.value)}>
-                {!vehicle.currentUserId && <option value="">Myself</option>}
-                {dbService.getUsers().filter(candidate => candidate.status === 'active' && candidate.role === 'employee' && (!vehicle.currentUserId || candidate.id === vehicle.currentUserId)).map(candidate => (
+                <option value="">Myself</option>
+                {dbService.getUsers().filter(candidate => candidate.status === 'active' && candidate.role === 'employee').map(candidate => (
                   <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
                 ))}
               </select>

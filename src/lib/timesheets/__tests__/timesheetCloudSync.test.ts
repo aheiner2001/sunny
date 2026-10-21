@@ -6,7 +6,7 @@ const { mockSetDoc, mockDeleteDoc, mockOnSnapshot, snapshotCallbacks } = vi.hois
   return {
     mockSetDoc: vi.fn().mockResolvedValue(undefined),
     mockDeleteDoc: vi.fn().mockResolvedValue(undefined),
-    mockOnSnapshot: vi.fn((col: any, onNext: any, onError: any) => {
+    mockOnSnapshot: vi.fn((col: any, options: any, onNext: any, onError: any) => {
       callbacks.push(onNext);
       return vi.fn();
     }),
@@ -16,7 +16,7 @@ const { mockSetDoc, mockDeleteDoc, mockOnSnapshot, snapshotCallbacks } = vi.hois
 
 vi.mock('@/lib/firebase', () => ({
   db: { _isMock: true },
-  ensureAuth: vi.fn().mockResolvedValue(null),
+  ensureAuth: vi.fn().mockResolvedValue({uid: 'test'}),
 }));
 
 vi.mock('firebase/firestore', () => ({
@@ -25,11 +25,37 @@ vi.mock('firebase/firestore', () => ({
   setDoc: mockSetDoc,
   deleteDoc: mockDeleteDoc,
   onSnapshot: mockOnSnapshot,
+  runTransaction: vi.fn(async (_db: any, callback: any) => callback({
+    get: async () => ({ exists: () => false }), set: mockSetDoc,
+  })),
   getDocs: vi.fn().mockResolvedValue({ empty: true, forEach: vi.fn() }),
 }));
 
 // Import after mocks are established
+import { runTransaction } from 'firebase/firestore';
 import { timesheetStore, FIRESTORE_COLLECTIONS } from '../timesheetStore';
+
+const sampleShift = (): ShiftRecord => ({
+  id: 'shift-save-1',
+  employeeId: 'emp-101',
+  employeeName: 'Alice',
+  locationId: 'loc-main',
+  status: 'active',
+  timeZone: 'America/Denver',
+  startAtUtc: '2026-10-14T14:00:00.000Z',
+  endAtUtc: null,
+  unpaidBreakSeconds: 0,
+  startSource: 'qr',
+  endSource: null,
+  startEventId: 'evt-save-1',
+  endEventId: null,
+  revision: 1,
+  createdAt: '2026-10-14T14:00:00.000Z',
+  updatedAt: '2026-10-14T14:00:00.000Z',
+  submittedAt: null,
+  approvedAt: null,
+  approvedBy: null,
+});
 
 describe('Timesheet Store Cloud Firestore Sync', () => {
   beforeEach(() => {
@@ -78,7 +104,7 @@ describe('Timesheet Store Cloud Firestore Sync', () => {
     const guard: ActiveShiftGuard = {
       employeeId: 'emp-101',
       activeShiftId: 'shift-cloud-1',
-      updatedAt: '2026-10-14T14:00:00.000Z',
+      revision: 1,
     };
 
     await timesheetStore.syncGuardToCloud(guard);
@@ -249,4 +275,102 @@ describe('Timesheet Store Cloud Firestore Sync', () => {
     await timesheetStore.waitForPendingSyncs();
     expect(mockSetDoc).toHaveBeenCalled();
   });
+  it('replaces deleted remote rows even when the server snapshot is empty', async () => {
+    await timesheetStore.setupFirestoreListeners();
+    const emit = snapshotCallbacks[0];
+    emit({ forEach: (cb: any) => cb({ data: () => ({ id: 'stale', status: 'active' }) }) });
+    expect(timesheetStore.getAllShifts()).toHaveLength(1);
+    emit({ empty: true, forEach: () => {} });
+    expect(timesheetStore.getAllShifts()).toHaveLength(0);
+  });
+
+  it('shows listener errors and can restart listeners after failure', async () => {
+    await timesheetStore.setupFirestoreListeners();
+    const onError = mockOnSnapshot.mock.calls[0][3];
+    onError(new Error('permission-denied'));
+    expect(timesheetStore.getSyncStatus()).toContain('Cloud sync failed');
+    await timesheetStore.setupFirestoreListeners();
+    expect(mockOnSnapshot).toHaveBeenCalledTimes(8);
+  });
+
+  it('classifies permission-denied listener errors separately from generic failures', async () => {
+    timesheetStore.reset();
+    await timesheetStore.setupFirestoreListeners();
+    const onError = mockOnSnapshot.mock.calls[0][3];
+    onError({ code: 'permission-denied', message: 'Missing or insufficient permissions.' });
+    expect(timesheetStore.getSyncStatus()).toMatch(/permission/i);
+    expect(timesheetStore.getSyncStatus()).toMatch(/Firebase|rules|Console/i);
+  });
+
+  it('keeps a generic cloud-sync failure message for non-permission errors', async () => {
+    timesheetStore.reset();
+    await timesheetStore.setupFirestoreListeners();
+    const onError = mockOnSnapshot.mock.calls[0][3];
+    onError(new Error('network-request-failed'));
+    expect(timesheetStore.getSyncStatus()).toContain('Cloud sync failed');
+    expect(timesheetStore.getSyncStatus()).not.toMatch(/Console rules/i);
+  });
+
+  it('classifies permission-denied failures when syncShiftToCloud save fails', async () => {
+    vi.mocked(runTransaction).mockRejectedValueOnce({
+      code: 'permission-denied',
+      message: 'Missing or insufficient permissions.',
+    });
+    await expect(timesheetStore.syncShiftToCloud(sampleShift())).rejects.toMatchObject({
+      code: 'permission-denied',
+    });
+    expect(timesheetStore.getSyncStatus()).toContain('Timesheet save failed');
+    expect(timesheetStore.getSyncStatus()).toMatch(/permission/i);
+    expect(timesheetStore.getSyncStatus()).toMatch(/Firebase|rules|Console/i);
+  });
+
+  it('classifies connection failures when transactPunch save fails', async () => {
+    vi.mocked(runTransaction).mockRejectedValueOnce(new Error('network-request-failed'));
+    const shift = sampleShift();
+    await expect(
+      timesheetStore.transactPunch('emp-101', 'evt-save-1', () => ({
+        shift,
+        audit: {
+          id: 'aud-save-1',
+          shiftId: shift.id,
+          actorId: 'emp-101',
+          actorName: 'Alice',
+          action: 'clock_in',
+          beforeValues: null,
+          afterValues: { id: shift.id, status: shift.status },
+          reason: null,
+          revision: 1,
+          eventId: 'evt-save-1',
+          timestamp: '2026-10-14T14:00:00.000Z',
+        },
+      })),
+    ).rejects.toThrow('network-request-failed');
+    expect(timesheetStore.getSyncStatus()).toBe('Timesheet save failed. Check connection, then retry.');
+  });
+
+  it('keeps cloud status unconfirmed until every collection has current server data', async () => {
+    await timesheetStore.setupFirestoreListeners();
+    const emit = (index: number, fromCache: boolean, hasPendingWrites = false) => snapshotCallbacks[index]({
+      metadata: { fromCache, hasPendingWrites }, forEach: () => {},
+    });
+    snapshotCallbacks.forEach((_, index) => emit(index, false));
+    expect(timesheetStore.getSyncStatus()).toBe('Firebase Cloud Sync Active');
+    emit(0, true, true);
+    emit(1, false);
+    expect(timesheetStore.getSyncStatus()).not.toBe('Firebase Cloud Sync Active');
+    emit(0, false);
+    expect(timesheetStore.getSyncStatus()).toBe('Firebase Cloud Sync Active');
+  });
+
+  it('does not wipe local shifts while a server snapshot still has pending writes', async () => {
+    timesheetStore.saveShift(sampleShift());
+    expect(timesheetStore.getShift('shift-save-1')).not.toBeNull();
+    await timesheetStore.setupFirestoreListeners();
+    snapshotCallbacks[0]({
+      metadata: { fromCache: false, hasPendingWrites: true },
+      forEach: () => {},
+    });
+    expect(timesheetStore.getShift('shift-save-1')).not.toBeNull();
+  });
+
 });

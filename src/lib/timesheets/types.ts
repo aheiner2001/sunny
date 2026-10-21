@@ -2,6 +2,7 @@ export type ShiftStatus = 'active' | 'pending' | 'needs_correction' | 'approved'
 export type PunchSource = 'qr' | 'manual' | 'checklist_return';
 export type CorrectionStatus = 'pending' | 'approved' | 'rejected';
 export type AuditAction = 
+  | 'recover_estimate'
   | 'clock_in' 
   | 'clock_out' 
   | 'request_correction' 
@@ -14,6 +15,7 @@ export const SHIFT_STATUSES: readonly ShiftStatus[] = ['active', 'pending', 'nee
 export const PUNCH_SOURCES: readonly PunchSource[] = ['qr', 'manual', 'checklist_return'] as const;
 export const CORRECTION_STATUSES: readonly CorrectionStatus[] = ['pending', 'approved', 'rejected'] as const;
 export const AUDIT_ACTIONS: readonly AuditAction[] = [
+  'recover_estimate',
   'clock_in',
   'clock_out',
   'request_correction',
@@ -44,6 +46,16 @@ export interface ShiftRecord {
   approvedAt: string | null;
   approvedBy: string | null;
   managerNote?: string;
+  recovery?: {
+    estimated: true;
+    inspectionId: string;
+    returnInspectionId: string | null;
+    manualEnd?: true;
+    recoveredBy: string;
+    recoveredByName: string;
+    recoveredAt: string;
+    startBasis: 'inspection started' | 'inspection submitted';
+  };
 }
 
 export interface CorrectionRequest {

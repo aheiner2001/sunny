@@ -109,9 +109,7 @@ describe('Inspection Form Clock-In Integration', () => {
       'emp-55',
       'Dan Driver',
       'qr',
-      expect.stringMatching(/^inspect-/),
-      expect.any(String),
-      expect.any(Object)
+      expect.stringMatching(/^inspect/)
     );
   });
 
