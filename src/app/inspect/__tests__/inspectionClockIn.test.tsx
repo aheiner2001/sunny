@@ -96,6 +96,15 @@ describe('Inspection Form Clock-In Integration', () => {
       root.render(<InspectClient />);
     });
 
+    // Start inspection by clicking Clock In & Start Inspection
+    const startBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Clock In & Start Inspection')
+    );
+    expect(startBtn).toBeDefined();
+    await act(async () => {
+      startBtn!.click();
+    });
+
     // Submit form
     const form = container.querySelector('form');
     expect(form).toBeDefined();

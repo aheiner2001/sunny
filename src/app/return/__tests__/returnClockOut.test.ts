@@ -303,5 +303,58 @@ describe('Return Checklist Clock-Out Integration', () => {
       expect(container.textContent).toContain('job count was not updated');
       expect(timesheetStore.getShift(shift.id)?.status).toBe('pending');
     });
+
+    it('clocks out directly without vehicle inspection when no vehicle is checked out', async () => {
+      vi.mocked(dbService.getVehicles).mockReturnValue([]);
+      const shift = await timesheetService.clockIn('emp-202', 'Dave', 'qr', 'no-veh-start');
+      expect(shift.status).toBe('active');
+
+      const clockOutSpy = vi.spyOn(timesheetService, 'clockOut');
+      await act(async () => root.render(React.createElement(ReturnClient)));
+
+      expect(container.textContent).toContain('Clock Out Only (No Inspection)');
+      const clockOutBtn = Array.from(container.querySelectorAll('button')).find(b => b.textContent === 'Clock Out');
+      expect(clockOutBtn).toBeDefined();
+
+      await act(async () => {
+        clockOutBtn!.click();
+      });
+
+      expect(clockOutSpy).toHaveBeenCalledTimes(1);
+      expect(clockOutSpy).toHaveBeenCalledWith(
+        'emp-202',
+        'qr',
+        expect.stringMatching(/^return-direct-/),
+      );
+      expect(container.textContent).toContain('Clocked Out Successfully');
+      expect(dbService.submitReturnInspection).not.toHaveBeenCalled();
+      expect(timesheetStore.getActiveShiftGuard('emp-202')?.activeShiftId).toBeNull();
+    });
+
+    it('clocks out directly without return inspection even when a vehicle is assigned', async () => {
+      const shift = await timesheetService.clockIn('emp-202', 'Dave', 'qr', 'has-veh-start');
+      expect(shift.status).toBe('active');
+
+      const clockOutSpy = vi.spyOn(timesheetService, 'clockOut');
+      await act(async () => root.render(React.createElement(ReturnClient)));
+
+      expect(container.textContent).toContain('Not driving this vehicle?');
+      const clockOutBtn = Array.from(container.querySelectorAll('button')).find(b => b.textContent?.includes('Clock Out Only'));
+      expect(clockOutBtn).toBeDefined();
+
+      await act(async () => {
+        clockOutBtn!.click();
+      });
+
+      expect(clockOutSpy).toHaveBeenCalledTimes(1);
+      expect(clockOutSpy).toHaveBeenCalledWith(
+        'emp-202',
+        'qr',
+        expect.stringMatching(/^return-direct-/),
+      );
+      expect(container.textContent).toContain('Clocked Out Successfully');
+      expect(dbService.submitReturnInspection).not.toHaveBeenCalled();
+      expect(timesheetStore.getActiveShiftGuard('emp-202')?.activeShiftId).toBeNull();
+    });
   });
 });
