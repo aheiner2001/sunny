@@ -39,6 +39,9 @@ import { occupancyKind, formatCheckoutStarted, vehicleInspectedOnLocalDay } from
 import { RecentInspectors } from '@/components/RecentInspectors';
 import { RejectedInspectionBanner } from '@/components/RejectedInspectionBanner';
 import { SignaturePad } from '@/components/SignaturePad';
+import { timesheetService } from '@/lib/timesheets/timesheetService';
+import { timesheetStore } from '@/lib/timesheets/timesheetStore';
+import { isEveningTime, DEFAULT_TIMEZONE } from '@/lib/timesheets/timeCalculations';
 
 export default function InspectClient() {
   const searchParams = useSearchParams();
@@ -649,6 +652,26 @@ export default function InspectClient() {
         const draftKey = `sunny_inspection_draft_${vehicleId}`;
         localStorage.removeItem(draftKey);
       }
+
+      // Clock in employee on pre-trip inspection form submission if not already clocked in
+      if (role !== 'manager' && user && user.id) {
+        try {
+          const guard = timesheetStore.getActiveShiftGuard(user.id);
+          if (!guard?.activeShiftId) {
+            const isLate = isEveningTime(inspectionStartedAt, DEFAULT_TIMEZONE);
+            await timesheetService.clockIn(
+              user.id,
+              user.name || user.email || 'Employee',
+              'qr',
+              `inspect-${Date.now()}`,
+              inspectionStartedAt,
+              { allowEvening: isLate }
+            );
+          }
+        } catch (clockInErr) {
+          console.warn('Inspection clock-in notice:', clockInErr);
+        }
+      }
     } catch (err: any) {
       const message = err?.name === 'QuotaExceededError'
         ? 'This phone is out of browser storage. Keep this page open; your draft may not be saved. Try a different browser or device and tell your manager.'
@@ -833,6 +856,18 @@ export default function InspectClient() {
               <span>{isSyncingOffline ? 'Syncing...' : 'Sync Now'}</span>
             </button>
           )}
+        </div>
+      )}
+
+      {/* Evening Late Notice */}
+      {employeeFlow && isEveningTime(inspectionStartedAt, DEFAULT_TIMEZONE) && (
+        <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/40 p-3 text-xs text-amber-900 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div>
+            <span className="font-bold">Evening Inspection Notice:</span> It is currently evening. If you are returning this vehicle and clocking out for the day, please use the Van Return checklist instead.
+          </div>
+          <Link href="/return" className="btn btn-secondary btn-xs shrink-0 font-bold self-start sm:self-center">
+            Go to Van Return &rarr;
+          </Link>
         </div>
       )}
 
