@@ -5,6 +5,7 @@ import {
   hasShiftOverlap,
   DEFAULT_TIMEZONE,
   getWeekBoundariesUtc,
+  isEveningTime,
 } from './timeCalculations';
 import type {
   ShiftRecord,
@@ -20,7 +21,8 @@ export class TimesheetService {
     employeeName: string,
     source: PunchSource,
     eventId: string,
-    timestamp = new Date().toISOString()
+    timestamp = new Date().toISOString(),
+    options?: { allowEvening?: boolean }
   ): Promise<ShiftRecord> {
     const guard = timesheetStore.getActiveShiftGuard(employeeId);
     if (guard?.activeShiftId) {
@@ -28,6 +30,10 @@ export class TimesheetService {
       if (existing && existing.status === 'active') {
         return existing; // Idempotent: preserve existing active shift & start time
       }
+    }
+
+    if (!options?.allowEvening && isEveningTime(timestamp, DEFAULT_TIMEZONE)) {
+      throw new Error('LATE_CLOCK_IN_WARNING');
     }
 
     const id = `shift-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -365,7 +371,14 @@ export class TimesheetService {
         }
       } else {
         // Missing hours shift creation
-        const newShift = await this.clockIn(req.employeeId, req.employeeName, 'manual', `corr-${req.id}`, req.proposedStart);
+        const newShift = await this.clockIn(
+          req.employeeId,
+          req.employeeName,
+          'manual',
+          `corr-${req.id}`,
+          req.proposedStart,
+          { allowEvening: true }
+        );
         await this.clockOut(req.employeeId, 'manual', `corr-out-${req.id}`, req.proposedBreakSeconds, req.proposedEnd);
         await this.approveShift(newShift.id, actor, 2, undefined, `Approved missing hours request: ${req.reason}`);
       }

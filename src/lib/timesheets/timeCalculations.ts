@@ -113,3 +113,13 @@ export function getWeekBoundariesUtc(
     weekEndUtc: sunday.toUTC().toISO()!,
   };
 }
+
+export function isEveningTime(
+  isoString: string,
+  timeZone = DEFAULT_TIMEZONE,
+  eveningHourThreshold = 17
+): boolean {
+  const dt = DateTime.fromISO(isoString, { zone: timeZone });
+  if (!dt.isValid) return false;
+  return dt.hour >= eveningHourThreshold;
+}

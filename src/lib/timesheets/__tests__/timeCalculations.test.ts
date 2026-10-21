@@ -6,6 +6,7 @@ import {
   splitShiftAtWeekBoundary,
   formatSecondsToHours,
   getWeekBoundariesUtc,
+  isEveningTime,
   DEFAULT_TIMEZONE,
 } from '../timeCalculations';
 import type { ShiftRecord } from '../types';
@@ -273,6 +274,28 @@ describe('timeCalculations', () => {
       const { weekStartUtc, weekEndUtc } = getWeekBoundariesUtc('2026-10-12T10:00:00.000Z', 'America/Denver');
       expect(weekStartUtc).toBe('2026-10-12T06:00:00.000Z');
       expect(weekEndUtc).toBe('2026-10-19T05:59:59.999Z');
+    });
+  });
+
+  describe('isEveningTime', () => {
+    it('returns false for morning and early afternoon times in Denver', () => {
+      // 8:00 AM Denver time (14:00 UTC)
+      expect(isEveningTime('2026-10-20T14:00:00.000Z', 'America/Denver')).toBe(false);
+      // 2:00 PM Denver time (20:00 UTC)
+      expect(isEveningTime('2026-10-20T20:00:00.000Z', 'America/Denver')).toBe(false);
+      // 4:59 PM Denver time (22:59 UTC)
+      expect(isEveningTime('2026-10-20T22:59:00.000Z', 'America/Denver')).toBe(false);
+    });
+
+    it('returns true for evening times (>= 17:00 / 5:00 PM Denver)', () => {
+      // 5:00 PM Denver time (23:00 UTC)
+      expect(isEveningTime('2026-10-20T23:00:00.000Z', 'America/Denver')).toBe(true);
+      // 6:22 PM Denver time (00:22 UTC next day)
+      expect(isEveningTime('2026-10-21T00:22:00.000Z', 'America/Denver')).toBe(true);
+    });
+
+    it('handles invalid timestamps safely', () => {
+      expect(isEveningTime('invalid-date')).toBe(false);
     });
   });
 });

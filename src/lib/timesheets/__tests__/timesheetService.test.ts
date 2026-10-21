@@ -36,6 +36,28 @@ describe('timesheetService', () => {
       expect(audits[0].action).toBe('clock_in');
       expect(audits[0].actorId).toBe('emp-1');
     });
+
+    it('rejects unconfirmed evening clock-in with LATE_CLOCK_IN_WARNING error', async () => {
+      // 6:22 PM Denver time is 2026-10-21T00:22:00.000Z
+      const eveningTime = '2026-10-21T00:22:00.000Z';
+      await expect(
+        timesheetService.clockIn('emp-1', 'Alice', 'qr', 'evt-eve-1', eveningTime)
+      ).rejects.toThrow('LATE_CLOCK_IN_WARNING');
+    });
+
+    it('allows evening clock-in when allowEvening option is explicitly set to true', async () => {
+      const eveningTime = '2026-10-21T00:22:00.000Z';
+      const shift = await timesheetService.clockIn(
+        'emp-1',
+        'Alice',
+        'qr',
+        'evt-eve-2',
+        eveningTime,
+        { allowEvening: true }
+      );
+      expect(shift.status).toBe('active');
+      expect(shift.startAtUtc).toBe(eveningTime);
+    });
   });
 
   describe('clockOut', () => {
