@@ -16,7 +16,6 @@ import { dbService } from '@/lib/db';
 import { Vehicle } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { PasscodePrompt } from '@/components/PasscodeGate';
-import { timesheetService } from '@/lib/timesheets/timesheetService';
 
 export default function ScanPage() {
   const router = useRouter();
@@ -113,20 +112,14 @@ export default function ScanPage() {
 
   const openVehicle = (vehicle: Vehicle) => {
     const activeRole = dbService.getSession()?.role || roleRef.current;
-    if (activeRole !== 'manager') {
-      const sessionUser = dbService.getSession();
-      if (sessionUser) {
-        const userName = (sessionUser as any).userName || dbService.getUser(sessionUser.userId)?.name || 'Employee';
-        void timesheetService.clockIn(sessionUser.userId, userName, 'qr', `qr-scan-${Date.now()}`);
-      }
-    }
     const mode = activeRole === 'manager' ? '' : '&mode=employee';
     router.push(`/inspect?id=${encodeURIComponent(vehicle.id)}${mode}`);
   };
 
   return (
-    <div className="page max-w-xl mx-auto">
+    <div className="page max-w-xl mx-auto space-y-4">
       {scanError ? <div className="card card-pad text-sm text-[var(--critical)]" role="alert">{scanError}</div> : null}
+      
       <div className="spread">
         <Link href="/dashboard" className="btn btn-secondary btn-sm">
           <ArrowLeft className="h-4 w-4" aria-hidden />
@@ -136,6 +129,16 @@ export default function ScanPage() {
           <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
           {role === 'manager' ? 'Manager Scan Active' : 'Employee Inspection Flow'}
         </span>
+      </div>
+
+      <div className="card card-pad cluster justify-between bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 text-xs">
+        <div>
+          <span className="font-semibold text-sky-900 dark:text-sky-200">Ending your shift?</span>
+          <p className="text-sky-700 dark:text-sky-300 m-0">Return your vehicle and clock out via the shop return checklist.</p>
+        </div>
+        <Link href="/return" className="btn btn-secondary btn-sm shrink-0">
+          Go to Van Return &rarr;
+        </Link>
       </div>
 
       <div className="card card-pad text-center">

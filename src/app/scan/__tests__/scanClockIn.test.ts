@@ -75,7 +75,7 @@ describe('QR Scan Clock-In Flow', () => {
       vi.restoreAllMocks();
     });
 
-    it('triggers timesheetService.clockIn when employee selects/scans a vehicle', async () => {
+    it('does NOT trigger clockIn on scan alone; routes to inspection form without modifying timesheet state', async () => {
       currentRole = 'employee';
       vi.spyOn(dbService, 'getSession').mockReturnValue({
         userId: 'emp-202',
@@ -109,13 +109,9 @@ describe('QR Scan Clock-In Flow', () => {
         vehicleButton!.click();
       });
 
-      expect(clockInSpy).toHaveBeenCalledTimes(1);
-      expect(clockInSpy).toHaveBeenCalledWith(
-        'emp-202',
-        'Sarah Connor',
-        'qr',
-        expect.stringMatching(/^qr-scan-/)
-      );
+      // Crucial: Scan does NOT clock the employee in!
+      expect(clockInSpy).not.toHaveBeenCalled();
+      expect(timesheetStore.getActiveShiftGuard('emp-202')?.activeShiftId).toBeUndefined();
       expect(mockPush).toHaveBeenCalledWith('/inspect?id=veh-1&mode=employee');
     });
 
@@ -168,8 +164,8 @@ describe('QR Scan Clock-In Flow', () => {
         { id: 'veh-3', vehicleNumber: '103', name: 'Van 3', status: 'active' } as any,
       ]);
 
-      // Pre-existing active shift
-      const initialShift = await timesheetService.clockIn('emp-303', 'John Doe', 'qr', 'initial-scan');
+      // Pre-existing active shift (morning time)
+      const initialShift = await timesheetService.clockIn('emp-303', 'John Doe', 'qr', 'initial-scan', '2026-10-14T14:00:00.000Z');
 
       await act(async () => {
         root.render(React.createElement(ScanPage));
