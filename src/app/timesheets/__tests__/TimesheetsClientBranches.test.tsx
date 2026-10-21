@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import TimesheetsClient from '../TimesheetsClient';
@@ -23,9 +23,15 @@ vi.mock('@/context/AuthContext', () => ({
 
 describe('TimesheetsClient Branch & Edge Case Coverage', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-10-14T14:00:00.000Z'));
     timesheetStore.reset();
     mockAuthUser = { id: 'u-1', name: 'Trainee Tom', email: 'tom@sunny.com', role: 'employee' };
     mockAuthRole = 'employee';
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('renders correctly when user is unauthenticated or null', () => {

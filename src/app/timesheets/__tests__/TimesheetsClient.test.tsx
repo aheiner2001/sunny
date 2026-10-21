@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import TimesheetsClient from '../TimesheetsClient';
@@ -23,9 +23,15 @@ vi.mock('@/context/AuthContext', () => ({
 
 describe('TimesheetsClient (Employee View)', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-10-14T14:00:00.000Z'));
     timesheetStore.reset();
     mockAuthUser = { id: 'u-1', name: 'Trainee Tom', email: 'tom@sunny.com', role: 'employee' };
     mockAuthRole = 'employee';
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('renders prototype indicator banner', () => {
@@ -284,5 +290,23 @@ describe('TimesheetsClient (Employee View)', () => {
       expect(screen.getByText(/clock-out service unavailable/i)).toBeDefined();
     });
     clockOutSpy.mockRestore();
+  });
+
+  it('shows evening confirmation dialog when clocking in during evening hours', async () => {
+    // 6:22 PM Denver time
+    vi.setSystemTime(new Date('2026-10-15T00:22:00.000Z'));
+    render(<TimesheetsClient />);
+    const clockInBtn = screen.getByRole('button', { name: /clock in/i });
+    fireEvent.click(clockInBtn);
+
+    // Evening warning dialog is displayed
+    expect(screen.getByText(/evening clock-in warning/i)).toBeDefined();
+    expect(screen.getByText(/did you mean to return your van/i)).toBeDefined();
+
+    // Click "Yes, Start Evening Shift"
+    const confirmBtn = screen.getByRole('button', { name: /start evening shift/i });
+    fireEvent.click(confirmBtn);
+
+    expect(timesheetStore.getActiveShiftGuard('u-1')?.activeShiftId).not.toBeNull();
   });
 });

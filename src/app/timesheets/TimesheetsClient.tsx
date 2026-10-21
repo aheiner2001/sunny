@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import Link from 'next/link';
 import { DateTime } from 'luxon';
 import {
   Clock,
@@ -33,6 +34,7 @@ import {
   formatSecondsToHours,
   calculateNetSeconds,
   getWeekBoundariesUtc,
+  isEveningTime,
 } from '@/lib/timesheets/timeCalculations';
 import type {
   ShiftRecord,
@@ -86,6 +88,7 @@ export default function TimesheetsClient() {
   // Modals state
   const [isBreakModalOpen, setIsBreakModalOpen] = useState(false);
   const [breakDurationMinutes, setBreakDurationMinutes] = useState(0);
+  const [isEveningWarningOpen, setIsEveningWarningOpen] = useState(false);
 
   const [isMissingHoursModalOpen, setIsMissingHoursModalOpen] = useState(false);
   const [missingForm, setMissingForm] = useState({
@@ -238,11 +241,25 @@ export default function TimesheetsClient() {
   }, [teamWeekShifts, managerEmployeeFilter, managerStatusFilter]);
 
   // Employee punch actions
-  const handleClockIn = async () => {
+  const handleClockIn = async (forceEvening: boolean = false) => {
     if (!user?.id) return;
+    const isForce = forceEvening === true;
+    const nowIso = DateTime.now().setZone(DEFAULT_TIMEZONE).toISO()!;
+    if (!isForce && isEveningTime(nowIso, DEFAULT_TIMEZONE)) {
+      setIsEveningWarningOpen(true);
+      return;
+    }
     try {
       const eventId = `manual-in-${Date.now()}`;
-      await timesheetService.clockIn(user.id, user.name || user.email || 'Employee', 'manual', eventId);
+      await timesheetService.clockIn(
+        user.id,
+        user.name || user.email || 'Employee',
+        'manual',
+        eventId,
+        undefined,
+        { allowEvening: isForce }
+      );
+      setIsEveningWarningOpen(false);
       setNotification({ type: 'success', message: 'Clocked in successfully!' });
       refreshData();
     } catch (err: any) {
@@ -638,7 +655,7 @@ export default function TimesheetsClient() {
               <div className="flex flex-wrap items-center gap-3">
                 {!activeShift ? (
                   <button
-                    onClick={handleClockIn}
+                    onClick={() => handleClockIn(false)}
                     className="flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-sm transition-colors focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   >
                     <Play className="w-4 h-4 fill-white" />
@@ -1160,6 +1177,55 @@ export default function TimesheetsClient() {
                 className="px-5 py-2 text-sm font-semibold rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-sm"
               >
                 Confirm Clock Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Evening Clock-In Warning Modal */}
+      {isEveningWarningOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-xl border border-amber-300 dark:border-amber-700/60 space-y-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="w-5 h-5" />
+                <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100">
+                  Evening Clock-In Warning
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsEveningWarningOpen(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              It is currently evening ({DateTime.now().setZone(DEFAULT_TIMEZONE).toFormat('h:mm a')}). Field shifts typically start in the morning. Did you mean to return your van, or are you starting an evening shift?
+            </p>
+
+            <div className="flex flex-col gap-2 pt-2">
+              <Link
+                href="/return"
+                className="w-full text-center px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-sm transition-colors"
+              >
+                Go to Van Return &rarr;
+              </Link>
+              <button
+                type="button"
+                onClick={() => handleClockIn(true)}
+                className="w-full px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm transition-colors"
+              >
+                Yes, Start Evening Shift
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsEveningWarningOpen(false)}
+                className="w-full px-4 py-2 rounded-xl text-slate-500 hover:text-slate-700 text-xs font-medium"
+              >
+                Cancel
               </button>
             </div>
           </div>

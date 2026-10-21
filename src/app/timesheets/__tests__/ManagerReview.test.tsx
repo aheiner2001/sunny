@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import TimesheetsClient from '../TimesheetsClient';
@@ -23,6 +23,8 @@ vi.mock('@/context/AuthContext', () => ({
 
 describe('TimesheetsClient (Manager Review)', () => {
   beforeEach(async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-10-14T14:00:00.000Z'));
     timesheetStore.reset();
     mockAuthUser = {
       id: 'mgr-9',
@@ -35,6 +37,10 @@ describe('TimesheetsClient (Manager Review)', () => {
     // Seed a pending shift from employee Alice
     await timesheetService.clockIn('emp-alice', 'Alice', 'qr', 'evt-1', '2026-10-14T14:00:00.000Z');
     await timesheetService.clockOut('emp-alice', 'checklist_return', 'evt-2', 0, '2026-10-14T20:00:00.000Z');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('renders team review table and allows manager approval', async () => {
