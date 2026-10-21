@@ -29,8 +29,9 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 
-it('starts an employee shift at the unchanged printed QR destination', async () => {
+it('starts an employee shift when clicking Clock In & Start Inspection', async () => {
   render(<InspectClient />);
+  fireEvent.click(await screen.findByRole('button', { name: /Clock In & Start Inspection/i }));
   await waitFor(() => expect(mock.clockIn).toHaveBeenCalledWith('employee-1', 'Driver', 'qr', expect.any(String)));
 });
 
@@ -45,6 +46,7 @@ it('does not start a manager shift merely viewing an inspection', async () => {
 it('shows a failed punch and allows retrying without losing the inspection', async () => {
   mock.clockIn.mockRejectedValueOnce(new Error('permission-denied'));
   render(<InspectClient />);
+  fireEvent.click(await screen.findByRole('button', { name: /Clock In & Start Inspection/i }));
   fireEvent.click(await screen.findByRole('button', { name: 'Retry clock-in' }));
   await waitFor(() => expect(mock.clockIn).toHaveBeenCalledTimes(2));
   await waitFor(() => expect(screen.queryByText(/clock-in was not saved/i)).toBeNull());
@@ -53,5 +55,12 @@ it('shows a failed punch and allows retrying without losing the inspection', asy
 it('still punches an employee whose temporary grant enables manager screens', async () => {
   mock.auth.role = 'manager';
   render(<InspectClient />);
+  fireEvent.click(await screen.findByRole('button', { name: /Clock In & Start Inspection/i }));
+  await waitFor(() => expect(mock.clockIn).toHaveBeenCalledWith('employee-1', 'Driver', 'qr', expect.any(String)));
+});
+
+it('clocks in and routes to timesheets when Clock In Only (No Inspection) is clicked', async () => {
+  render(<InspectClient />);
+  fireEvent.click(await screen.findByRole('button', { name: /Clock In Only \(No Inspection\)/i }));
   await waitFor(() => expect(mock.clockIn).toHaveBeenCalledWith('employee-1', 'Driver', 'qr', expect.any(String)));
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -22,7 +22,9 @@ import {
   Gauge,
   Fuel,
   LogOut,
+  Clock,
 } from 'lucide-react';
+import { DateTime } from 'luxon';
 import { timesheetService } from '@/lib/timesheets/timesheetService';
 import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
@@ -87,17 +89,79 @@ export default function InspectClient() {
   const [occupancyBusy, setOccupancyBusy] = useState(false);
 
   const [punchAttempt, setPunchAttempt] = useState(0);
-  const [punchStatus, setPunchStatus] = useState<'saving' | 'saved' | 'error'>('saving');
+  const [punchStatus, setPunchStatus] = useState<'saving' | 'saved' | 'error'>('saved');
+  const [inspectionStarted, setInspectionStarted] = useState(false);
+  const [isPunching, setIsPunching] = useState(false);
+  const [punchError, setPunchError] = useState<string | null>(null);
+  const [punchUpdateCount, setPunchUpdateCount] = useState(0);
+
   useEffect(() => {
-    if (!vehicle?.id || !user?.id || user.role !== 'employee') return;
+    const handleUpdate = () => setPunchUpdateCount((c) => c + 1);
+    window.addEventListener('sunny_timesheet_update', handleUpdate);
+    return () => window.removeEventListener('sunny_timesheet_update', handleUpdate);
+  }, []);
+
+  const activeShift = useMemo(() => {
+    if (!user?.id) return null;
+    const guard = timesheetStore.getActiveShiftGuard(user.id);
+    if (!guard?.activeShiftId) return null;
+    const shift = timesheetStore.getShift(guard.activeShiftId);
+    return shift && shift.status === 'active' ? shift : null;
+  }, [user?.id, punchUpdateCount, punchAttempt]);
+
+  useEffect(() => {
+    if (!punchAttempt || !vehicle?.id || !user?.id || user.role !== 'employee') return;
     let cancelled = false;
     setPunchStatus('saving');
-    // Repeated scans preserve the original active shift through the cloud guard.
     void timesheetService.clockIn(user.id, user.name, 'qr', `inspection-${crypto.randomUUID()}`)
       .then(() => { if (!cancelled) setPunchStatus('saved'); })
       .catch(() => { if (!cancelled) setPunchStatus('error'); });
     return () => { cancelled = true; };
-  }, [vehicle?.id, user?.id, user?.name, user?.role, punchAttempt]);
+  }, [punchAttempt, vehicle?.id, user?.id, user?.name, user?.role]);
+
+  const handleClockInAndStart = () => {
+    setIsPunching(true);
+    setPunchError(null);
+    setPunchStatus('saving');
+    setInspectionStarted(true);
+    setInspectionStartedAt(new Date().toISOString());
+    if (user?.id && user?.role === 'employee') {
+      timesheetService.clockIn(user.id, user.name, 'qr', `inspection-${crypto.randomUUID()}`)
+        .then(() => {
+          setPunchStatus('saved');
+        })
+        .catch((err: unknown) => {
+          console.error('Inspection clock-in error:', err);
+          setPunchStatus('error');
+        })
+        .finally(() => {
+          setIsPunching(false);
+        });
+    } else {
+      setIsPunching(false);
+    }
+  };
+
+  const handleClockInOnly = async () => {
+    setIsPunching(true);
+    setPunchError(null);
+    try {
+      if (user?.id && user?.role === 'employee') {
+        await timesheetService.clockIn(user.id, user.name, 'qr', `clockin-only-${crypto.randomUUID()}`);
+      }
+      router.push('/timesheets');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not clock in.';
+      setPunchError(msg);
+      setIsPunching(false);
+    }
+  };
+
+  const handleStartInspection = () => {
+    setInspectionStarted(true);
+    setInspectionStartedAt(new Date().toISOString());
+    setPunchStatus('saved');
+  };
 
   const loadData = async () => {
     if (!vehicleId) {
@@ -226,6 +290,7 @@ export default function InspectClient() {
         const rejected = JSON.parse(rejectedData);
         setRejectedInspection(rejected);
         setShowDraftRecovery(true);
+        setInspectionStarted(true);
         // Pre-fill form with rejected data
         if (rejected.responses) {
           const prefilledResponses: typeof responses = {};
@@ -251,6 +316,7 @@ export default function InspectClient() {
       const draftData = localStorage.getItem(draftKey);
       if (draftData) {
         setShowDraftRecovery(true);
+        setInspectionStarted(true);
         try {
           const draft = JSON.parse(draftData);
           if (draft.startedAt && Number.isFinite(Date.parse(draft.startedAt)) && Date.parse(draft.startedAt) <= Date.now()) {
@@ -287,7 +353,7 @@ export default function InspectClient() {
 
   // Auto-save every 30 seconds
   useEffect(() => {
-    if (!vehicleId || submittedInspection) return;
+    if (!vehicleId || submittedInspection || !inspectionStarted) return;
 
     const interval = setInterval(() => {
       const draftKey = `sunny_inspection_draft_${vehicleId}`;
@@ -852,6 +918,100 @@ export default function InspectClient() {
               </>
             )}
             <Link href="/scan" className="btn btn-ghost">Cancel</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const isEmployeePreFlight = user?.role === 'employee' && !inspectionStarted && !showDraftRecovery && !rejectedInspection;
+
+  if (isEmployeePreFlight) {
+    return (
+      <div className="page max-w-lg mx-auto py-8 px-4">
+        <div className="card card-pad text-center space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-surface-sunk text-ink mx-auto flex items-center justify-center font-bold">
+            <Truck className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="text-xl font-black text-ink">
+              {vehicle?.vehicleNumber ? `Van ${vehicle.vehicleNumber}` : vehicle?.name || 'Vehicle Inspection'}
+            </h1>
+            <p className="text-xs text-ink-muted mt-1">
+              {vehicle?.name ? `${vehicle.name} · ` : ''}Start of day inspection
+            </p>
+          </div>
+
+          {activeShift ? (
+            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 text-left flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+              <div>
+                <span className="font-bold">Shift Active:</span> Clocked in at {DateTime.fromISO(activeShift.startAtUtc, { zone: DEFAULT_TIMEZONE }).toFormat('h:mm a')}.
+              </div>
+            </div>
+          ) : (
+            <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 text-xs text-sky-900 text-left flex items-center gap-2">
+              <Clock className="w-4 h-4 shrink-0 text-sky-600" />
+              <div>
+                <span className="font-bold">Ready to Start:</span> Choose an action below to begin your work day.
+              </div>
+            </div>
+          )}
+
+          {punchError && (
+            <div role="alert" className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800 text-left">
+              {punchError}
+            </div>
+          )}
+
+          <div className="stack gap-3 pt-2">
+            {activeShift ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-block py-3 font-bold text-sm"
+                onClick={handleStartInspection}
+              >
+                Start Inspection
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={isPunching}
+                  className="btn btn-primary btn-block py-3 font-bold text-sm"
+                  onClick={handleClockInAndStart}
+                >
+                  {isPunching ? 'Starting shift...' : 'Clock In & Start Inspection'}
+                </button>
+
+                <div className="relative my-1">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-line" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-surface px-2 text-ink-faint font-semibold">Or</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1 text-left">
+                  <button
+                    type="button"
+                    disabled={isPunching}
+                    className="btn btn-secondary btn-block py-2.5 font-bold text-sm"
+                    onClick={handleClockInOnly}
+                  >
+                    Clock In Only (No Inspection)
+                  </button>
+                  <p className="text-[11px] text-ink-muted text-center">
+                    Training, ride-along, shop, or other non-driver work
+                  </p>
+                </div>
+              </>
+            )}
+
+            <Link href="/scan" className="btn btn-ghost btn-sm mt-2">
+              Back to scanner
+            </Link>
           </div>
         </div>
       </div>

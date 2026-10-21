@@ -27,7 +27,13 @@ beforeEach(() => {
   el = document.createElement('div'); document.body.append(el); root = createRoot(el);
 });
 afterEach(async () => { await act(async () => root.unmount()); el.remove(); localStorage.clear(); vi.restoreAllMocks(); });
-async function render() { await act(async () => root.render(<InspectClient />)); }
+async function render() {
+  await act(async () => root.render(<InspectClient />));
+  const startBtn = Array.from(el.querySelectorAll('button')).find(b => b.textContent?.includes('Start Inspection'));
+  if (startBtn) {
+    await act(async () => startBtn.click());
+  }
+}
 function submit() { return Array.from(el.querySelectorAll('button')).find(b => b.textContent?.includes('Submit Vehicle Inspection'))!; }
 function confirmReading() { return el.querySelector<HTMLInputElement>('input[type="checkbox"]')!; }
 async function changeMileage(value: string) {

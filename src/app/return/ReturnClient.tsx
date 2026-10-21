@@ -7,6 +7,7 @@ import { AlertTriangle, Camera, CheckCircle2, Truck, X } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { timesheetService } from '@/lib/timesheets/timesheetService';
+import { timesheetStore } from '@/lib/timesheets/timesheetStore';
 import {
   normalizeReturnQuestions,
   resolveReturnVehicle,
@@ -88,7 +89,42 @@ export default function ReturnClient() {
   } | null>(null);
   const [jobsCompleted, setJobsCompleted] = useState('0');
   const [inspectionStartedAt, setInspectionStartedAt] = useState(() => new Date().toISOString());
+  const [directClockOutDone, setDirectClockOutDone] = useState(false);
+  const [isClockingOutDirect, setIsClockingOutDirect] = useState(false);
+  const [punchUpdateCount, setPunchUpdateCount] = useState(0);
   const damageRef = useRef<VehicleDamageCaptureHandle>(null);
+
+  useEffect(() => {
+    const handleUpdate = () => setPunchUpdateCount((c) => c + 1);
+    window.addEventListener('sunny_timesheet_update', handleUpdate);
+    return () => window.removeEventListener('sunny_timesheet_update', handleUpdate);
+  }, []);
+
+  const activeShift = useMemo(() => {
+    if (!user?.id) return null;
+    const guard = timesheetStore.getActiveShiftGuard(user.id);
+    if (!guard?.activeShiftId) return null;
+    const shift = timesheetStore.getShift(guard.activeShiftId);
+    return shift && shift.status === 'active' ? shift : null;
+  }, [user?.id, punchUpdateCount]);
+
+  const handleDirectClockOut = async () => {
+    if (!user?.id || isClockingOutDirect) return;
+    setIsClockingOutDirect(true);
+    try {
+      await timesheetService.clockOut(user.id, 'qr', `return-direct-${crypto.randomUUID()}`);
+      setDirectClockOutDone(true);
+      setTimesheetNotice({ type: 'success', message: 'Shift ended and submitted for manager review.' });
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'NO_ACTIVE_SHIFT') {
+        setTimesheetNotice({ type: 'no_active_shift', message: 'No active shift was open to clock out.' });
+      } else {
+        setTimesheetNotice({ type: 'error', message: 'Could not complete clock-out. Please retry or check Timesheets.' });
+      }
+    } finally {
+      setIsClockingOutDirect(false);
+    }
+  };
 
   const load = () => {
     const fleet = dbService.getVehicles();
@@ -258,6 +294,33 @@ export default function ReturnClient() {
     );
   }
 
+  if (directClockOutDone) {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-10">
+        <div className="card card-pad text-center space-y-3" data-status="ok">
+          <CheckCircle2 className="w-10 h-10 mx-auto text-[var(--ok)]" />
+          <h1 className="card-title">Clocked Out Successfully</h1>
+          <p className="hint">Your shift has ended and was submitted for manager review.</p>
+
+          {timesheetNotice?.type === 'success' && (
+            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 text-left">
+              <span className="font-bold">Shift Clocked Out:</span> {timesheetNotice.message}
+            </div>
+          )}
+
+          <div className="cluster justify-center pt-2">
+            <Link href="/home" className="btn btn-primary btn-sm">
+              Home
+            </Link>
+            <Link href="/timesheets" className="btn btn-secondary btn-sm">
+              Timesheets
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (returnedVehicle) {
     return (
       <div className="max-w-lg mx-auto px-4 py-10">
@@ -315,6 +378,26 @@ export default function ReturnClient() {
     return (
       <div className="max-w-lg mx-auto px-4 py-8 space-y-4">
         <h1 className="card-title">Return a van</h1>
+        {activeShift && (
+          <div className="card card-pad border-2 border-line bg-surface space-y-2">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-bold text-ink">Clock Out Only (No Inspection)</h2>
+                <p className="text-xs text-ink-muted mt-0.5">
+                  Not driving or no vehicle to return (training, ride-along, shop work)
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={isClockingOutDirect}
+                onClick={handleDirectClockOut}
+                className="btn btn-secondary btn-sm font-bold shrink-0"
+              >
+                {isClockingOutDirect ? 'Clocking out…' : 'Clock Out'}
+              </button>
+            </div>
+          </div>
+        )}
         {isCatchUp && missed && (
           <p className="text-sm font-semibold text-amber-800">
             You forgot to sign out of {missed.vehicleNumber}.
@@ -395,6 +478,23 @@ export default function ReturnClient() {
         <button type="button" onClick={() => router.replace('/home')} className="btn btn-ghost btn-sm">
           Dismiss
         </button>
+      )}
+
+      {activeShift && (
+        <div className="card card-pad bg-surface-alt border border-line flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold text-ink">Not driving this vehicle?</p>
+            <p className="text-[11px] text-ink-muted">Clock out without completing a return inspection</p>
+          </div>
+          <button
+            type="button"
+            disabled={isClockingOutDirect}
+            onClick={handleDirectClockOut}
+            className="btn btn-secondary btn-xs font-bold shrink-0"
+          >
+            {isClockingOutDirect ? 'Clocking out…' : 'Clock Out Only'}
+          </button>
+        </div>
       )}
 
       <form onSubmit={handleSubmit} className="card card-pad space-y-4">

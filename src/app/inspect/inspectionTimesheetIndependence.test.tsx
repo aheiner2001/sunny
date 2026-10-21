@@ -26,9 +26,10 @@ beforeEach(() => {
 afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 
 describe('inspection form-entry clock-in contract', () => {
-  it('clocks in when the inspection form mounts for an employee', async () => {
+  it('clocks in when the inspection form starts for an employee', async () => {
     mock.clockIn.mockResolvedValue({ status: 'active' });
     render(<InspectClient />);
+    fireEvent.click(await screen.findByRole('button', { name: /Clock In & Start Inspection/i }));
     await waitFor(() => expect(mock.clockIn).toHaveBeenCalledWith(
       'employee-1', 'Driver', 'qr', expect.any(String),
     ));
@@ -40,6 +41,7 @@ describe('inspection submission is independent of timesheet persistence', () => 
     mock.clockIn.mockImplementation(() => status === 'failed' ? Promise.reject(new Error('permission-denied')) :
       status === 'pending' ? new Promise(() => {}) : Promise.resolve({ status: 'active' }));
     render(<InspectClient />);
+    fireEvent.click(await screen.findByRole('button', { name: /Clock In & Start Inspection/i }));
     const submit = await screen.findByRole('button', { name: 'Submit Vehicle Inspection' });
     await waitFor(() => expect(mock.clockIn).toHaveBeenCalled());
     if (status === 'failed') await screen.findByRole('button', { name: 'Retry clock-in' });
@@ -55,6 +57,7 @@ describe('inspection submission is independent of timesheet persistence', () => 
       questions: [{ id: 'lights', text: 'Lights working?', category: 'safety', type: 'yes_no', required: true, active: true }],
       collectOdometer: false, collectFuelLevel: false } as any);
     render(<InspectClient />);
+    fireEvent.click(await screen.findByRole('button', { name: /Clock In & Start Inspection/i }));
     const submit = await screen.findByRole('button', { name: 'Submit Vehicle Inspection' });
     await screen.findByRole('button', { name: 'Retry clock-in' });
     expect((submit as HTMLButtonElement).disabled).toBe(true);
