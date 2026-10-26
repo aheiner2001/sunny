@@ -33,7 +33,8 @@ import {
   DamageRegion,
   VehicleDamageEvent,
   VehicleSide,
-  VehicleAssignment
+  VehicleAssignment,
+  PreviousUserFlag,
 } from '@/types';
 import { validDay, dateOnly, validateProfile, validateService } from './maintenance';
 import { effectiveServices, validateMaintenanceRule } from './maintenanceRules';
@@ -108,6 +109,7 @@ const STORAGE_KEYS = {
   OVERNIGHT_RECONCILED: 'sunny_overnight_reconciled',
   VEHICLE_DAMAGE: 'sunny_vehicle_damage',
   VEHICLE_ASSIGNMENTS: 'sunny_vehicle_assignments',
+  PREVIOUS_USER_FLAGS: 'sunny_previous_user_flags',
 };
 
 const DEFAULT_CHECKLIST_ID = 'standard-detailing-checklist';
@@ -3605,6 +3607,64 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     this.init();
     const raw = localStorage.getItem(STORAGE_KEYS.ALERTS);
     return raw ? JSON.parse(raw) : [];
+  }
+
+  public getPreviousUserFlags(): PreviousUserFlag[] {
+    if (!this.isClient()) return [];
+    this.init();
+    const raw = localStorage.getItem(STORAGE_KEYS.PREVIOUS_USER_FLAGS);
+    return raw ? (JSON.parse(raw) as PreviousUserFlag[]) : [];
+  }
+
+  public getOpenPreviousUserFlagsForEmployee(employeeId: string): PreviousUserFlag[] {
+    return this.getPreviousUserFlags().filter(f => f.employeeId === employeeId && f.status === 'open');
+  }
+
+  public async savePreviousUserFlags(flags: PreviousUserFlag[]): Promise<PreviousUserFlag[]> {
+    if (!this.isClient()) return [];
+    this.init();
+    if (!flags.length) return [];
+    if (db) {
+      await ensureAuth();
+      const batch = writeBatch(db);
+      for (const flag of flags) {
+        batch.set(doc(db, 'previousUserFlags', flag.id), sanitizeForFirestore(flag));
+      }
+      await batch.commit();
+    }
+    const byId = new Map(this.getPreviousUserFlags().map(f => [f.id, f]));
+    for (const flag of flags) byId.set(flag.id, flag);
+    localStorage.setItem(STORAGE_KEYS.PREVIOUS_USER_FLAGS, JSON.stringify(Array.from(byId.values())));
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return flags;
+  }
+
+  public async acknowledgePreviousUserFlags(
+    employeeId: string,
+    acknowledgedAt = new Date().toISOString(),
+  ): Promise<PreviousUserFlag[]> {
+    if (!this.isClient()) return [];
+    this.init();
+    const open = this.getOpenPreviousUserFlagsForEmployee(employeeId);
+    if (!open.length) return [];
+    const cleared = open.map(f => ({
+      ...f,
+      status: 'acknowledged' as const,
+      acknowledgedAt,
+    }));
+    if (db) {
+      await ensureAuth();
+      const batch = writeBatch(db);
+      for (const flag of cleared) {
+        batch.set(doc(db, 'previousUserFlags', flag.id), sanitizeForFirestore(flag));
+      }
+      await batch.commit();
+    }
+    const byId = new Map(this.getPreviousUserFlags().map(f => [f.id, f]));
+    for (const flag of cleared) byId.set(flag.id, flag);
+    localStorage.setItem(STORAGE_KEYS.PREVIOUS_USER_FLAGS, JSON.stringify(Array.from(byId.values())));
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return cleared;
   }
 
   public async moveIssuesToPending(
