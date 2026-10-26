@@ -107,3 +107,21 @@ Overdue/incomplete, needs retrain, miss streaks, completion % by item, person→
 ## Out of branch policy
 
 Push only to `october-26-changes`. Owner merges to `main` after Vercel preview.
+
+## Firebase collections (preview)
+
+Allow authenticated read/write in Console rules for:
+
+- `previousUserFlags`
+- `trainingItems`
+- `trainingAssignments`
+- `traineeTrainers`
+
+Until rules exist, cloud writes fail closed (local state does not claim success when `db` is configured).
+
+## Preview checklist
+
+1. Settings → checklist question → enable **Hold previous user accountable** + message.  
+2. Submit an inspection with that item flagged while a prior assignment/inspector exists.  
+3. Sign in as the previous user → Scan/Inspect → Acknowledge gate → proceed.  
+4. Nav → **Training** → add curriculum item → assign → trainer sign-off → trainee certify.

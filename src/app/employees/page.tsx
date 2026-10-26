@@ -84,13 +84,15 @@ function EmployeesPageContent() {
     status: 'active' | 'inactive';
     avatarUrl: string;
     passcode: string;
+    isDesignatedTrainer: boolean;
   }>({
     name: '',
     email: '',
     role: 'employee',
     status: 'active',
     avatarUrl: '',
-    passcode: ''
+    passcode: '',
+    isDesignatedTrainer: false,
   });
 
   const loadData = () => {
@@ -191,7 +193,8 @@ function EmployeesPageContent() {
       role: 'employee',
       status: 'active',
       avatarUrl: '',
-      passcode: dbService.generateUniquePasscode()
+      passcode: dbService.generateUniquePasscode(),
+      isDesignatedTrainer: false,
     });
     setIsAddModalOpen(true);
   };
@@ -203,7 +206,8 @@ function EmployeesPageContent() {
       role: target.role,
       status: target.status,
       avatarUrl: target.avatarUrl || '',
-      passcode: target.passcode || dbService.generateUniquePasscode()
+      passcode: target.passcode || dbService.generateUniquePasscode(),
+      isDesignatedTrainer: Boolean(target.isDesignatedTrainer),
     });
     setIsEditModalOpen(true);
   };
@@ -227,7 +231,8 @@ function EmployeesPageContent() {
         role: formData.role,
         status: formData.status,
         avatarUrl: formData.avatarUrl,
-        passcode: formData.passcode.trim()
+        passcode: formData.passcode.trim(),
+        isDesignatedTrainer: formData.role === 'employee' ? formData.isDesignatedTrainer : false,
       });
       setSelectedUser(created);
       setIsAddModalOpen(false);
@@ -255,7 +260,8 @@ function EmployeesPageContent() {
         role: formData.role,
         status: formData.status,
         avatarUrl: formData.avatarUrl.trim() || selectedUser.avatarUrl,
-        passcode: formData.passcode.trim()
+        passcode: formData.passcode.trim(),
+        isDesignatedTrainer: formData.role === 'employee' ? formData.isDesignatedTrainer : false,
       });
       setSelectedUser(updated);
       setIsEditModalOpen(false);
@@ -498,6 +504,24 @@ function EmployeesPageContent() {
                         so the control only appears for employee accounts. */}
                     {selectedUser.role === 'employee' && (
                       <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                        <label className="text-[11px] font-bold text-ink flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(selectedUser.isDesignatedTrainer)}
+                            onChange={async (e) => {
+                              try {
+                                const updated = await dbService.updateUser({
+                                  ...selectedUser,
+                                  isDesignatedTrainer: e.target.checked,
+                                });
+                                setSelectedUser(updated);
+                              } catch (err: any) {
+                                alert(err.message || 'Failed to update trainer flag');
+                              }
+                            }}
+                          />
+                          Designated trainer
+                        </label>
                         {dbService.hasActiveManagerGrant(selectedUser) ? (
                           <>
                             <span className="text-[11px] font-bold text-ink bg-[var(--info-wash)] border border-line rounded-lg px-2 py-1 flex items-center gap-1.5">
