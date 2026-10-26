@@ -277,6 +277,33 @@ export interface ChecklistQuestion {
    * (e.g. Pressure Washer / Air Compressor) — NOT a specific unit id.
    */
   equipmentFamily?: string;
+  /**
+   * When true, an issue-direction answer creates a previous-user accountability flag
+   * for the prior driver (see previousVehicleUser resolution).
+   */
+  holdPreviousUserAccountable?: boolean;
+  /** Measures / instructions shown on the previous-user Acknowledge screen. */
+  previousUserMessage?: string;
+}
+
+export type PreviousUserFlagStatus = 'open' | 'acknowledged';
+
+/** In-app accountability flag for the prior truck user after a checklist miss. */
+export interface PreviousUserFlag {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  vehicleId: string;
+  vehicleNumber: string;
+  questionId: string;
+  questionText: string;
+  inspectionId: string;
+  message: string;
+  status: PreviousUserFlagStatus;
+  createdAt: string;
+  createdById: string;
+  acknowledgedAt?: string | null;
+  batchId?: string;
 }
 
 export interface InspectionResponse {
