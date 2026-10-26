@@ -13,6 +13,7 @@ import {
   Settings,
   QrCode,
   Clock,
+  GraduationCap,
 } from 'lucide-react';
 
 export type NavItem = {
@@ -35,6 +36,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Pending', href: '/pending', icon: Bell, managerOnly: true },
   { label: 'Issues', href: '/issues', icon: AlertTriangle, managerOnly: true },
   { label: 'Employees', href: '/employees', icon: Users, managerOnly: true },
+  { label: 'Training', href: '/training', icon: GraduationCap },
   { label: 'Reports', href: '/reports', icon: BarChart3, managerOnly: true },
   { label: 'Settings', href: '/settings', icon: Settings, managerOnly: true },
 ];

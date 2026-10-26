@@ -20,6 +20,8 @@ export interface User {
    * cannot manage accounts or grant elevation onward.
    */
   tempManagerUntil?: string | null;
+  /** When true, employee may sign off training items (managers always can). */
+  isDesignatedTrainer?: boolean;
 }
 
 /** Persisted passcode session. Expires after a work shift; see SESSION_TTL_MS. */

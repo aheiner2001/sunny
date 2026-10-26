@@ -47,6 +47,8 @@ import { repairDuplicateCategoryIds } from './checklistCategories';
 import { compactConfirmedInspections } from './inspectionCache';
 import { assertDamagePayload, normalizeRegion } from './vehicleDamage';
 import { buildPreviousUserAccountabilityFlags } from './previousUserAccountability';
+import type { TrainingAssignment, TrainingItem, TraineeTrainerLink } from './training/types';
+import { applyTrainingMiss } from './training/trainingDomain';
 import { 
   computeLifespanStatus,
   calculateLifespanDueDate,
@@ -111,6 +113,9 @@ const STORAGE_KEYS = {
   VEHICLE_DAMAGE: 'sunny_vehicle_damage',
   VEHICLE_ASSIGNMENTS: 'sunny_vehicle_assignments',
   PREVIOUS_USER_FLAGS: 'sunny_previous_user_flags',
+  TRAINING_ITEMS: 'sunny_training_items',
+  TRAINING_ASSIGNMENTS: 'sunny_training_assignments',
+  TRAINEE_TRAINERS: 'sunny_trainee_trainers',
 };
 
 const DEFAULT_CHECKLIST_ID = 'standard-detailing-checklist';
@@ -3266,6 +3271,30 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       console.warn('Previous-user accountability flags were not saved:', error);
     }
 
+    try {
+      const trainingItems = this.getTrainingItems().filter(item => item.active);
+      const flaggedQuestionIds = new Set(
+        (newInspection.responses || []).filter(r => r.isFlagged).map(r => r.questionId),
+      );
+      for (const item of trainingItems) {
+        if (!item.linkedQuestionIds.some(id => flaggedQuestionIds.has(id))) continue;
+        const rows = this.getTrainingAssignments().filter(
+          a => a.traineeId === (data.userId || '') && a.itemId === item.id,
+        );
+        for (const row of rows) {
+          const next = applyTrainingMiss(
+            row,
+            item,
+            { id: 'system', name: 'Inspection' },
+            nowIso,
+          );
+          await this.saveTrainingAssignment(next);
+        }
+      }
+    } catch (error) {
+      console.warn('Training miss updates were not saved:', error);
+    }
+
     window.dispatchEvent(new Event('sunny_db_update'));
     return { inspection: newInspection, newIssues, localCacheWarning };
   }
@@ -3695,6 +3724,75 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     localStorage.setItem(STORAGE_KEYS.PREVIOUS_USER_FLAGS, JSON.stringify(Array.from(byId.values())));
     window.dispatchEvent(new Event('sunny_db_update'));
     return cleared;
+  }
+
+  public getTrainingItems(): TrainingItem[] {
+    if (!this.isClient()) return [];
+    this.init();
+    const raw = localStorage.getItem(STORAGE_KEYS.TRAINING_ITEMS);
+    return raw ? (JSON.parse(raw) as TrainingItem[]) : [];
+  }
+
+  public async saveTrainingItems(items: TrainingItem[]): Promise<TrainingItem[]> {
+    if (!this.isClient()) return [];
+    this.init();
+    if (db) {
+      await ensureAuth();
+      const batch = writeBatch(db);
+      for (const item of items) {
+        batch.set(doc(db, 'trainingItems', item.id), sanitizeForFirestore(item));
+      }
+      await batch.commit();
+    }
+    localStorage.setItem(STORAGE_KEYS.TRAINING_ITEMS, JSON.stringify(items));
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return items;
+  }
+
+  public getTrainingAssignments(): TrainingAssignment[] {
+    if (!this.isClient()) return [];
+    this.init();
+    const raw = localStorage.getItem(STORAGE_KEYS.TRAINING_ASSIGNMENTS);
+    return raw ? (JSON.parse(raw) as TrainingAssignment[]) : [];
+  }
+
+  public async saveTrainingAssignment(assignment: TrainingAssignment): Promise<TrainingAssignment> {
+    if (!this.isClient()) return assignment;
+    this.init();
+    if (db) {
+      await ensureAuth();
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'trainingAssignments', assignment.id), sanitizeForFirestore(assignment));
+      await batch.commit();
+    }
+    const byId = new Map(this.getTrainingAssignments().map(a => [a.id, a]));
+    byId.set(assignment.id, assignment);
+    localStorage.setItem(STORAGE_KEYS.TRAINING_ASSIGNMENTS, JSON.stringify(Array.from(byId.values())));
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return assignment;
+  }
+
+  public getTraineeTrainerLinks(): TraineeTrainerLink[] {
+    if (!this.isClient()) return [];
+    this.init();
+    const raw = localStorage.getItem(STORAGE_KEYS.TRAINEE_TRAINERS);
+    return raw ? (JSON.parse(raw) as TraineeTrainerLink[]) : [];
+  }
+
+  public async saveTraineeTrainerLink(link: TraineeTrainerLink): Promise<TraineeTrainerLink> {
+    if (!this.isClient()) return link;
+    this.init();
+    if (db) {
+      await ensureAuth();
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'traineeTrainers', link.traineeId), sanitizeForFirestore(link));
+      await batch.commit();
+    }
+    const byId = new Map(this.getTraineeTrainerLinks().map(l => [l.traineeId, l]));
+    byId.set(link.traineeId, link);
+    localStorage.setItem(STORAGE_KEYS.TRAINEE_TRAINERS, JSON.stringify(Array.from(byId.values())));
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return link;
   }
 
   public async moveIssuesToPending(
