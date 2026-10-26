@@ -55,4 +55,16 @@ describe('training curriculum persistence', () => {
     expect(dbService.getTrainingItems()).toHaveLength(1);
     expect(dbService.getTrainingItems()[0].title).toBe('Cab cleanliness');
   });
+
+  it('persists trainee↔trainer pairing after a successful cloud write', async () => {
+    commit.mockResolvedValueOnce(undefined);
+    await dbService.saveTraineeTrainerLink({
+      traineeId: 'emp-2',
+      trainerIds: ['emp-1'],
+      updatedAt: '2026-10-26T12:00:00Z',
+    });
+    expect(dbService.getTraineeTrainerLinks()).toEqual([
+      { traineeId: 'emp-2', trainerIds: ['emp-1'], updatedAt: '2026-10-26T12:00:00Z' },
+    ]);
+  });
 });

@@ -32,11 +32,16 @@ import {
   Fuel,
   ToggleLeft,
   ToggleRight,
+  UserCheck,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { ChecklistQuestion, ChecklistCategoryConfig, QuestionType, ChecklistConfig, EquipmentOption, FleetTask, FlagCondition, PhotoRequirement } from '@/types';
 import { listDistinctEquipmentFamilies } from '@/lib/checklistPairing';
-import { applyPreviousUserQuestionSettings } from '@/lib/previousUserQuestionSettings';
+import {
+  applyPreviousUserQuestionSettings,
+  canHoldPreviousUserAccountable,
+  togglePreviousUserAccountable,
+} from '@/lib/previousUserQuestionSettings';
 import { useAuth } from '@/context/AuthContext';
 import { ManagerOnly } from '@/components/ManagerOnly';
 import { AiImportModal } from '@/components/AiImportModal';
@@ -564,11 +569,33 @@ function SettingsPageContent() {
 
 
   const handleToggleQuestionEnabled = async (qId: string) => {
+    const previous = questions;
     const updatedQs = questions.map((q) =>
       q.id === qId ? { ...q, enabled: q.enabled === false ? true : false } : q
     );
     setQuestions(updatedQs);
-    await dbService.saveChecklistQuestions(updatedQs);
+    try {
+      await dbService.saveChecklistQuestions(updatedQs);
+    } catch (err) {
+      setQuestions(previous);
+      alert(err instanceof Error ? err.message : 'Could not update question visibility.');
+    }
+  };
+
+  const handleTogglePreviousUserAccountable = async (qId: string) => {
+    const target = questions.find((q) => q.id === qId);
+    if (!target || !canHoldPreviousUserAccountable(target.type)) return;
+    const toggled = togglePreviousUserAccountable(target);
+    if (!toggled) return;
+    const previous = questions;
+    const updatedQs = questions.map((q) => (q.id === qId ? toggled : q));
+    setQuestions(updatedQs);
+    try {
+      await dbService.saveChecklistQuestions(updatedQs);
+    } catch (err) {
+      setQuestions(previous);
+      alert(err instanceof Error ? err.message : 'Could not update previous-user check.');
+    }
   };
 
 
@@ -931,6 +958,12 @@ function SettingsPageContent() {
                           Required
                         </span>
                       )}
+                      {q.holdPreviousUserAccountable && (
+                        <span className="text-[10px] font-bold text-amber-900 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-flex items-center gap-1">
+                          <UserCheck className="w-3 h-3" aria-hidden />
+                          Prev. user
+                        </span>
+                      )}
                       {q.equipmentFamily && (
                         <span className="text-[10px] font-medium text-ink-muted bg-surface-sunk px-1.5 py-0.5 rounded">
                           Tagged: {q.equipmentFamily}
@@ -973,6 +1006,30 @@ function SettingsPageContent() {
                       <ToggleRight className="w-4 h-4" />
                     )}
                   </button>
+                  {canHoldPreviousUserAccountable(q.type) && (
+                    <button
+                      type="button"
+                      onClick={() => void handleTogglePreviousUserAccountable(q.id)}
+                      className={`p-1.5 rounded-lg hover:bg-amber-50 ${
+                        q.holdPreviousUserAccountable
+                          ? 'text-amber-700 bg-amber-50'
+                          : 'text-ink-faint hover:text-amber-700'
+                      }`}
+                      title={
+                        q.holdPreviousUserAccountable
+                          ? 'Previous-user check on — click to turn off'
+                          : 'Mark as previous-user check (prior driver must Acknowledge if flagged)'
+                      }
+                      aria-pressed={Boolean(q.holdPreviousUserAccountable)}
+                      aria-label={
+                        q.holdPreviousUserAccountable
+                          ? 'Turn off previous-user check'
+                          : 'Turn on previous-user check'
+                      }
+                    >
+                      <UserCheck className="w-4 h-4" />
+                    </button>
+                  )}
                   <button
                     onClick={() => handleOpenEditQuestion(q)}
                     className="p-1.5 rounded-lg text-ink-muted hover:text-slate-800 hover:bg-surface-sunk"

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { applyPreviousUserQuestionSettings } from '../previousUserQuestionSettings';
+import {
+  applyPreviousUserQuestionSettings,
+  canHoldPreviousUserAccountable,
+  togglePreviousUserAccountable,
+} from '../previousUserQuestionSettings';
 import type { ChecklistQuestion } from '@/types';
 
 const base: ChecklistQuestion = {
@@ -33,6 +37,31 @@ describe('applyPreviousUserQuestionSettings', () => {
     ).toMatchObject({
       holdPreviousUserAccountable: false,
       previousUserMessage: undefined,
+    });
+  });
+
+  it('only allows previous-user mark on yes/no and pass/fail questions', () => {
+    expect(canHoldPreviousUserAccountable('yes_no')).toBe(true);
+    expect(canHoldPreviousUserAccountable('pass_fail')).toBe(true);
+    expect(canHoldPreviousUserAccountable('photo')).toBe(false);
+  });
+
+  it('quick-toggles previous-user accountability while keeping the message', () => {
+    const on = togglePreviousUserAccountable({
+      ...base,
+      holdPreviousUserAccountable: false,
+      previousUserMessage: 'Clean cab',
+    });
+    expect(on).toMatchObject({ holdPreviousUserAccountable: true, previousUserMessage: 'Clean cab' });
+    const off = togglePreviousUserAccountable(on!);
+    expect(off).toMatchObject({ holdPreviousUserAccountable: false, previousUserMessage: undefined });
+    expect(togglePreviousUserAccountable({ ...base, type: 'photo' })).toBeNull();
+  });
+
+  it('seeds a default measures message when turning previous-user on with none set', () => {
+    expect(togglePreviousUserAccountable(base)).toMatchObject({
+      holdPreviousUserAccountable: true,
+      previousUserMessage: 'Please address this before your next truck scan.',
     });
   });
 });
