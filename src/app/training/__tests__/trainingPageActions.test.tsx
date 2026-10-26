@@ -46,6 +46,10 @@ vi.mock('@/components/CurriculumSortList', () => ({
   CurriculumSortList: () => <div data-testid="curriculum-sort-list" />,
 }));
 
+vi.mock('@/components/TrainingLearnChart', () => ({
+  TrainingLearnChart: () => <div data-testid="learn-chart" />,
+}));
+
 vi.mock('@/context/AuthContext', () => ({
   useAuth: () => currentAuth,
 }));
@@ -75,7 +79,8 @@ describe('Training page primary actions', () => {
     expect(screen.queryByRole('heading', { name: /^my training$/i })).toBeNull();
     expect(screen.queryByRole('heading', { name: /^onboarding$/i })).toBeNull();
     expect(screen.queryByRole('heading', { name: /^all assignments$/i })).toBeNull();
-    expect(screen.queryByRole('heading', { name: /^learn chart$/i })).toBeNull();
+    expect(screen.getByRole('heading', { name: /^learn chart$/i })).toBeTruthy();
+    expect(screen.getByTestId('learn-chart')).toBeTruthy();
     expect(screen.getByRole('heading', { name: /^people$/i })).toBeTruthy();
     expect(screen.getByRole('heading', { name: /^needs attention$/i })).toBeTruthy();
   });

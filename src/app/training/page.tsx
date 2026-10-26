@@ -7,6 +7,7 @@ import { ManagerOnly } from '@/components/ManagerOnly';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { CurriculumSortList } from '@/components/CurriculumSortList';
+import { TrainingLearnChart } from '@/components/TrainingLearnChart';
 import { MyTrainingSection } from '@/components/training/MyTrainingSection';
 import { NeedsAttentionSection } from '@/components/training/NeedsAttentionSection';
 import { PeopleOverview } from '@/components/training/PeopleOverview';
@@ -400,6 +401,14 @@ function TrainingDashboard() {
 
       {isManager && (
         <>
+          <section className="card card-pad space-y-3">
+            <div>
+              <h2 className="card-title text-base m-0">Learn chart</h2>
+              <p className="hint m-0 mt-1">Who has been trained across the active curriculum.</p>
+            </div>
+            <TrainingLearnChart rows={learnRows} />
+          </section>
+
           <PeopleOverview
             learnRows={learnRows}
             selectedId={selectedEmployeeId || null}
