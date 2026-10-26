@@ -2,11 +2,27 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, GraduationCap, Plus } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  Clock3,
+  GraduationCap,
+  Plus,
+  Users,
+} from 'lucide-react';
 import { ManagerOnly } from '@/components/ManagerOnly';
+import { PageHeader } from '@/components/PageHeader';
+import { EmptyState } from '@/components/EmptyState';
+import { TrainingLearnChart } from '@/components/TrainingLearnChart';
 import { useAuth } from '@/context/AuthContext';
 import { dbService } from '@/lib/db';
 import { applyTraineeCertify, applyTrainerSignOff } from '@/lib/training/trainingDomain';
+import {
+  buildTraineeLearnRows,
+  trainingStatusLabel,
+  trainingStatusTone,
+} from '@/lib/training/trainingProgress';
 import {
   buildNewTrainingItem,
   buildTrainingAssignment,
@@ -78,8 +94,21 @@ function TrainingDashboard() {
     const incomplete = assignments.filter(a => a.status !== 'completed');
     const overdue = assignments.filter(a => a.status === 'overdue');
     const retrain = assignments.filter(a => a.status === 'needs_retrain');
-    return { incomplete: incomplete.length, overdue: overdue.length, retrain: retrain.length };
-  }, [assignments]);
+    const trainedPeople = buildTraineeLearnRows({ employees, items, assignments }).filter(
+      r => r.headlineStatus === 'trained',
+    ).length;
+    return {
+      incomplete: incomplete.length,
+      overdue: overdue.length,
+      retrain: retrain.length,
+      trainedPeople,
+    };
+  }, [assignments, employees, items]);
+
+  const learnRows = useMemo(
+    () => buildTraineeLearnRows({ employees, items, assignments }),
+    [employees, items, assignments],
+  );
 
   const runAction = async (work: () => Promise<void>, success: string, fallbackError: string) => {
     if (busy) return;
@@ -117,7 +146,10 @@ function TrainingDashboard() {
     );
   };
 
-  const saveItemSettings = async (item: TrainingItem, patch: { withinDays?: number; retrainThreshold?: number }) => {
+  const saveItemSettings = async (
+    item: TrainingItem,
+    patch: { withinDays?: number; retrainThreshold?: number },
+  ) => {
     if (!isManager) return;
     const now = new Date().toISOString();
     const next = updateTrainingItemSettings(item, patch, now);
@@ -205,98 +237,177 @@ function TrainingDashboard() {
   const nameById = useMemo(() => new Map(employees.map(e => [e.id, e.name])), [employees]);
 
   return (
-    <div className="page max-w-3xl mx-auto space-y-5 pb-12">
-      <div className="spread">
-        <Link href={isManager ? '/dashboard' : '/home'} className="btn btn-secondary btn-sm">
-          <ArrowLeft className="h-4 w-4" aria-hidden />
-          Back
-        </Link>
-        <span className="badge" data-status="info">
-          <GraduationCap className="h-3.5 w-3.5" aria-hidden />
-          Training
-        </span>
-      </div>
-
-      <div>
-        <h1 className="card-title text-2xl">Training accountability</h1>
-        <p className="text-sm text-ink-muted">
-          Dual sign-off (trainer then trainee), deadlines, and miss/retrain tracking.
-        </p>
-      </div>
+    <div className="page max-w-5xl mx-auto space-y-6 pb-12">
+      <PageHeader
+        title="Training"
+        subtitle="Dual sign-off curriculum, trainer pairing, and a clear view of who has been trained."
+        actions={
+          <Link href={isManager ? '/dashboard' : '/home'} className="btn btn-secondary btn-sm">
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+            Back
+          </Link>
+        }
+      />
 
       {message ? (
-        <p className="text-sm text-emerald-800 dark:text-emerald-200" role="status">
-          {message}
-        </p>
+        <div className="card card-pad" data-status="ok" role="status">
+          <p className="text-sm m-0 text-[var(--ok)]">{message}</p>
+        </div>
       ) : null}
       {error ? (
-        <p className="text-sm text-[var(--critical)]" role="alert">
-          {error}
-        </p>
+        <div className="card card-pad" data-status="critical" role="alert">
+          <p className="text-sm m-0 text-[var(--critical)]">{error}</p>
+        </div>
       ) : null}
 
       {isManager && (
-        <div className="grid grid-cols-3 gap-3">
-          <div className="card card-pad">
-            <p className="text-2xs uppercase text-ink-muted m-0">Incomplete</p>
-            <p className="text-2xl font-bold m-0">{stats.incomplete}</p>
+        <div className="grid-auto" style={{ '--min': '11rem' } as React.CSSProperties}>
+          <div className="card card-pad flex flex-col justify-between" data-status="ok">
+            <div className="spread">
+              <span className="eyebrow mb-0">Fully trained</span>
+              <span className="icon-tile" data-status="ok" aria-hidden>
+                <CheckCircle2 className="h-5 w-5" />
+              </span>
+            </div>
+            <div className="stat mt-3" data-status="ok">
+              <div className="stat-value">{stats.trainedPeople}</div>
+              <p className="stat-label">People who finished every step</p>
+            </div>
           </div>
-          <div className="card card-pad">
-            <p className="text-2xs uppercase text-ink-muted m-0">Overdue</p>
-            <p className="text-2xl font-bold m-0">{stats.overdue}</p>
+          <div className="card card-pad flex flex-col justify-between" data-status="info">
+            <div className="spread">
+              <span className="eyebrow mb-0">Incomplete</span>
+              <span className="icon-tile" data-status="info" aria-hidden>
+                <Clock3 className="h-5 w-5" />
+              </span>
+            </div>
+            <div className="stat mt-3" data-status="info">
+              <div className="stat-value">{stats.incomplete}</div>
+              <p className="stat-label">Open assignments</p>
+            </div>
           </div>
-          <div className="card card-pad">
-            <p className="text-2xs uppercase text-ink-muted m-0">Needs retrain</p>
-            <p className="text-2xl font-bold m-0">{stats.retrain}</p>
+          <div className="card card-pad flex flex-col justify-between" data-status="flagged">
+            <div className="spread">
+              <span className="eyebrow mb-0">Overdue</span>
+              <span className="icon-tile" data-status="flagged" aria-hidden>
+                <AlertTriangle className="h-5 w-5" />
+              </span>
+            </div>
+            <div className="stat mt-3" data-status="flagged">
+              <div className="stat-value">{stats.overdue}</div>
+              <p className="stat-label">Past due date</p>
+            </div>
+          </div>
+          <div className="card card-pad flex flex-col justify-between" data-status="critical">
+            <div className="spread">
+              <span className="eyebrow mb-0">Needs retrain</span>
+              <span className="icon-tile" data-status="critical" aria-hidden>
+                <GraduationCap className="h-5 w-5" />
+              </span>
+            </div>
+            <div className="stat mt-3" data-status="critical">
+              <div className="stat-value">{stats.retrain}</div>
+              <p className="stat-label">Miss threshold hit</p>
+            </div>
           </div>
         </div>
       )}
 
       {isManager && (
         <section className="card card-pad space-y-3">
-          <h2 className="card-title text-base m-0">Trainers</h2>
-          <p className="text-xs text-ink-muted m-0">
-            Mark people as designated trainers on the Employees page, then pair them here.
+          <div className="spread items-start gap-2 flex-wrap">
+            <div>
+              <h2 className="card-title text-base m-0 cluster gap-2">
+                <GraduationCap className="h-4 w-4" aria-hidden />
+                Learn chart
+              </h2>
+              <p className="hint m-0 mt-1">Who has been trained across the active curriculum.</p>
+            </div>
+            <span className="badge" data-status="info">
+              {learnRows.filter(r => r.headlineStatus === 'trained').length} trained
+            </span>
+          </div>
+          <TrainingLearnChart rows={learnRows} />
+        </section>
+      )}
+
+      {isManager && (
+        <section className="card card-pad space-y-3">
+          <h2 className="card-title text-base m-0 cluster gap-2">
+            <Users className="h-4 w-4" aria-hidden />
+            Trainers
+          </h2>
+          <p className="hint m-0">
+            Mark designated trainers on Employees, then pair them to trainees here.
           </p>
-          <ul className="space-y-1 m-0 p-0 list-none text-sm">
-            {trainers.map(t => (
-              <li key={t.id} className="text-ink">
-                {t.name}
-              </li>
-            ))}
-            {!trainers.length && (
-              <li className="text-ink-muted">No designated trainers yet — enable on Employees.</li>
-            )}
-          </ul>
-          <form onSubmit={e => void pairTrainer(e)} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-            <select
-              className="px-3 py-2 rounded-xl border border-line text-sm"
-              value={pairTraineeId}
-              onChange={e => setPairTraineeId(e.target.value)}
-              aria-label="Trainee to pair"
-            >
-              {employees.map(e => (
-                <option key={e.id} value={e.id}>
-                  Trainee: {e.name}
-                </option>
-              ))}
-            </select>
-            <select
-              className="px-3 py-2 rounded-xl border border-line text-sm"
-              value={pairTrainerId}
-              onChange={e => setPairTrainerId(e.target.value)}
-              aria-label="Trainer to pair"
-            >
-              <option value="">Select trainer…</option>
+          {trainers.length ? (
+            <div className="cluster gap-2 flex-wrap">
               {trainers.map(t => (
-                <option key={t.id} value={t.id}>
+                <span key={t.id} className="badge" data-status="info">
                   {t.name}
-                </option>
+                </span>
               ))}
-            </select>
-            <button type="submit" className="btn btn-secondary btn-sm" disabled={busy || !trainers.length}>
-              Pair
-            </button>
+            </div>
+          ) : (
+            <EmptyState
+              icon={<Users className="h-7 w-7" aria-hidden />}
+              title="No designated trainers"
+              action={
+                <Link href="/employees" className="btn btn-secondary btn-sm">
+                  Open Employees
+                </Link>
+              }
+            >
+              Enable “Designated trainer” on an employee, then come back to pair them.
+            </EmptyState>
+          )}
+          <form onSubmit={e => void pairTrainer(e)} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+            <div className="field">
+              <label className="label" htmlFor="pair-trainee">
+                Trainee
+              </label>
+              <select
+                id="pair-trainee"
+                className="select"
+                value={pairTraineeId}
+                onChange={e => setPairTraineeId(e.target.value)}
+                aria-label="Trainee to pair"
+              >
+                {employees.map(e => (
+                  <option key={e.id} value={e.id}>
+                    {e.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label className="label" htmlFor="pair-trainer">
+                Trainer
+              </label>
+              <select
+                id="pair-trainer"
+                className="select"
+                value={pairTrainerId}
+                onChange={e => setPairTrainerId(e.target.value)}
+                aria-label="Trainer to pair"
+              >
+                <option value="">Select trainer…</option>
+                {trainers.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button
+                type="submit"
+                className="btn btn-secondary w-full sm:w-auto"
+                disabled={busy || !trainers.length}
+              >
+                Pair
+              </button>
+            </div>
           </form>
           {links.length > 0 && (
             <ul className="space-y-1 m-0 p-0 list-none text-xs text-ink-muted">
@@ -312,27 +423,30 @@ function TrainingDashboard() {
       )}
 
       {isManager && (
-        <section className="card card-pad space-y-3">
+        <section className="card card-pad space-y-4">
           <h2 className="card-title text-base m-0">Curriculum</h2>
-          <form onSubmit={e => void addItem(e)} className="flex gap-2">
+          <form onSubmit={e => void addItem(e)} className="flex flex-col sm:flex-row gap-2">
             <input
-              className="flex-1 px-3 py-2 rounded-xl border border-line text-sm"
+              className="input flex-1"
               placeholder="New training step title"
               value={title}
               onChange={e => setTitle(e.target.value)}
               aria-label="New training step title"
             />
-            <button type="submit" className="btn btn-primary btn-sm" disabled={busy} aria-busy={busy}>
+            <button type="submit" className="btn btn-primary" disabled={busy} aria-busy={busy}>
               <Plus className="h-4 w-4" aria-hidden />
               Add
             </button>
           </form>
 
           {(isManager || canTrain) && (
-            <label className="block text-xs text-ink-muted">
-              Assign to
+            <div className="field max-w-sm">
+              <label className="label" htmlFor="assign-trainee">
+                Assign to
+              </label>
               <select
-                className="mt-1 w-full px-3 py-2 rounded-xl border border-line text-sm text-ink"
+                id="assign-trainee"
+                className="select"
                 value={assignTraineeId}
                 onChange={e => setAssignTraineeId(e.target.value)}
               >
@@ -342,16 +456,16 @@ function TrainingDashboard() {
                   </option>
                 ))}
               </select>
-            </label>
+            </div>
           )}
 
           <ul className="space-y-2 m-0 p-0 list-none">
             {items.map(item => (
-              <li key={item.id} className="rounded-xl border border-line p-3 space-y-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
+              <li key={item.id} className="rounded-xl border border-line p-3 space-y-3">
+                <div className="spread items-start gap-3 flex-wrap">
+                  <div className="min-w-0">
                     <p className="text-sm font-semibold m-0">{item.title}</p>
-                    <p className="text-xs text-ink-muted m-0">
+                    <p className="hint m-0 mt-0.5">
                       Due in {item.withinDays || 7} days · retrain after {item.retrainThreshold} misses
                     </p>
                   </div>
@@ -366,14 +480,14 @@ function TrainingDashboard() {
                     </button>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-3 text-xs">
-                  <label className="flex items-center gap-1 text-ink-muted">
-                    Days
+                <div className="flex flex-wrap gap-3">
+                  <div className="field">
+                    <label className="label">Days</label>
                     <input
                       type="number"
                       min={1}
                       max={90}
-                      className="w-16 px-2 py-1 rounded-lg border border-line text-ink"
+                      className="input w-20"
                       defaultValue={item.withinDays || 7}
                       onBlur={e => {
                         const withinDays = Number(e.target.value);
@@ -381,29 +495,38 @@ function TrainingDashboard() {
                         void saveItemSettings(item, { withinDays });
                       }}
                     />
-                  </label>
-                  <label className="flex items-center gap-1 text-ink-muted">
-                    Retrain after
+                  </div>
+                  <div className="field">
+                    <label className="label">Retrain after misses</label>
                     <input
                       type="number"
                       min={1}
                       max={20}
-                      className="w-16 px-2 py-1 rounded-lg border border-line text-ink"
+                      className="input w-20"
                       defaultValue={item.retrainThreshold}
                       onBlur={e => {
                         const retrainThreshold = Number(e.target.value);
-                        if (!Number.isFinite(retrainThreshold) || retrainThreshold === item.retrainThreshold) {
+                        if (
+                          !Number.isFinite(retrainThreshold) ||
+                          retrainThreshold === item.retrainThreshold
+                        ) {
                           return;
                         }
                         void saveItemSettings(item, { retrainThreshold });
                       }}
                     />
-                    misses
-                  </label>
+                  </div>
                 </div>
               </li>
             ))}
-            {!items.length && <p className="text-sm text-ink-muted">No training steps yet.</p>}
+            {!items.length && (
+              <EmptyState
+                icon={<Plus className="h-7 w-7" aria-hidden />}
+                title="No training steps yet"
+              >
+                Add a curriculum title above to start tracking who has been trained.
+              </EmptyState>
+            )}
           </ul>
         </section>
       )}
@@ -411,10 +534,13 @@ function TrainingDashboard() {
       {!isManager && canTrain && (
         <section className="card card-pad space-y-3">
           <h2 className="card-title text-base m-0">Assign training</h2>
-          <label className="block text-xs text-ink-muted">
-            Trainee
+          <div className="field max-w-sm">
+            <label className="label" htmlFor="trainer-assign-trainee">
+              Trainee
+            </label>
             <select
-              className="mt-1 w-full px-3 py-2 rounded-xl border border-line text-sm text-ink"
+              id="trainer-assign-trainee"
+              className="select"
               value={assignTraineeId}
               onChange={e => setAssignTraineeId(e.target.value)}
             >
@@ -424,10 +550,10 @@ function TrainingDashboard() {
                 </option>
               ))}
             </select>
-          </label>
+          </div>
           <ul className="space-y-2 m-0 p-0 list-none">
             {items.map(item => (
-              <li key={item.id} className="rounded-xl border border-line p-3 flex justify-between gap-2">
+              <li key={item.id} className="rounded-xl border border-line p-3 spread items-center gap-2">
                 <p className="text-sm font-semibold m-0">{item.title}</p>
                 <button
                   type="button"
@@ -439,7 +565,11 @@ function TrainingDashboard() {
                 </button>
               </li>
             ))}
-            {!items.length && <p className="text-sm text-ink-muted">No curriculum yet — ask a manager to add steps.</p>}
+            {!items.length && (
+              <EmptyState icon={<GraduationCap className="h-7 w-7" aria-hidden />} title="No curriculum yet">
+                Ask a manager to add training steps first.
+              </EmptyState>
+            )}
           </ul>
         </section>
       )}
@@ -452,15 +582,20 @@ function TrainingDashboard() {
               const item = items.find(i => i.id === row.itemId);
               return (
                 <li key={row.id} className="rounded-xl border border-line p-3 space-y-2">
-                  <div className="flex justify-between gap-2">
-                    <div>
+                  <div className="spread items-start gap-2 flex-wrap">
+                    <div className="min-w-0 space-y-1">
                       <p className="text-sm font-semibold m-0">
                         {row.traineeName} · {item?.title || row.itemId}
                       </p>
-                      <p className="text-xs text-ink-muted m-0">
-                        {row.status} · streak {row.missStreak}
-                        {row.dueAt ? ` · due ${new Date(row.dueAt).toLocaleString()}` : ''}
-                      </p>
+                      <div className="cluster gap-2 flex-wrap">
+                        <span className="badge" data-status={trainingStatusTone(row.status)}>
+                          {trainingStatusLabel(row.status)}
+                        </span>
+                        <span className="text-xs text-ink-muted">
+                          streak {row.missStreak}
+                          {row.dueAt ? ` · due ${new Date(row.dueAt).toLocaleString()}` : ''}
+                        </span>
+                      </div>
                     </div>
                     {canTrain &&
                       (row.status === 'assigned' ||
@@ -479,7 +614,14 @@ function TrainingDashboard() {
                 </li>
               );
             })}
-            {!assignments.length && <p className="text-sm text-ink-muted">No assignments yet.</p>}
+            {!assignments.length && (
+              <EmptyState
+                icon={<Clock3 className="h-7 w-7" aria-hidden />}
+                title="No assignments yet"
+              >
+                Assign a curriculum step to an employee to start dual sign-off.
+              </EmptyState>
+            )}
           </ul>
         </section>
       )}
@@ -490,10 +632,12 @@ function TrainingDashboard() {
           {myAssignments.map(row => {
             const item = items.find(i => i.id === row.itemId);
             return (
-              <li key={row.id} className="rounded-xl border border-line p-3 flex justify-between gap-2">
-                <div>
+              <li key={row.id} className="rounded-xl border border-line p-3 spread items-center gap-2 flex-wrap">
+                <div className="min-w-0 space-y-1">
                   <p className="text-sm font-semibold m-0">{item?.title || row.itemId}</p>
-                  <p className="text-xs text-ink-muted m-0">{row.status}</p>
+                  <span className="badge" data-status={trainingStatusTone(row.status)}>
+                    {trainingStatusLabel(row.status)}
+                  </span>
                 </div>
                 {row.status === 'awaiting_trainee' && (
                   <button
@@ -508,7 +652,14 @@ function TrainingDashboard() {
               </li>
             );
           })}
-          {!myAssignments.length && <p className="text-sm text-ink-muted">No training assigned to you.</p>}
+          {!myAssignments.length && (
+            <EmptyState
+              icon={<CheckCircle2 className="h-7 w-7" aria-hidden />}
+              title="No training assigned to you"
+            >
+              When a trainer assigns a step, it will show up here for you to certify.
+            </EmptyState>
+          )}
         </ul>
       </section>
     </div>
