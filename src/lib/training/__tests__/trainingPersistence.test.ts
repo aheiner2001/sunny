@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const commit = vi.fn().mockRejectedValue(new Error('Firestore permission denied'));
 const batchSet = vi.fn();
+const batchDelete = vi.fn();
 vi.mock('../../firebase', () => ({ db: {}, ensureAuth: vi.fn().mockResolvedValue({ uid: 'test' }) }));
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
@@ -9,10 +10,10 @@ vi.mock('firebase/firestore', () => ({
   setDoc: vi.fn(),
   deleteDoc: vi.fn(),
   getDoc: vi.fn(),
-  getDocs: vi.fn(),
+  getDocs: vi.fn(async () => ({ forEach: () => {}, empty: true })),
   updateDoc: vi.fn(),
   onSnapshot: vi.fn(() => () => {}),
-  writeBatch: vi.fn(() => ({ set: batchSet, commit })),
+  writeBatch: vi.fn(() => ({ set: batchSet, delete: batchDelete, commit })),
   arrayUnion: vi.fn(),
   runTransaction: vi.fn(),
 }));
@@ -41,6 +42,7 @@ describe('training curriculum persistence', () => {
     localStorage.setItem('sunny_overnight_reconciled', new Date().toLocaleDateString('en-CA'));
     commit.mockReset();
     batchSet.mockReset();
+    batchDelete.mockReset();
     commit.mockRejectedValue(new Error('Firestore permission denied'));
   });
 

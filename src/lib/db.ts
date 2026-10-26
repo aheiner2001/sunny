@@ -490,6 +490,45 @@ class DataStore {
         console.warn('Firestore vehicleDamage listener (using local cache):', err.message);
       });
 
+      // Training + previous-user: hydrate localStorage from cloud so curriculum/onboarding
+      // survive new preview URLs / devices (writes already went to these collections).
+      onSnapshot(collection(db, 'trainingItems'), (snapshot) => {
+        if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
+          const list: TrainingItem[] = [];
+          snapshot.forEach(d => list.push(d.data() as TrainingItem));
+          list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          localStorage.setItem(STORAGE_KEYS.TRAINING_ITEMS, JSON.stringify(list));
+          window.dispatchEvent(new Event('sunny_db_update'));
+        }
+      }, err => console.warn('Firestore trainingItems listener:', err.message));
+
+      onSnapshot(collection(db, 'trainingAssignments'), (snapshot) => {
+        if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
+          const list: TrainingAssignment[] = [];
+          snapshot.forEach(d => list.push(d.data() as TrainingAssignment));
+          localStorage.setItem(STORAGE_KEYS.TRAINING_ASSIGNMENTS, JSON.stringify(list));
+          window.dispatchEvent(new Event('sunny_db_update'));
+        }
+      }, err => console.warn('Firestore trainingAssignments listener:', err.message));
+
+      onSnapshot(collection(db, 'traineeTrainers'), (snapshot) => {
+        if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
+          const list: TraineeTrainerLink[] = [];
+          snapshot.forEach(d => list.push(d.data() as TraineeTrainerLink));
+          localStorage.setItem(STORAGE_KEYS.TRAINEE_TRAINERS, JSON.stringify(list));
+          window.dispatchEvent(new Event('sunny_db_update'));
+        }
+      }, err => console.warn('Firestore traineeTrainers listener:', err.message));
+
+      onSnapshot(collection(db, 'previousUserFlags'), (snapshot) => {
+        if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
+          const list: PreviousUserFlag[] = [];
+          snapshot.forEach(d => list.push({ ...(d.data() as PreviousUserFlag), id: (d.data() as PreviousUserFlag).id || d.id }));
+          localStorage.setItem(STORAGE_KEYS.PREVIOUS_USER_FLAGS, JSON.stringify(list));
+          window.dispatchEvent(new Event('sunny_db_update'));
+        }
+      }, err => console.warn('Firestore previousUserFlags listener:', err.message));
+
     } catch (e: any) {
       console.warn('Could not attach Firestore listeners:', e.message);
     }
@@ -560,6 +599,19 @@ class DataStore {
       const checklistConfig = this.getChecklistConfig();
       const checklistRef = doc(db, 'checklists', DEFAULT_CHECKLIST_ID);
       batch.set(checklistRef, sanitizeForFirestore(checklistConfig));
+
+      this.getTrainingItems().forEach(item => {
+        batch.set(doc(db, 'trainingItems', item.id), sanitizeForFirestore(item));
+      });
+      this.getTrainingAssignments().forEach(row => {
+        batch.set(doc(db, 'trainingAssignments', row.id), sanitizeForFirestore(row));
+      });
+      this.getTraineeTrainerLinks().forEach(link => {
+        batch.set(doc(db, 'traineeTrainers', link.traineeId), sanitizeForFirestore(link));
+      });
+      this.getPreviousUserFlags().forEach(flag => {
+        batch.set(doc(db, 'previousUserFlags', flag.id), sanitizeForFirestore(flag));
+      });
 
       await batch.commit();
       localStorage.setItem(STORAGE_KEYS.FIREBASE_SYNCED, 'true');
@@ -3760,7 +3812,12 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     this.init();
     if (db) {
       await ensureAuth();
+      const existing = await getDocs(collection(db, 'trainingItems'));
+      const keep = new Set(items.map(item => item.id));
       const batch = writeBatch(db);
+      existing?.forEach(d => {
+        if (!keep.has(d.id)) batch.delete(d.ref);
+      });
       for (const item of items) {
         batch.set(doc(db, 'trainingItems', item.id), sanitizeForFirestore(item));
       }
