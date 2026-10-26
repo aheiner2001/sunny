@@ -95,3 +95,15 @@ export function isMenuFullyInViewport(
     right <= viewport.width - margin + 0.5
   );
 }
+
+/**
+ * Scroll/wheel inside the menu must not dismiss it — only outside page scroll
+ * should reposition or close. Used by capture-phase scroll listeners.
+ */
+export function isEventInsideAnchoredMenu(
+  menu: HTMLElement | null | undefined,
+  target: EventTarget | null | undefined,
+): boolean {
+  if (!menu || !(target instanceof Node)) return false;
+  return menu === target || menu.contains(target);
+}

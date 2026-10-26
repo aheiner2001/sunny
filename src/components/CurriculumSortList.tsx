@@ -4,7 +4,10 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { createPortal } from 'react-dom';
 import { GridLayout, useContainerWidth, type Layout } from 'react-grid-layout';
 import { GripVertical, Link2, Trash2, X } from 'lucide-react';
-import { applyAnchoredMenuPlacement } from '@/lib/ui/anchoredMenu';
+import {
+  applyAnchoredMenuPlacement,
+  isEventInsideAnchoredMenu,
+} from '@/lib/ui/anchoredMenu';
 import type { TrainingItem } from '@/lib/training/types';
 import type { ChecklistQuestion } from '@/types';
 
@@ -108,16 +111,38 @@ export function CurriculumSortList({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setLinkingItemId(null);
     };
-    const onRepositionClose = () => setLinkingItemId(null);
+    const onScroll = (e: Event) => {
+      // Scrolling the question list must keep the menu open.
+      if (isEventInsideAnchoredMenu(linkMenuRef.current, e.target)) return;
+      if (!linkBtnRef.current || !linkMenuRef.current) {
+        setLinkingItemId(null);
+        return;
+      }
+      // Page scroll: keep menu open and re-anchor to the Link button.
+      applyAnchoredMenuPlacement(
+        linkMenuRef.current,
+        linkBtnRef.current.getBoundingClientRect(),
+      );
+    };
+    const onResize = () => {
+      if (!linkBtnRef.current || !linkMenuRef.current) {
+        setLinkingItemId(null);
+        return;
+      }
+      applyAnchoredMenuPlacement(
+        linkMenuRef.current,
+        linkBtnRef.current.getBoundingClientRect(),
+      );
+    };
     document.addEventListener('mousedown', onPointer);
     document.addEventListener('keydown', onKey);
-    window.addEventListener('scroll', onRepositionClose, true);
-    window.addEventListener('resize', onRepositionClose);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onResize);
     return () => {
       document.removeEventListener('mousedown', onPointer);
       document.removeEventListener('keydown', onKey);
-      window.removeEventListener('scroll', onRepositionClose, true);
-      window.removeEventListener('resize', onRepositionClose);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onResize);
     };
   }, [linkingItemId]);
 
@@ -129,11 +154,12 @@ export function CurriculumSortList({
           <div
             ref={linkMenuRef}
             id={`link-menu-${linkingItem.id}`}
-            className="fixed z-[80] w-[min(calc(100vw-2rem),22rem)] rounded-2xl border border-line bg-surface p-3 space-y-3 shadow-lg"
+            className="fixed z-[80] w-[min(calc(100vw-2rem),22rem)] rounded-2xl border border-line bg-surface p-3 space-y-3 shadow-lg flex flex-col"
             role="dialog"
             aria-label={`Link questions for ${linkingItem.title}`}
             style={{ top: 0, left: 0 }}
             data-anchored-menu="true"
+            data-testid="curriculum-link-menu"
           >
             <div className="spread items-start gap-2">
               <div className="min-w-0">
@@ -163,7 +189,10 @@ export function CurriculumSortList({
               Show all yes/no questions (not only previous-user)
             </label>
             {linkableQuestions.length ? (
-              <ul className="m-0 p-0 list-none space-y-2 max-h-56 overflow-y-auto">
+              <ul
+                className="m-0 p-0 list-none space-y-2 min-h-0 flex-1 overflow-y-auto overscroll-contain"
+                data-testid="curriculum-link-question-list"
+              >
                 {linkableQuestions.map(q => {
                   const checked = linkingItem.linkedQuestionIds.includes(q.id);
                   return (

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   computeAnchoredMenuPlacement,
+  isEventInsideAnchoredMenu,
   isMenuFullyInViewport,
 } from '../anchoredMenu';
 
@@ -101,5 +102,27 @@ describe('computeAnchoredMenuPlacement — no-clip contract for every dropdown',
         `failed for anchor top=${anchor.top} left=${anchor.left}`,
       ).toBe(true);
     }
+  });
+});
+
+describe('isEventInsideAnchoredMenu — scroll-inside must not dismiss', () => {
+  it('treats scroll targets inside the menu as inside', () => {
+    const menu = document.createElement('div');
+    const list = document.createElement('ul');
+    menu.appendChild(list);
+    document.body.appendChild(menu);
+    expect(isEventInsideAnchoredMenu(menu, list)).toBe(true);
+    expect(isEventInsideAnchoredMenu(menu, menu)).toBe(true);
+    menu.remove();
+  });
+
+  it('treats document/window scroll targets as outside', () => {
+    const menu = document.createElement('div');
+    document.body.appendChild(menu);
+    expect(isEventInsideAnchoredMenu(menu, document)).toBe(false);
+    expect(isEventInsideAnchoredMenu(menu, document.documentElement)).toBe(false);
+    expect(isEventInsideAnchoredMenu(menu, document.body)).toBe(false);
+    expect(isEventInsideAnchoredMenu(null, document.body)).toBe(false);
+    menu.remove();
   });
 });

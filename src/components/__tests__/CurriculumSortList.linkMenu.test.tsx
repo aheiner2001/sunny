@@ -118,4 +118,42 @@ describe('CurriculumSortList Link menu — no viewport clipping', () => {
     ).toBe(true);
     expect(placement.openUp).toBe(true);
   });
+
+  it('stays open when the question list is scrolled (does not dismiss on inner scroll)', async () => {
+    const manyQuestions = Array.from({ length: 12 }, (_, i) =>
+      question({
+        id: `q-${i}`,
+        text: `Question ${i + 1}`,
+        order: i + 1,
+      }),
+    );
+
+    render(
+      <CurriculumSortList
+        items={[item()]}
+        questions={manyQuestions}
+        onReorder={vi.fn()}
+        onDelete={vi.fn()}
+        onSettingsBlur={vi.fn()}
+        onToggleLinkedQuestion={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /link inspection questions/i }));
+    const menu = await screen.findByTestId('curriculum-link-menu');
+    const list = screen.getByTestId('curriculum-link-question-list');
+
+    fireEvent.scroll(list, { target: { scrollTop: 80 } });
+    // Capture-phase window scroll with the list as target (same as browser inner scroll).
+    window.dispatchEvent(
+      new Event('scroll', { bubbles: true, cancelable: false }),
+    );
+    // Directly simulate the capture listener seeing the list as target:
+    const scrollEvt = new Event('scroll', { bubbles: true });
+    Object.defineProperty(scrollEvt, 'target', { value: list });
+    window.dispatchEvent(scrollEvt);
+
+    expect(screen.getByTestId('curriculum-link-menu')).toBe(menu);
+    expect(screen.getByRole('dialog', { name: /link questions/i })).toBeTruthy();
+  });
 });
