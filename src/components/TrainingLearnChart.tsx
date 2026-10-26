@@ -74,14 +74,13 @@ export function TrainingLearnChart({ rows }: { rows: TraineeLearnRow[] }) {
             <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
             <YAxis type="category" dataKey="name" width={72} tick={{ fontSize: 12 }} />
             <Tooltip
-              formatter={(value: number, key: string) => [
-                value,
-                key === 'trained' ? 'Trained steps' : 'Remaining',
-              ]}
-              labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName || ''}
+              labelFormatter={(_label, payload) => {
+                const fullName = payload?.[0]?.payload?.fullName;
+                return typeof fullName === 'string' ? fullName : '';
+              }}
             />
-            <Bar dataKey="trained" stackId="a" fill="var(--ok)" name="trained" radius={[0, 0, 0, 0]} />
-            <Bar dataKey="remaining" stackId="a" fill="var(--surface-sunk)" name="remaining" radius={[0, 6, 6, 0]} />
+            <Bar dataKey="trained" stackId="a" fill="var(--ok)" name="Trained steps" radius={[0, 0, 0, 0]} />
+            <Bar dataKey="remaining" stackId="a" fill="var(--surface-sunk)" name="Remaining" radius={[0, 6, 6, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
