@@ -4,6 +4,7 @@ const commit = vi.fn().mockRejectedValue(new Error('Firestore permission denied'
 const batchSet = vi.fn();
 const batchDelete = vi.fn();
 const listeners = new Map<string, (snapshot: unknown) => void>();
+const listenerOptions = new Map<string, { includeMetadataChanges?: boolean }>();
 vi.mock('../../firebase', () => ({ db: {}, ensureAuth: vi.fn().mockResolvedValue({ uid: 'test' }) }));
 vi.mock('firebase/firestore', () => ({
   collection: (_db: unknown, path: string) => ({ path }),
@@ -13,7 +14,16 @@ vi.mock('firebase/firestore', () => ({
   getDoc: vi.fn(),
   getDocs: vi.fn(async () => ({ forEach: () => {}, empty: true })),
   updateDoc: vi.fn(),
-  onSnapshot: (ref: { path: string }, callback: (snapshot: unknown) => void) => {
+  onSnapshot: (
+    ref: { path: string },
+    optionsOrCallback: { includeMetadataChanges?: boolean } | ((snapshot: unknown) => void),
+    maybeCallback?: (snapshot: unknown) => void,
+  ) => {
+    const callback =
+      typeof optionsOrCallback === 'function' ? optionsOrCallback : (maybeCallback as (snapshot: unknown) => void);
+    if (typeof optionsOrCallback !== 'function') {
+      listenerOptions.set(ref.path, optionsOrCallback);
+    }
     listeners.set(ref.path, callback);
     return () => {};
   },
@@ -74,6 +84,12 @@ describe('training curriculum persistence', () => {
     ]);
   });
 
+  it('registers training listeners with includeMetadataChanges', () => {
+    for (const path of ['trainingItems', 'trainingAssignments', 'traineeTrainers', 'previousUserFlags']) {
+      expect(listenerOptions.get(path)).toEqual({ includeMetadataChanges: true });
+    }
+  });
+
   it('ignores optimistic trainingItems snapshots while writes are pending', () => {
     dbService.getTrainingItems();
     expect(dbService.getTrainingItems()).toHaveLength(0);
@@ -83,5 +99,20 @@ describe('training curriculum persistence', () => {
       forEach: (cb: (doc: { data: () => TrainingItem }) => void) => cb({ data: () => item() }),
     });
     expect(dbService.getTrainingItems()).toHaveLength(0);
+  });
+
+  it('hydrates trainingItems after pending writes are acknowledged', () => {
+    dbService.getTrainingItems();
+    const fire = (hasPendingWrites: boolean) =>
+      listeners.get('trainingItems')?.({
+        empty: false,
+        metadata: { hasPendingWrites },
+        forEach: (cb: (doc: { data: () => TrainingItem }) => void) => cb({ data: () => item() }),
+      });
+    fire(true);
+    expect(dbService.getTrainingItems()).toHaveLength(0);
+    fire(false);
+    expect(dbService.getTrainingItems()).toHaveLength(1);
+    expect(dbService.getTrainingItems()[0].title).toBe('Cab cleanliness');
   });
 });

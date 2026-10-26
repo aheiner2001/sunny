@@ -492,7 +492,7 @@ class DataStore {
 
       // Training + previous-user: hydrate localStorage from cloud so curriculum/onboarding
       // survive new preview URLs / devices (writes already went to these collections).
-      onSnapshot(collection(db, 'trainingItems'), (snapshot) => {
+      onSnapshot(collection(db, 'trainingItems'), { includeMetadataChanges: true }, (snapshot) => {
         if (snapshot.metadata?.hasPendingWrites) return;
         if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
           const list: TrainingItem[] = [];
@@ -503,7 +503,7 @@ class DataStore {
         }
       }, err => console.warn('Firestore trainingItems listener:', err.message));
 
-      onSnapshot(collection(db, 'trainingAssignments'), (snapshot) => {
+      onSnapshot(collection(db, 'trainingAssignments'), { includeMetadataChanges: true }, (snapshot) => {
         if (snapshot.metadata?.hasPendingWrites) return;
         if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
           const list: TrainingAssignment[] = [];
@@ -513,7 +513,7 @@ class DataStore {
         }
       }, err => console.warn('Firestore trainingAssignments listener:', err.message));
 
-      onSnapshot(collection(db, 'traineeTrainers'), (snapshot) => {
+      onSnapshot(collection(db, 'traineeTrainers'), { includeMetadataChanges: true }, (snapshot) => {
         if (snapshot.metadata?.hasPendingWrites) return;
         if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
           const list: TraineeTrainerLink[] = [];
@@ -523,7 +523,7 @@ class DataStore {
         }
       }, err => console.warn('Firestore traineeTrainers listener:', err.message));
 
-      onSnapshot(collection(db, 'previousUserFlags'), (snapshot) => {
+      onSnapshot(collection(db, 'previousUserFlags'), { includeMetadataChanges: true }, (snapshot) => {
         if (snapshot.metadata?.hasPendingWrites) return;
         if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
           const list: PreviousUserFlag[] = [];
