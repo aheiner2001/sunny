@@ -855,6 +855,7 @@ class DataStore {
     avatarUrl?: string;
     avatarStyle?: User['avatarStyle'];
     passcode?: string;
+    isDesignatedTrainer?: boolean;
   }): Promise<User> {
     if (!this.isClient()) throw new Error('Client only');
     this.init();
@@ -873,6 +874,7 @@ class DataStore {
       role: userData.role,
       status: userData.status || 'active',
       avatarUrl: userData.avatarUrl?.trim() || undefined,
+      isDesignatedTrainer: userData.role === 'employee' ? Boolean(userData.isDesignatedTrainer) : false,
       avatarStyle: userData.avatarStyle || 'circle',
       passcode: userData.passcode?.trim() || undefined
     };
