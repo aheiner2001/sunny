@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyApproveRetrain,
+  applyManagerMarkTrained,
   applyManagerRequireRetrain,
   applyTrainerSignOff,
   applyTraineeCertify,
@@ -138,6 +139,19 @@ describe('training domain', () => {
     });
     expect(fresh.status).toBe('assigned');
     expect(fresh.itemId).toBe('i-new');
+  });
+
+  it('lets a manager mark trained again after require retrain (closes the open row)', () => {
+    const open = assignment({ status: 'assigned', missStreak: 0 });
+    const done = applyManagerMarkTrained({
+      item: item(),
+      trainee: { id: 'alex', name: 'Alex' },
+      actor: { id: 'mgr', name: 'Morgan' },
+      nowIso: '2026-10-26T13:00:00Z',
+      existing: open,
+    });
+    expect(done.status).toBe('completed');
+    expect(done.events.some(e => e.type === 'marked_trained')).toBe(true);
   });
 
   it('reorders and deletes curriculum steps', () => {

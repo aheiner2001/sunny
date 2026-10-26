@@ -20,10 +20,10 @@ import { useAuth } from '@/context/AuthContext';
 import { dbService } from '@/lib/db';
 import {
   applyApproveRetrain,
+  applyManagerMarkTrained,
   applyManagerRequireRetrain,
   applyTraineeCertify,
   applyTrainerSignOff,
-  buildMarkedTrainedAssignment,
   buildOnboardingAssignments,
   removeTrainingItem,
   reorderTrainingItemsByIds,
@@ -266,26 +266,27 @@ function TrainingDashboard() {
     const trainee = employees.find(e => e.id === traineeId);
     const item = items.find(i => i.id === itemId);
     if (!trainee || !item) return;
-    const existingOpen = assignments.find(
-      a => a.traineeId === traineeId && a.itemId === itemId && a.status !== 'completed',
-    );
-    if (existingOpen) {
-      setError('Clear or complete the open assignment for this step first.');
-      return;
+    const existing =
+      assignments.find(a => a.traineeId === traineeId && a.itemId === itemId) || null;
+    try {
+      const row = applyManagerMarkTrained({
+        item,
+        trainee: { id: trainee.id, name: trainee.name },
+        actor: { id: user.id, name: user.name },
+        nowIso: new Date().toISOString(),
+        existing,
+      });
+      await runAction(
+        async () => {
+          await dbService.saveTrainingAssignment(row);
+        },
+        `Marked ${trainee.name} trained on “${item.title}”.`,
+        'Could not mark trained.',
+      );
+    } catch (err) {
+      setError(formatTrainingActionError(err, 'Could not mark trained.'));
+      setMessage('');
     }
-    const row = buildMarkedTrainedAssignment({
-      item,
-      trainee: { id: trainee.id, name: trainee.name },
-      actor: { id: user.id, name: user.name },
-      nowIso: new Date().toISOString(),
-    });
-    await runAction(
-      async () => {
-        await dbService.saveTrainingAssignment(row);
-      },
-      `Marked ${trainee.name} trained on “${item.title}”.`,
-      'Could not mark trained.',
-    );
   };
 
   const approveRetrain = async (row: TrainingAssignment) => {
@@ -403,6 +404,26 @@ function TrainingDashboard() {
           </Link>
         }
       />
+
+      {isManager && (
+        <div className="card card-pad" data-status="info">
+          <p className="text-sm font-semibold m-0 mb-2">How dual sign-off works</p>
+          <ol className="m-0 pl-4 text-sm text-ink-muted space-y-1">
+            <li>
+              <strong className="text-ink">Trainer sign-off</strong> on an assigned step (All assignments
+              below).
+            </li>
+            <li>
+              Status becomes <strong className="text-ink">Awaiting certify</strong> — the{' '}
+              <em>trainee</em> must sign in as themselves.
+            </li>
+            <li>
+              They open <strong className="text-ink">My training</strong> at the bottom and tap{' '}
+              <strong className="text-ink">I was trained — certify</strong>.
+            </li>
+          </ol>
+        </div>
+      )}
 
       {message ? (
         <div className="card card-pad" data-status="ok" role="status">
@@ -568,8 +589,8 @@ function TrainingDashboard() {
                     a => a.traineeId === reviewEmployeeId && a.itemId === item.id,
                   );
                   const status = row?.status;
-                  const open =
-                    status === 'assigned' || status === 'awaiting_trainee' || status === 'overdue';
+                  const done = status === 'completed';
+                  const open = Boolean(status && status !== 'completed');
                   return (
                     <li
                       key={item.id}
@@ -587,19 +608,28 @@ function TrainingDashboard() {
                           </span>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        disabled={busy || open}
-                        title={
-                          open
-                            ? 'Already open for training'
-                            : 'Require this person to train on this step again'
-                        }
-                        onClick={() => void requireRetrain(reviewEmployeeId, item.id)}
-                      >
-                        Require retrain
-                      </button>
+                      <div className="cluster gap-1 flex-wrap">
+                        {(done || !status) && (
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            disabled={busy}
+                            onClick={() => void requireRetrain(reviewEmployeeId, item.id)}
+                          >
+                            Require retrain
+                          </button>
+                        )}
+                        {open && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            disabled={busy}
+                            onClick={() => void markAlreadyTrained(reviewEmployeeId, item.id)}
+                          >
+                            Mark trained
+                          </button>
+                        )}
+                      </div>
                     </li>
                   );
                 })}
@@ -657,29 +687,36 @@ function TrainingDashboard() {
                 {items
                   .filter(i => i.active)
                   .map(item => {
-                    const done = assignments.some(
-                      a =>
-                        a.traineeId === onboardTraineeId &&
-                        a.itemId === item.id &&
-                        a.status === 'completed',
+                    const row = assignments.find(
+                      a => a.traineeId === onboardTraineeId && a.itemId === item.id,
                     );
+                    const done = row?.status === 'completed';
+                    const inRetrain = Boolean(row && row.status !== 'completed');
                     return (
-                      <li key={item.id} className="spread items-center gap-2 text-sm">
+                      <li key={item.id} className="spread items-center gap-2 text-sm flex-wrap">
                         <span className="truncate">{item.title}</span>
-                        {done ? (
-                          <span className="badge" data-status="ok">
-                            Trained
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            disabled={busy}
-                            onClick={() => void markAlreadyTrained(onboardTraineeId, item.id)}
-                          >
-                            Mark trained
-                          </button>
-                        )}
+                        <div className="cluster gap-1">
+                          {done ? (
+                            <span className="badge" data-status="ok">
+                              Trained
+                            </span>
+                          ) : null}
+                          {inRetrain ? (
+                            <span className="badge" data-status="flagged">
+                              {trainingStatusLabel(row!.status)}
+                            </span>
+                          ) : null}
+                          {!done && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              disabled={busy}
+                              onClick={() => void markAlreadyTrained(onboardTraineeId, item.id)}
+                            >
+                              Mark trained
+                            </button>
+                          )}
+                        </div>
                       </li>
                     );
                   })}
@@ -874,8 +911,8 @@ function TrainingDashboard() {
           <div>
             <h2 className="card-title text-base m-0">Curriculum</h2>
             <p className="hint m-0 mt-1">
-              Add steps, drag to reorder, and link Settings inspection questions (e.g. Chemical caddy).
-              Onboarding assigns people separately.
+              Add steps and drag to reorder. Tap <strong>Link</strong> only when you want inspection misses
+              to count — usually previous-user questions.
             </p>
           </div>
           <form onSubmit={e => void addItem(e)} className="flex flex-col sm:flex-row gap-2">
@@ -913,6 +950,10 @@ function TrainingDashboard() {
       {(isManager || canTrain) && (
         <section className="card card-pad space-y-3">
           <h2 className="card-title text-base m-0">All assignments</h2>
+          <p className="hint m-0">
+            After trainer sign-off, status is Awaiting certify — only the trainee can finish it under My
+            training (sign in as that person).
+          </p>
           <ul className="space-y-2 m-0 p-0 list-none">
             {assignments.map(row => {
               const item = items.find(i => i.id === row.itemId);
@@ -932,17 +973,41 @@ function TrainingDashboard() {
                           {row.dueAt ? ` · due ${new Date(row.dueAt).toLocaleString()}` : ''}
                         </span>
                       </div>
+                      {row.status === 'awaiting_trainee' && (
+                        <p className="hint m-0">
+                          Waiting for <strong>{row.traineeName}</strong> to open My training and certify.
+                          {isManager && (
+                            <>
+                              {' '}
+                              Or use <strong>Mark trained</strong> on Employee training / Onboarding if
+                              they already know it.
+                            </>
+                          )}
+                        </p>
+                      )}
                     </div>
-                    {canTrain && (row.status === 'assigned' || row.status === 'overdue') && (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        disabled={busy}
-                        onClick={() => void signOff(row)}
-                      >
-                        Trainer sign-off
-                      </button>
-                    )}
+                    <div className="cluster gap-1 flex-wrap">
+                      {canTrain && (row.status === 'assigned' || row.status === 'overdue') && (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          disabled={busy}
+                          onClick={() => void signOff(row)}
+                        >
+                          Trainer sign-off
+                        </button>
+                      )}
+                      {isManager && row.status !== 'completed' && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          disabled={busy}
+                          onClick={() => void markAlreadyTrained(row.traineeId, row.itemId)}
+                        >
+                          Mark trained
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </li>
               );
@@ -956,8 +1021,17 @@ function TrainingDashboard() {
         </section>
       )}
 
-      <section className="card card-pad space-y-3">
+      <section
+        id="my-training"
+        className={`card card-pad space-y-3 ${
+          myAssignments.some(a => a.status === 'awaiting_trainee') ? 'ring-2 ring-[var(--ok)]' : ''
+        }`}
+      >
         <h2 className="card-title text-base m-0">My training</h2>
+        <p className="hint m-0">
+          Steps assigned to <strong>you</strong> ({user?.name || 'current user'}). Certify here after a
+          trainer signs off.
+        </p>
         <ul className="space-y-2 m-0 p-0 list-none">
           {myAssignments.map(row => {
             const item = items.find(i => i.id === row.itemId);
@@ -990,8 +1064,9 @@ function TrainingDashboard() {
               icon={<CheckCircle2 className="h-7 w-7" aria-hidden />}
               title="No training assigned to you"
             >
-              When a manager onboards you, steps show up here after the trainer signs off for you to
-              certify.
+              {isManager
+                ? 'You are signed in as a manager. Sign in as the trainee to certify, or Mark trained on their assignment.'
+                : 'When a trainer signs off your step, Certify appears here.'}
             </EmptyState>
           )}
         </ul>

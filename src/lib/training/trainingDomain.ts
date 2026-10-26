@@ -288,6 +288,35 @@ export function buildMarkedTrainedAssignment(input: {
   };
 }
 
+/**
+ * Manager mark-trained: creates a completed row, or finishes an open/retrain
+ * assignment (so Require retrain → Mark trained works without blocking).
+ */
+export function applyManagerMarkTrained(input: {
+  item: TrainingItem;
+  trainee: { id: string; name: string };
+  actor: { id: string; name: string };
+  nowIso: string;
+  existing: TrainingAssignment | null;
+}): TrainingAssignment {
+  if (input.existing?.status === 'completed') {
+    throw new Error('This step is already marked trained.');
+  }
+  const event = {
+    id: newEventId(),
+    type: 'marked_trained' as const,
+    at: input.nowIso,
+    actorId: input.actor.id,
+    actorName: input.actor.name,
+    note: 'Manager marked already trained',
+  };
+  if (input.existing) {
+    const next = appendTrainingEvent(input.existing, event);
+    return { ...next, status: 'completed', missStreak: 0, dueAt: null };
+  }
+  return buildMarkedTrainedAssignment(input);
+}
+
 export function reorderTrainingItems(items: TrainingItem[], fromIndex: number, toIndex: number): TrainingItem[] {
   if (fromIndex === toIndex) return items;
   if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) {
