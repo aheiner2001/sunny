@@ -30,6 +30,7 @@ import {
   MoreHorizontal
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
+import { applyAnchoredMenuPlacement } from '@/lib/ui/anchoredMenu';
 import { User, UserRole, Inspection, Issue, Vehicle } from '@/types';
 import { InspectionStatusBadge, VehicleStatusBadge } from '@/components/StatusBadges';
 import { useAuth } from '@/context/AuthContext';
@@ -128,19 +129,10 @@ function EmployeesPageContent() {
 
   useLayoutEffect(() => {
     if (!detailMenuOpen || !detailMenuBtnRef.current || !detailMenuRef.current) return;
-    const btn = detailMenuBtnRef.current;
-    const menu = detailMenuRef.current;
-    const rect = btn.getBoundingClientRect();
-    const mh = menu.offsetHeight || 140;
-    const mw = menu.offsetWidth || 192;
-    const gap = 4;
-    const spaceBelow = window.innerHeight - rect.bottom - 8;
-    const openUp = spaceBelow < mh && rect.top > spaceBelow;
-    const top = openUp ? rect.top - gap - mh : rect.bottom + gap;
-    let left = rect.right - mw;
-    left = Math.min(Math.max(8, left), window.innerWidth - mw - 8);
-    menu.style.top = `${Math.max(8, top)}px`;
-    menu.style.left = `${left}px`;
+    applyAnchoredMenuPlacement(
+      detailMenuRef.current,
+      detailMenuBtnRef.current.getBoundingClientRect(),
+    );
   }, [detailMenuOpen]);
 
   useEffect(() => {

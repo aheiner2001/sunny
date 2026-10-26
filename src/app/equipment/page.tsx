@@ -4,6 +4,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { applyAnchoredMenuPlacement } from '@/lib/ui/anchoredMenu';
 import {
   AlertTriangle,
   ChevronDown,
@@ -121,23 +122,10 @@ function EquipmentPageContent() {
 
   useLayoutEffect(() => {
     if (!actionMenuId || !actionMenuBtnRef.current || !actionMenuRef.current) return;
-    const btn = actionMenuBtnRef.current;
-    const menu = actionMenuRef.current;
-    const rect = btn.getBoundingClientRect();
-    const mh = menu.offsetHeight;
-    const mw = menu.offsetWidth;
-    const gap = 4;
-    const maxH = window.innerHeight - 16;
-    menu.style.maxHeight = `${maxH}px`;
-    menu.style.overflowY = mh > maxH ? 'auto' : 'visible';
-    const height = Math.min(mh, maxH);
-    const spaceBelow = window.innerHeight - rect.bottom - 8;
-    const openUp = spaceBelow < height && rect.top > spaceBelow;
-    const top = openUp ? rect.top - gap - height : rect.bottom + gap;
-    let left = rect.right - mw;
-    left = Math.min(Math.max(8, left), window.innerWidth - mw - 8);
-    menu.style.top = `${Math.max(8, top)}px`;
-    menu.style.left = `${left}px`;
+    applyAnchoredMenuPlacement(
+      actionMenuRef.current,
+      actionMenuBtnRef.current.getBoundingClientRect(),
+    );
   }, [actionMenuId]);
 
   useEffect(() => {

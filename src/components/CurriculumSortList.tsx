@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { GridLayout, useContainerWidth, type Layout } from 'react-grid-layout';
 import { GripVertical, Link2, Trash2, X } from 'lucide-react';
+import { applyAnchoredMenuPlacement } from '@/lib/ui/anchoredMenu';
 import type { TrainingItem } from '@/lib/training/types';
 import type { ChecklistQuestion } from '@/types';
 
@@ -35,6 +37,8 @@ export function CurriculumSortList({
   const [linkingItemId, setLinkingItemId] = useState<string | null>(null);
   const [showAllQuestions, setShowAllQuestions] = useState(false);
   const active = useRef(false);
+  const linkBtnRef = useRef<HTMLButtonElement | null>(null);
+  const linkMenuRef = useRef<HTMLDivElement | null>(null);
 
   const saved: Layout = useMemo(
     () =>
@@ -86,7 +90,115 @@ export function CurriculumSortList({
     return prevOnly.length ? prevOnly : all;
   }, [questions, showAllQuestions]);
 
+  const linkingItem = items.find(i => i.id === linkingItemId) || null;
+
+  useLayoutEffect(() => {
+    if (!linkingItemId || !linkBtnRef.current || !linkMenuRef.current) return;
+    applyAnchoredMenuPlacement(linkMenuRef.current, linkBtnRef.current.getBoundingClientRect());
+  }, [linkingItemId, showAllQuestions, linkableQuestions.length, linkingItem?.linkedQuestionIds.length]);
+
+  useEffect(() => {
+    if (!linkingItemId) return;
+    const onPointer = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (linkMenuRef.current?.contains(t)) return;
+      if (linkBtnRef.current?.contains(t)) return;
+      setLinkingItemId(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLinkingItemId(null);
+    };
+    const onRepositionClose = () => setLinkingItemId(null);
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', onRepositionClose, true);
+    window.addEventListener('resize', onRepositionClose);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', onRepositionClose, true);
+      window.removeEventListener('resize', onRepositionClose);
+    };
+  }, [linkingItemId]);
+
   if (!items.length) return null;
+
+  const linkMenu =
+    linkingItem && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            ref={linkMenuRef}
+            id={`link-menu-${linkingItem.id}`}
+            className="fixed z-[80] w-[min(calc(100vw-2rem),22rem)] rounded-2xl border border-line bg-surface p-3 space-y-3 shadow-lg"
+            role="dialog"
+            aria-label={`Link questions for ${linkingItem.title}`}
+            style={{ top: 0, left: 0 }}
+            data-anchored-menu="true"
+          >
+            <div className="spread items-start gap-2">
+              <div className="min-w-0">
+                <h3 className="card-title text-sm m-0 cluster gap-2">
+                  <Link2 className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="truncate">Link questions</span>
+                </h3>
+                <p className="hint m-0 mt-1">
+                  Prefer previous-user questions so a miss ticks that person&apos;s training.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm shrink-0"
+                aria-label="Close link menu"
+                onClick={() => setLinkingItemId(null)}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-ink-muted">
+              <input
+                type="checkbox"
+                checked={showAllQuestions}
+                onChange={e => setShowAllQuestions(e.target.checked)}
+              />
+              Show all yes/no questions (not only previous-user)
+            </label>
+            {linkableQuestions.length ? (
+              <ul className="m-0 p-0 list-none space-y-2 max-h-56 overflow-y-auto">
+                {linkableQuestions.map(q => {
+                  const checked = linkingItem.linkedQuestionIds.includes(q.id);
+                  return (
+                    <li key={q.id}>
+                      <label className="flex items-start gap-2 text-sm cursor-pointer rounded-xl border border-line p-2 hover:bg-surface-sunk/50">
+                        <input
+                          type="checkbox"
+                          className="mt-1"
+                          checked={checked}
+                          disabled={busy}
+                          onChange={() => onToggleLinkedQuestion(linkingItem, q.id)}
+                        />
+                        <span className="min-w-0">
+                          <span className="font-medium text-ink">{q.text}</span>
+                          {q.holdPreviousUserAccountable ? (
+                            <span className="badge ml-1" data-status="flagged">
+                              Prev. user
+                            </span>
+                          ) : null}
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="hint m-0">
+                No matching questions yet. Add yes/no items in Settings and tag previous-user when
+                needed.
+              </p>
+            )}
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
     <div
@@ -121,9 +233,7 @@ export function CurriculumSortList({
             return (
               <section
                 key={item.id}
-                className={`dashboard-grid-card curriculum-step-card min-w-0 flex flex-col rounded-2xl border border-line bg-surface shadow-sm ${
-                  isLinking ? 'curriculum-link-open' : ''
-                }`}
+                className="dashboard-grid-card curriculum-step-card min-w-0 flex flex-col rounded-2xl border border-line bg-surface shadow-sm overflow-hidden"
               >
                 <header className="dashboard-card-header flex flex-wrap items-center justify-between gap-2 px-2 py-1">
                   <button
@@ -135,8 +245,9 @@ export function CurriculumSortList({
                     <GripVertical className="w-4 h-4 shrink-0" aria-hidden="true" />
                     <span className="truncate max-w-[12rem] sm:max-w-none">{item.title}</span>
                   </button>
-                  <div className="cluster gap-1 relative">
+                  <div className="cluster gap-1">
                     <button
+                      ref={isLinking ? linkBtnRef : undefined}
                       type="button"
                       className="btn btn-secondary btn-sm"
                       disabled={busy}
@@ -165,78 +276,6 @@ export function CurriculumSortList({
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
-                    {isLinking ? (
-                      <div
-                        id={`link-menu-${item.id}`}
-                        className="absolute right-0 top-full mt-1 z-30 w-[min(calc(100vw-2rem),22rem)] rounded-2xl border border-line bg-surface p-3 space-y-3 shadow-lg"
-                        role="dialog"
-                        aria-label={`Link questions for ${item.title}`}
-                        onMouseDown={e => e.stopPropagation()}
-                        onPointerDown={e => e.stopPropagation()}
-                      >
-                        <div className="spread items-start gap-2">
-                          <div className="min-w-0">
-                            <h3 className="card-title text-sm m-0 cluster gap-2">
-                              <Link2 className="h-4 w-4 shrink-0" aria-hidden />
-                              <span className="truncate">Link questions</span>
-                            </h3>
-                            <p className="hint m-0 mt-1">
-                              Prefer previous-user questions so a miss ticks that person&apos;s
-                              training.
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm shrink-0"
-                            aria-label="Close link menu"
-                            onClick={() => setLinkingItemId(null)}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                        <label className="flex items-center gap-2 text-xs text-ink-muted">
-                          <input
-                            type="checkbox"
-                            checked={showAllQuestions}
-                            onChange={e => setShowAllQuestions(e.target.checked)}
-                          />
-                          Show all yes/no questions (not only previous-user)
-                        </label>
-                        {linkableQuestions.length ? (
-                          <ul className="m-0 p-0 list-none space-y-2 max-h-56 overflow-y-auto">
-                            {linkableQuestions.map(q => {
-                              const checked = item.linkedQuestionIds.includes(q.id);
-                              return (
-                                <li key={q.id}>
-                                  <label className="flex items-start gap-2 text-sm cursor-pointer rounded-xl border border-line p-2 hover:bg-surface-sunk/50">
-                                    <input
-                                      type="checkbox"
-                                      className="mt-1"
-                                      checked={checked}
-                                      disabled={busy}
-                                      onChange={() => onToggleLinkedQuestion(item, q.id)}
-                                    />
-                                    <span className="min-w-0">
-                                      <span className="font-medium text-ink">{q.text}</span>
-                                      {q.holdPreviousUserAccountable ? (
-                                        <span className="badge ml-1" data-status="flagged">
-                                          Prev. user
-                                        </span>
-                                      ) : null}
-                                    </span>
-                                  </label>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        ) : (
-                          <p className="hint m-0">
-                            No matching questions yet. Add yes/no items in Settings and tag
-                            previous-user when needed.
-                          </p>
-                        )}
-                      </div>
-                    ) : null}
                   </div>
                 </header>
                 <div className="dashboard-card-body px-3 pb-3 space-y-2">
@@ -290,6 +329,7 @@ export function CurriculumSortList({
           })}
         </GridLayout>
       )}
+      {linkMenu}
     </div>
   );
 }
