@@ -28,7 +28,7 @@ function bestStatusForItem(
   const rows = assignments.filter(a => a.traineeId === traineeId && a.itemId === itemId);
   if (!rows.length) return null;
   return rows.reduce((best, row) =>
-    STATUS_RANK[row.status] > STATUS_RANK[best] ? row.status : best,
+    STATUS_RANK[row.status] > STATUS_RANK[best.status] ? row : best,
   ).status;
 }
 
