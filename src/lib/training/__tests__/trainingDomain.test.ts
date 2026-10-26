@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyApproveRetrain,
   applyTrainerSignOff,
   applyTraineeCertify,
   applyTrainingMiss,
+  buildOnboardingAssignments,
   computeTrainingDueAt,
   markOverdueIfNeeded,
+  removeTrainingItem,
+  reorderTrainingItems,
 } from '../trainingDomain';
 import type { TrainingAssignment, TrainingItem } from '../types';
 
@@ -78,5 +82,45 @@ describe('training domain', () => {
       '2026-10-26T12:00:00Z',
     );
     expect(done.status).toBe('completed');
+  });
+
+  it('onboards all active steps and skips already completed ones', () => {
+    const items = [
+      item({ id: 'i1', order: 1 }),
+      item({ id: 'i2', order: 2, title: 'Gear' }),
+      item({ id: 'i3', order: 3, title: 'Off', active: false }),
+    ];
+    const created = buildOnboardingAssignments({
+      items,
+      existing: [assignment({ itemId: 'i1', status: 'completed' })],
+      trainee: { id: 'alex', name: 'Alex' },
+      actor: { id: 'mgr', name: 'Morgan' },
+      nowIso: '2026-10-26T12:00:00Z',
+    });
+    expect(created).toHaveLength(1);
+    expect(created[0].itemId).toBe('i2');
+    expect(created[0].events[0]?.type).toBe('onboarded');
+  });
+
+  it('approves retrain and returns the item to assigned', () => {
+    const flagged = assignment({ status: 'needs_retrain', missStreak: 3 });
+    const next = applyApproveRetrain(
+      flagged,
+      { id: 'mgr', name: 'Morgan' },
+      '2026-10-26T12:00:00Z',
+      item(),
+    );
+    expect(next.status).toBe('assigned');
+    expect(next.missStreak).toBe(0);
+    expect(next.events.some(e => e.type === 'retrain_approved')).toBe(true);
+  });
+
+  it('reorders and deletes curriculum steps', () => {
+    const a = item({ id: 'a', order: 1, title: 'A' });
+    const b = item({ id: 'b', order: 2, title: 'B' });
+    const reordered = reorderTrainingItems([a, b], 0, 1);
+    expect(reordered.map(i => i.id)).toEqual(['b', 'a']);
+    expect(reordered.map(i => i.order)).toEqual([1, 2]);
+    expect(removeTrainingItem(reordered, 'a').map(i => i.id)).toEqual(['b']);
   });
 });

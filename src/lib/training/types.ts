@@ -12,8 +12,11 @@ export type TrainingEventType =
   | 'trainee_certify'
   | 'miss'
   | 'retrain_required'
+  | 'retrain_approved'
   | 'deadline_passed'
-  | 'assigned';
+  | 'assigned'
+  | 'onboarded'
+  | 'marked_trained';
 
 export interface TrainingItem {
   id: string;

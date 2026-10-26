@@ -4,11 +4,14 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle,
-  ArrowLeft,
+  ArrowDown,
+  ArrowUp,
   CheckCircle2,
   Clock3,
   GraduationCap,
   Plus,
+  Trash2,
+  UserPlus,
   Users,
 } from 'lucide-react';
 import { ManagerOnly } from '@/components/ManagerOnly';
@@ -17,17 +20,26 @@ import { EmptyState } from '@/components/EmptyState';
 import { TrainingLearnChart } from '@/components/TrainingLearnChart';
 import { useAuth } from '@/context/AuthContext';
 import { dbService } from '@/lib/db';
-import { applyTraineeCertify, applyTrainerSignOff } from '@/lib/training/trainingDomain';
+import {
+  applyApproveRetrain,
+  applyTraineeCertify,
+  applyTrainerSignOff,
+  buildMarkedTrainedAssignment,
+  buildOnboardingAssignments,
+  removeTrainingItem,
+  reorderTrainingItems,
+} from '@/lib/training/trainingDomain';
 import {
   buildTraineeLearnRows,
+  employeeOverviewLabel,
+  employeeOverviewStatus,
+  employeeOverviewTone,
   trainingStatusLabel,
   trainingStatusTone,
 } from '@/lib/training/trainingProgress';
 import {
   buildNewTrainingItem,
-  buildTrainingAssignment,
   formatTrainingActionError,
-  traineesForAssigner,
   updateTrainingItemSettings,
 } from '@/lib/training/trainingUi';
 import type { TrainingAssignment, TrainingItem, TraineeTrainerLink } from '@/lib/training/types';
@@ -40,12 +52,13 @@ function TrainingDashboard() {
   const [links, setLinks] = useState<TraineeTrainerLink[]>([]);
   const [employees, setEmployees] = useState<User[]>([]);
   const [title, setTitle] = useState('');
-  const [assignTraineeId, setAssignTraineeId] = useState('');
+  const [onboardTraineeId, setOnboardTraineeId] = useState('');
   const [pairTraineeId, setPairTraineeId] = useState('');
   const [pairTrainerId, setPairTrainerId] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const isManager = role === 'manager';
   const canTrain = isManager || Boolean(user?.isDesignatedTrainer);
 
@@ -72,43 +85,34 @@ function TrainingDashboard() {
     [employees],
   );
 
-  const assignableTrainees = useMemo(
-    () =>
-      traineesForAssigner({
-        employees,
-        links,
-        assignerId: user?.id || '',
-        isManager,
-      }),
-    [employees, links, user?.id, isManager],
-  );
-
   useEffect(() => {
     if (!pairTraineeId && employees[0]) setPairTraineeId(employees[0].id);
-    if (!assignableTrainees.some(e => e.id === assignTraineeId)) {
-      setAssignTraineeId(assignableTrainees[0]?.id || '');
-    }
-  }, [employees, pairTraineeId, assignableTrainees, assignTraineeId]);
-
-  const stats = useMemo(() => {
-    const incomplete = assignments.filter(a => a.status !== 'completed');
-    const overdue = assignments.filter(a => a.status === 'overdue');
-    const retrain = assignments.filter(a => a.status === 'needs_retrain');
-    const trainedPeople = buildTraineeLearnRows({ employees, items, assignments }).filter(
-      r => r.headlineStatus === 'trained',
-    ).length;
-    return {
-      incomplete: incomplete.length,
-      overdue: overdue.length,
-      retrain: retrain.length,
-      trainedPeople,
-    };
-  }, [assignments, employees, items]);
+    if (!onboardTraineeId && employees[0]) setOnboardTraineeId(employees[0].id);
+  }, [employees, pairTraineeId, onboardTraineeId]);
 
   const learnRows = useMemo(
     () => buildTraineeLearnRows({ employees, items, assignments }),
     [employees, items, assignments],
   );
+
+  const retrainQueue = useMemo(
+    () => assignments.filter(a => a.status === 'needs_retrain'),
+    [assignments],
+  );
+
+  const stats = useMemo(() => {
+    const incomplete = assignments.filter(a => a.status !== 'completed');
+    const overdue = assignments.filter(a => a.status === 'overdue');
+    return {
+      incomplete: incomplete.length,
+      overdue: overdue.length,
+      retrain: retrainQueue.length,
+      trainedPeople: learnRows.filter(r => employeeOverviewStatus(r) === 'up_to_date').length,
+    };
+  }, [assignments, learnRows, retrainQueue.length]);
+
+  const nameById = useMemo(() => new Map(employees.map(e => [e.id, e.name])), [employees]);
+  const itemById = useMemo(() => new Map(items.map(i => [i.id, i])), [items]);
 
   const runAction = async (work: () => Promise<void>, success: string, fallbackError: string) => {
     if (busy) return;
@@ -162,27 +166,120 @@ function TrainingDashboard() {
     );
   };
 
-  const assignItem = async (item: TrainingItem) => {
-    if (!user?.id || !canTrain) return;
-    const trainee = assignableTrainees.find(e => e.id === assignTraineeId);
+  const moveItem = async (fromIndex: number, toIndex: number) => {
+    if (!isManager) return;
+    const next = reorderTrainingItems(items, fromIndex, toIndex);
+    await runAction(
+      async () => {
+        await dbService.saveTrainingItems(next);
+      },
+      'Curriculum order updated.',
+      'Could not reorder curriculum.',
+    );
+  };
+
+  const deleteItem = async (itemId: string) => {
+    if (!isManager) return;
+    if (!confirm('Delete this training step from the curriculum?')) return;
+    const next = removeTrainingItem(items, itemId);
+    await runAction(
+      async () => {
+        await dbService.saveTrainingItems(next);
+      },
+      'Training step deleted.',
+      'Could not delete training step.',
+    );
+  };
+
+  const onboardEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isManager || !user?.id) return;
+    const trainee = employees.find(emp => emp.id === onboardTraineeId);
     if (!trainee) {
-      setError('Pick an employee to assign training to.');
+      setError('Pick an employee to onboard.');
       setMessage('');
       return;
     }
-    const now = new Date().toISOString();
-    const row = buildTrainingAssignment({
+    if (!items.some(i => i.active)) {
+      setError('Add curriculum steps before onboarding.');
+      setMessage('');
+      return;
+    }
+    const created = buildOnboardingAssignments({
+      items,
+      existing: assignments,
+      trainee: { id: trainee.id, name: trainee.name },
+      actor: { id: user.id, name: user.name },
+      nowIso: new Date().toISOString(),
+    });
+    if (!created.length) {
+      setMessage(`${trainee.name} is already covered for every active curriculum step.`);
+      setError('');
+      return;
+    }
+    const paired = links.find(l => l.traineeId === trainee.id);
+    const trainerNames = (paired?.trainerIds || [])
+      .map(id => nameById.get(id) || id)
+      .join(', ');
+    await runAction(
+      async () => {
+        for (const row of created) {
+          await dbService.saveTrainingAssignment(row);
+        }
+      },
+      trainerNames
+        ? `Onboarded ${trainee.name}: ${created.length} step(s) assigned. Trainer notified in-app: ${trainerNames}.`
+        : `Onboarded ${trainee.name}: ${created.length} step(s) assigned. Pair a trainer so they see the queue.`,
+      'Could not complete onboarding.',
+    );
+  };
+
+  const markAlreadyTrained = async (traineeId: string, itemId: string) => {
+    if (!isManager || !user?.id) return;
+    const trainee = employees.find(e => e.id === traineeId);
+    const item = items.find(i => i.id === itemId);
+    if (!trainee || !item) return;
+    const existingOpen = assignments.find(
+      a => a.traineeId === traineeId && a.itemId === itemId && a.status !== 'completed',
+    );
+    if (existingOpen) {
+      setError('Clear or complete the open assignment for this step first.');
+      return;
+    }
+    const row = buildMarkedTrainedAssignment({
       item,
       trainee: { id: trainee.id, name: trainee.name },
       actor: { id: user.id, name: user.name },
-      nowIso: now,
+      nowIso: new Date().toISOString(),
     });
     await runAction(
       async () => {
         await dbService.saveTrainingAssignment(row);
       },
-      `Assigned “${item.title}” to ${trainee.name}.`,
-      'Could not assign training. Check connection / permissions and retry.',
+      `Marked ${trainee.name} trained on “${item.title}”.`,
+      'Could not mark trained.',
+    );
+  };
+
+  const approveRetrain = async (row: TrainingAssignment) => {
+    if (!isManager || !user?.id) return;
+    const item = itemById.get(row.itemId);
+    if (!item) {
+      setError('Curriculum step missing for this assignment.');
+      return;
+    }
+    const next = applyApproveRetrain(
+      row,
+      { id: user.id, name: user.name },
+      new Date().toISOString(),
+      item,
+    );
+    await runAction(
+      async () => {
+        await dbService.saveTrainingAssignment(next);
+      },
+      `Retrain approved for ${row.traineeName}. Trainer can sign off again.`,
+      'Could not approve retrain.',
     );
   };
 
@@ -234,16 +331,14 @@ function TrainingDashboard() {
   };
 
   const myAssignments = assignments.filter(a => a.traineeId === user?.id);
-  const nameById = useMemo(() => new Map(employees.map(e => [e.id, e.name])), [employees]);
 
   return (
     <div className="page max-w-5xl mx-auto space-y-6 pb-12">
       <PageHeader
         title="Training"
-        subtitle="Dual sign-off curriculum, trainer pairing, and a clear view of who has been trained."
+        subtitle="Build the curriculum once. Onboard people into every step. Approve retrain when misses pile up."
         actions={
           <Link href={isManager ? '/dashboard' : '/home'} className="btn btn-secondary btn-sm">
-            <ArrowLeft className="h-4 w-4" aria-hidden />
             Back
           </Link>
         }
@@ -262,31 +357,31 @@ function TrainingDashboard() {
 
       {isManager && (
         <div className="grid-auto" style={{ '--min': '11rem' } as React.CSSProperties}>
-          <div className="card card-pad flex flex-col justify-between" data-status="ok">
+          <div className="card card-pad" data-status="ok">
             <div className="spread">
-              <span className="eyebrow mb-0">Fully trained</span>
+              <span className="eyebrow mb-0">Up to date</span>
               <span className="icon-tile" data-status="ok" aria-hidden>
                 <CheckCircle2 className="h-5 w-5" />
               </span>
             </div>
             <div className="stat mt-3" data-status="ok">
               <div className="stat-value">{stats.trainedPeople}</div>
-              <p className="stat-label">People who finished every step</p>
+              <p className="stat-label">People fully trained</p>
             </div>
           </div>
-          <div className="card card-pad flex flex-col justify-between" data-status="info">
+          <div className="card card-pad" data-status="info">
             <div className="spread">
-              <span className="eyebrow mb-0">Incomplete</span>
+              <span className="eyebrow mb-0">Open work</span>
               <span className="icon-tile" data-status="info" aria-hidden>
                 <Clock3 className="h-5 w-5" />
               </span>
             </div>
-            <div className="stat mt-3" data-status="info">
+            <div className="stat mt-3">
               <div className="stat-value">{stats.incomplete}</div>
-              <p className="stat-label">Open assignments</p>
+              <p className="stat-label">Incomplete assignments</p>
             </div>
           </div>
-          <div className="card card-pad flex flex-col justify-between" data-status="flagged">
+          <div className="card card-pad" data-status="flagged">
             <div className="spread">
               <span className="eyebrow mb-0">Overdue</span>
               <span className="icon-tile" data-status="flagged" aria-hidden>
@@ -295,22 +390,181 @@ function TrainingDashboard() {
             </div>
             <div className="stat mt-3" data-status="flagged">
               <div className="stat-value">{stats.overdue}</div>
-              <p className="stat-label">Past due date</p>
+              <p className="stat-label">Past due</p>
             </div>
           </div>
-          <div className="card card-pad flex flex-col justify-between" data-status="critical">
+          <div className="card card-pad" data-status="critical">
             <div className="spread">
-              <span className="eyebrow mb-0">Needs retrain</span>
+              <span className="eyebrow mb-0">Retrain review</span>
               <span className="icon-tile" data-status="critical" aria-hidden>
                 <GraduationCap className="h-5 w-5" />
               </span>
             </div>
             <div className="stat mt-3" data-status="critical">
               <div className="stat-value">{stats.retrain}</div>
-              <p className="stat-label">Miss threshold hit</p>
+              <p className="stat-label">Awaiting your approval</p>
             </div>
           </div>
         </div>
+      )}
+
+      {isManager && (
+        <section className="card card-pad space-y-3">
+          <div className="spread items-start gap-2 flex-wrap">
+            <div>
+              <h2 className="card-title text-base m-0 cluster gap-2">
+                <Users className="h-4 w-4" aria-hidden />
+                People overview
+              </h2>
+              <p className="hint m-0 mt-1">Quick status for every active employee.</p>
+            </div>
+          </div>
+          {learnRows.length ? (
+            <ul className="m-0 p-0 list-none grid gap-2 sm:grid-cols-2">
+              {learnRows.map(row => {
+                const status = employeeOverviewStatus(row);
+                return (
+                  <li key={row.traineeId} className="rounded-xl border border-line p-3 space-y-2">
+                    <div className="spread items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold">{row.traineeName}</span>
+                      <span className="badge" data-status={employeeOverviewTone(status)}>
+                        {employeeOverviewLabel(status)}
+                      </span>
+                    </div>
+                    <p className="hint m-0">
+                      {row.totalSteps
+                        ? `${row.completed}/${row.totalSteps} curriculum steps complete`
+                        : 'No curriculum yet'}
+                    </p>
+                    {status === 'needs_training' && row.totalSteps > 0 && row.notStarted > 0 && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        disabled={busy}
+                        onClick={() => {
+                          setOnboardTraineeId(row.traineeId);
+                          document.getElementById('onboarding-section')?.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                      >
+                        Onboard…
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <EmptyState icon={<Users className="h-7 w-7" aria-hidden />} title="No employees yet">
+              Add people on Employees, then return here to onboard them.
+            </EmptyState>
+          )}
+        </section>
+      )}
+
+      {isManager && (
+        <section id="onboarding-section" className="card card-pad space-y-3">
+          <h2 className="card-title text-base m-0 cluster gap-2">
+            <UserPlus className="h-4 w-4" aria-hidden />
+            Onboarding
+          </h2>
+          <p className="hint m-0">
+            Assigns every active curriculum step the person has not already completed. Paired trainers see
+            the new work on this page (in-app).
+          </p>
+          <form onSubmit={e => void onboardEmployee(e)} className="flex flex-col sm:flex-row gap-2 sm:items-end">
+            <div className="field flex-1">
+              <label className="label" htmlFor="onboard-trainee">
+                Employee
+              </label>
+              <select
+                id="onboard-trainee"
+                className="select"
+                value={onboardTraineeId}
+                onChange={e => setOnboardTraineeId(e.target.value)}
+              >
+                {employees.map(e => (
+                  <option key={e.id} value={e.id}>
+                    {e.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={busy || !employees.length}>
+              Onboard — assign all steps
+            </button>
+          </form>
+          {items.filter(i => i.active).length > 0 && onboardTraineeId && (
+            <div className="rounded-xl border border-line p-3 space-y-2">
+              <p className="text-xs font-semibold m-0">Veteran shortcut — mark already trained</p>
+              <p className="hint m-0">
+                Use when someone already knows a step and should not go through dual sign-off.
+              </p>
+              <ul className="m-0 p-0 list-none space-y-1">
+                {items
+                  .filter(i => i.active)
+                  .map(item => {
+                    const done = assignments.some(
+                      a =>
+                        a.traineeId === onboardTraineeId &&
+                        a.itemId === item.id &&
+                        a.status === 'completed',
+                    );
+                    return (
+                      <li key={item.id} className="spread items-center gap-2 text-sm">
+                        <span className="truncate">{item.title}</span>
+                        {done ? (
+                          <span className="badge" data-status="ok">
+                            Trained
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            disabled={busy}
+                            onClick={() => void markAlreadyTrained(onboardTraineeId, item.id)}
+                          >
+                            Mark trained
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
+
+      {isManager && retrainQueue.length > 0 && (
+        <section className="card card-pad space-y-3" data-status="critical">
+          <h2 className="card-title text-base m-0 cluster gap-2">
+            <AlertTriangle className="h-4 w-4" aria-hidden />
+            Retrain review
+          </h2>
+          <p className="hint m-0">
+            Miss streak hit the curriculum threshold. Approve to put the step back on their training list.
+          </p>
+          <ul className="m-0 p-0 list-none space-y-2">
+            {retrainQueue.map(row => (
+              <li key={row.id} className="rounded-xl border border-line p-3 spread items-center gap-2 flex-wrap">
+                <div>
+                  <p className="text-sm font-semibold m-0">
+                    {row.traineeName} · {itemById.get(row.itemId)?.title || row.itemId}
+                  </p>
+                  <p className="hint m-0">Miss streak {row.missStreak}</p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={busy}
+                  onClick={() => void approveRetrain(row)}
+                >
+                  Approve retrain
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {isManager && (
@@ -323,9 +577,6 @@ function TrainingDashboard() {
               </h2>
               <p className="hint m-0 mt-1">Who has been trained across the active curriculum.</p>
             </div>
-            <span className="badge" data-status="info">
-              {learnRows.filter(r => r.headlineStatus === 'trained').length} trained
-            </span>
           </div>
           <TrainingLearnChart rows={learnRows} />
         </section>
@@ -337,9 +588,7 @@ function TrainingDashboard() {
             <Users className="h-4 w-4" aria-hidden />
             Trainers
           </h2>
-          <p className="hint m-0">
-            Mark designated trainers on Employees, then pair them to trainees here.
-          </p>
+          <p className="hint m-0">Pair designated trainers (set on Employees) to trainees.</p>
           {trainers.length ? (
             <div className="cluster gap-2 flex-wrap">
               {trainers.map(t => (
@@ -358,7 +607,7 @@ function TrainingDashboard() {
                 </Link>
               }
             >
-              Enable “Designated trainer” on an employee, then come back to pair them.
+              Enable “Designated trainer” on an employee, then pair them here.
             </EmptyState>
           )}
           <form onSubmit={e => void pairTrainer(e)} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
@@ -400,11 +649,7 @@ function TrainingDashboard() {
               </select>
             </div>
             <div className="flex items-end">
-              <button
-                type="submit"
-                className="btn btn-secondary w-full sm:w-auto"
-                disabled={busy || !trainers.length}
-              >
+              <button type="submit" className="btn btn-secondary" disabled={busy || !trainers.length}>
                 Pair
               </button>
             </div>
@@ -424,7 +669,12 @@ function TrainingDashboard() {
 
       {isManager && (
         <section className="card card-pad space-y-4">
-          <h2 className="card-title text-base m-0">Curriculum</h2>
+          <div>
+            <h2 className="card-title text-base m-0">Curriculum</h2>
+            <p className="hint m-0 mt-1">
+              Add, reorder, and delete steps. Assigning people happens in Onboarding — not here.
+            </p>
+          </div>
           <form onSubmit={e => void addItem(e)} className="flex flex-col sm:flex-row gap-2">
             <input
               className="input flex-1"
@@ -439,46 +689,60 @@ function TrainingDashboard() {
             </button>
           </form>
 
-          {(isManager || canTrain) && (
-            <div className="field max-w-sm">
-              <label className="label" htmlFor="assign-trainee">
-                Assign to
-              </label>
-              <select
-                id="assign-trainee"
-                className="select"
-                value={assignTraineeId}
-                onChange={e => setAssignTraineeId(e.target.value)}
-              >
-                {assignableTrainees.map(e => (
-                  <option key={e.id} value={e.id}>
-                    {e.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
           <ul className="space-y-2 m-0 p-0 list-none">
-            {items.map(item => (
-              <li key={item.id} className="rounded-xl border border-line p-3 space-y-3">
+            {items.map((item, idx) => (
+              <li
+                key={item.id}
+                className={`rounded-xl border border-line p-3 space-y-3 ${
+                  dragIndex === idx ? 'opacity-70 ring-2 ring-[var(--line-strong)]' : ''
+                }`}
+                draggable
+                onDragStart={() => setDragIndex(idx)}
+                onDragOver={e => e.preventDefault()}
+                onDrop={() => {
+                  if (dragIndex === null) return;
+                  void moveItem(dragIndex, idx);
+                  setDragIndex(null);
+                }}
+                onDragEnd={() => setDragIndex(null)}
+              >
                 <div className="spread items-start gap-3 flex-wrap">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold m-0">{item.title}</p>
                     <p className="hint m-0 mt-0.5">
-                      Due in {item.withinDays || 7} days · retrain after {item.retrainThreshold} misses
+                      Due in {item.withinDays || 7} days · retrain after {item.retrainThreshold} misses ·
+                      drag to reorder
                     </p>
                   </div>
-                  {canTrain && (
+                  <div className="cluster gap-1">
                     <button
                       type="button"
-                      className="btn btn-secondary btn-sm shrink-0"
-                      disabled={busy || !assignableTrainees.length}
-                      onClick={() => void assignItem(item)}
+                      className="btn btn-secondary btn-sm"
+                      disabled={busy || idx === 0}
+                      aria-label="Move up"
+                      onClick={() => void moveItem(idx, idx - 1)}
                     >
-                      Assign
+                      <ArrowUp className="h-3.5 w-3.5" />
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      disabled={busy || idx === items.length - 1}
+                      aria-label="Move down"
+                      onClick={() => void moveItem(idx, idx + 1)}
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm text-[var(--critical)]"
+                      disabled={busy}
+                      aria-label="Delete step"
+                      onClick={() => void deleteItem(item.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <div className="field">
@@ -520,54 +784,8 @@ function TrainingDashboard() {
               </li>
             ))}
             {!items.length && (
-              <EmptyState
-                icon={<Plus className="h-7 w-7" aria-hidden />}
-                title="No training steps yet"
-              >
-                Add a curriculum title above to start tracking who has been trained.
-              </EmptyState>
-            )}
-          </ul>
-        </section>
-      )}
-
-      {!isManager && canTrain && (
-        <section className="card card-pad space-y-3">
-          <h2 className="card-title text-base m-0">Assign training</h2>
-          <div className="field max-w-sm">
-            <label className="label" htmlFor="trainer-assign-trainee">
-              Trainee
-            </label>
-            <select
-              id="trainer-assign-trainee"
-              className="select"
-              value={assignTraineeId}
-              onChange={e => setAssignTraineeId(e.target.value)}
-            >
-              {assignableTrainees.map(e => (
-                <option key={e.id} value={e.id}>
-                  {e.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <ul className="space-y-2 m-0 p-0 list-none">
-            {items.map(item => (
-              <li key={item.id} className="rounded-xl border border-line p-3 spread items-center gap-2">
-                <p className="text-sm font-semibold m-0">{item.title}</p>
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  disabled={busy || !assignableTrainees.length}
-                  onClick={() => void assignItem(item)}
-                >
-                  Assign
-                </button>
-              </li>
-            ))}
-            {!items.length && (
-              <EmptyState icon={<GraduationCap className="h-7 w-7" aria-hidden />} title="No curriculum yet">
-                Ask a manager to add training steps first.
+              <EmptyState icon={<Plus className="h-7 w-7" aria-hidden />} title="No training steps yet">
+                Add curriculum titles above. Onboard people after the list looks right.
               </EmptyState>
             )}
           </ul>
@@ -597,29 +815,23 @@ function TrainingDashboard() {
                         </span>
                       </div>
                     </div>
-                    {canTrain &&
-                      (row.status === 'assigned' ||
-                        row.status === 'overdue' ||
-                        row.status === 'needs_retrain') && (
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          disabled={busy}
-                          onClick={() => void signOff(row)}
-                        >
-                          Trainer sign-off
-                        </button>
-                      )}
+                    {canTrain && (row.status === 'assigned' || row.status === 'overdue') && (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={busy}
+                        onClick={() => void signOff(row)}
+                      >
+                        Trainer sign-off
+                      </button>
+                    )}
                   </div>
                 </li>
               );
             })}
             {!assignments.length && (
-              <EmptyState
-                icon={<Clock3 className="h-7 w-7" aria-hidden />}
-                title="No assignments yet"
-              >
-                Assign a curriculum step to an employee to start dual sign-off.
+              <EmptyState icon={<Clock3 className="h-7 w-7" aria-hidden />} title="No assignments yet">
+                Use Onboarding to assign the full curriculum to someone.
               </EmptyState>
             )}
           </ul>
@@ -632,7 +844,10 @@ function TrainingDashboard() {
           {myAssignments.map(row => {
             const item = items.find(i => i.id === row.itemId);
             return (
-              <li key={row.id} className="rounded-xl border border-line p-3 spread items-center gap-2 flex-wrap">
+              <li
+                key={row.id}
+                className="rounded-xl border border-line p-3 spread items-center gap-2 flex-wrap"
+              >
                 <div className="min-w-0 space-y-1">
                   <p className="text-sm font-semibold m-0">{item?.title || row.itemId}</p>
                   <span className="badge" data-status={trainingStatusTone(row.status)}>
@@ -657,7 +872,8 @@ function TrainingDashboard() {
               icon={<CheckCircle2 className="h-7 w-7" aria-hidden />}
               title="No training assigned to you"
             >
-              When a trainer assigns a step, it will show up here for you to certify.
+              When a manager onboards you, steps show up here after the trainer signs off for you to
+              certify.
             </EmptyState>
           )}
         </ul>

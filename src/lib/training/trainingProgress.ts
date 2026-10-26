@@ -8,6 +8,7 @@ export type TraineeLearnRow = {
   inProgress: number;
   notStarted: number;
   percentComplete: number;
+  hasNeedsRetrain: boolean;
   /** Latest / most urgent status across their assignments */
   headlineStatus: 'trained' | 'in_progress' | 'needs_attention' | 'not_started';
 };
@@ -50,6 +51,7 @@ export function buildTraineeLearnRows(input: {
       let inProgress = 0;
       let notStarted = 0;
       let needsAttention = false;
+      let hasNeedsRetrain = false;
 
       for (const item of activeItems) {
         const status = bestStatusForItem(input.assignments, emp.id, item.id);
@@ -58,6 +60,7 @@ export function buildTraineeLearnRows(input: {
         else {
           inProgress += 1;
           if (status === 'overdue' || status === 'needs_retrain') needsAttention = true;
+          if (status === 'needs_retrain') hasNeedsRetrain = true;
         }
       }
 
@@ -70,6 +73,7 @@ export function buildTraineeLearnRows(input: {
           inProgress: 0,
           notStarted: 0,
           percentComplete: 0,
+          hasNeedsRetrain: false,
           headlineStatus: 'not_started' as const,
         };
       }
@@ -88,6 +92,7 @@ export function buildTraineeLearnRows(input: {
         inProgress,
         notStarted,
         percentComplete,
+        hasNeedsRetrain,
         headlineStatus,
       };
     })
@@ -127,5 +132,39 @@ export function trainingStatusLabel(status: TrainingAssignmentStatus): string {
       return 'Needs retrain';
     default:
       return status;
+  }
+}
+
+/** Manager overview chip: Up to date | Needs training | Needs retrain */
+export type EmployeeTrainingOverviewStatus = 'up_to_date' | 'needs_training' | 'needs_retrain';
+
+export function employeeOverviewStatus(row: TraineeLearnRow): EmployeeTrainingOverviewStatus {
+  if (row.hasNeedsRetrain) return 'needs_retrain';
+  if (row.totalSteps === 0) return 'needs_training';
+  if (row.headlineStatus === 'trained') return 'up_to_date';
+  return 'needs_training';
+}
+
+export function employeeOverviewLabel(status: EmployeeTrainingOverviewStatus): string {
+  switch (status) {
+    case 'up_to_date':
+      return 'Up to date';
+    case 'needs_retrain':
+      return 'Needs retrain';
+    default:
+      return 'Needs training';
+  }
+}
+
+export function employeeOverviewTone(
+  status: EmployeeTrainingOverviewStatus,
+): 'ok' | 'flagged' | 'critical' | 'info' | 'idle' {
+  switch (status) {
+    case 'up_to_date':
+      return 'ok';
+    case 'needs_retrain':
+      return 'critical';
+    default:
+      return 'flagged';
   }
 }
