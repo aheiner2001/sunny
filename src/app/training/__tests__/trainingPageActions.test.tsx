@@ -18,10 +18,32 @@ vi.mock('@/lib/db', () => ({
     getTrainingAssignments: () => getTrainingAssignments(),
     getTraineeTrainerLinks: () => getTraineeTrainerLinks(),
     getUsers: () => getUsers(),
+    getChecklistConfig: () => ({
+      questions: [
+        {
+          id: 'q-caddy',
+          text: 'Chemical caddy filled?',
+          type: 'yes_no',
+          holdPreviousUserAccountable: true,
+          order: 1,
+          category: 'supplies',
+          required: true,
+        },
+      ],
+      returnQuestions: [],
+    }),
     saveTrainingItems: (...args: unknown[]) => saveTrainingItems(...args),
     saveTrainingAssignment: (...args: unknown[]) => saveTrainingAssignment(...args),
     saveTraineeTrainerLink: vi.fn(),
   },
+}));
+
+vi.mock('@/components/CurriculumSortList', () => ({
+  CurriculumSortList: () => <div data-testid="curriculum-sort-list" />,
+}));
+
+vi.mock('@/components/TrainingLearnChart', () => ({
+  TrainingLearnChart: () => <div data-testid="learn-chart" />,
 }));
 
 vi.mock('@/context/AuthContext', () => ({

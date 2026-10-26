@@ -57,7 +57,7 @@ export function buildTrainingAssignment(input: {
 
 export function updateTrainingItemSettings(
   item: TrainingItem,
-  patch: { withinDays?: number; retrainThreshold?: number },
+  patch: { withinDays?: number; retrainThreshold?: number; linkedQuestionIds?: string[] },
   nowIso: string,
 ): TrainingItem {
   const withinDays =
@@ -72,6 +72,7 @@ export function updateTrainingItemSettings(
     ...item,
     withinDays,
     retrainThreshold,
+    linkedQuestionIds: patch.linkedQuestionIds ?? item.linkedQuestionIds,
     updatedAt: nowIso,
   };
 }

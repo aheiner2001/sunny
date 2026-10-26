@@ -49,6 +49,7 @@ import { assertDamagePayload, normalizeRegion } from './vehicleDamage';
 import { buildPreviousUserAccountabilityFlags } from './previousUserAccountability';
 import type { TrainingAssignment, TrainingItem, TraineeTrainerLink } from './training/types';
 import { applyTrainingMiss } from './training/trainingDomain';
+import { resolveTrainingMissTargets } from './training/trainingMissTargets';
 import { 
   computeLifespanStatus,
   calculateLifespanDueDate,
@@ -3274,14 +3275,33 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     }
 
     try {
-      const trainingItems = this.getTrainingItems().filter(item => item.active);
-      const flaggedQuestionIds = new Set(
-        (newInspection.responses || []).filter(r => r.isFlagged).map(r => r.questionId),
-      );
-      for (const item of trainingItems) {
-        if (!item.linkedQuestionIds.some(id => flaggedQuestionIds.has(id))) continue;
+      const configForTraining = this.getChecklistConfig();
+      const allQuestions = [
+        ...(configForTraining.questions || []),
+        ...(configForTraining.returnQuestions || []),
+      ];
+      const missTargets = resolveTrainingMissTargets({
+        items: this.getTrainingItems(),
+        assignments: this.getTrainingAssignments(),
+        questions: allQuestions,
+        inspection: newInspection,
+        alert: {
+          inspectionId,
+          vehicleId: vehicle.id,
+          inspectionKind: (data.type as 'pretrip' | 'return') || 'pretrip',
+          reportedById: data.submittedById || data.userId || 'anon',
+          reportedAt: nowIso,
+        },
+        assignmentsHistory: this.getVehicleAssignments(),
+        inspectionsHistory: this.getInspections(),
+        submitterId: data.userId || '',
+      });
+      const itemById = new Map(this.getTrainingItems().map(i => [i.id, i]));
+      for (const target of missTargets) {
+        const item = itemById.get(target.itemId);
+        if (!item) continue;
         const rows = this.getTrainingAssignments().filter(
-          a => a.traineeId === (data.userId || '') && a.itemId === item.id,
+          a => a.traineeId === target.traineeId && a.itemId === target.itemId,
         );
         for (const row of rows) {
           const next = applyTrainingMiss(

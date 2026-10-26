@@ -41,8 +41,9 @@ import {
   formatTrainingActionError,
   updateTrainingItemSettings,
 } from '@/lib/training/trainingUi';
+import { buildMissStrikeSlots, toggleLinkedQuestionId } from '@/lib/training/trainingMissTargets';
 import type { TrainingAssignment, TrainingItem, TraineeTrainerLink } from '@/lib/training/types';
-import type { User } from '@/types';
+import type { ChecklistQuestion, User } from '@/types';
 
 function TrainingDashboard() {
   const { user, role } = useAuth();
@@ -50,6 +51,7 @@ function TrainingDashboard() {
   const [assignments, setAssignments] = useState<TrainingAssignment[]>([]);
   const [links, setLinks] = useState<TraineeTrainerLink[]>([]);
   const [employees, setEmployees] = useState<User[]>([]);
+  const [checklistQuestions, setChecklistQuestions] = useState<ChecklistQuestion[]>([]);
   const [title, setTitle] = useState('');
   const [onboardTraineeId, setOnboardTraineeId] = useState('');
   const [reviewEmployeeId, setReviewEmployeeId] = useState('');
@@ -71,6 +73,8 @@ function TrainingDashboard() {
         .filter(u => u.status === 'active' && u.role === 'employee')
         .sort((a, b) => a.name.localeCompare(b.name)),
     );
+    const config = dbService.getChecklistConfig?.() || { questions: [], returnQuestions: [] };
+    setChecklistQuestions([...(config.questions || []), ...(config.returnQuestions || [])]);
   }, []);
 
   useEffect(() => {
@@ -97,6 +101,15 @@ function TrainingDashboard() {
 
   const retrainQueue = useMemo(
     () => assignments.filter(a => a.status === 'needs_retrain'),
+    [assignments],
+  );
+
+  /** Open miss streaks (strikes toward retrain) for manager review. */
+  const missStrikeRows = useMemo(
+    () =>
+      assignments
+        .filter(a => a.missStreak > 0 || a.status === 'needs_retrain')
+        .sort((a, b) => b.missStreak - a.missStreak || a.traineeName.localeCompare(b.traineeName)),
     [assignments],
   );
 
@@ -152,7 +165,7 @@ function TrainingDashboard() {
 
   const saveItemSettings = async (
     item: TrainingItem,
-    patch: { withinDays?: number; retrainThreshold?: number },
+    patch: { withinDays?: number; retrainThreshold?: number; linkedQuestionIds?: string[] },
   ) => {
     if (!isManager) return;
     const now = new Date().toISOString();
@@ -163,6 +176,20 @@ function TrainingDashboard() {
       },
       'Curriculum settings updated.',
       'Could not update curriculum settings.',
+    );
+  };
+
+  const toggleLink = async (item: TrainingItem, questionId: string) => {
+    if (!isManager) return;
+    const next = toggleLinkedQuestionId(item, questionId, new Date().toISOString());
+    await runAction(
+      async () => {
+        await dbService.saveTrainingItems(items.map(row => (row.id === item.id ? next : row)));
+      },
+      next.linkedQuestionIds.includes(questionId)
+        ? 'Inspection question linked to this step.'
+        : 'Inspection question unlinked.',
+      'Could not update linked questions.',
     );
   };
 
@@ -662,35 +689,83 @@ function TrainingDashboard() {
         </section>
       )}
 
-      {isManager && retrainQueue.length > 0 && (
-        <section className="card card-pad space-y-3" data-status="critical">
+      {isManager && (
+        <section className="card card-pad space-y-3">
           <h2 className="card-title text-base m-0 cluster gap-2">
             <AlertTriangle className="h-4 w-4" aria-hidden />
-            Retrain review
+            Miss strikes &amp; retrain review
           </h2>
           <p className="hint m-0">
-            Miss streak hit the curriculum threshold. Approve to put the step back on their training list.
+            Each filled mark is a flagged linked inspection (previous user when that question is tagged).
+            When the row fills to your curriculum threshold, approve retrain.
           </p>
-          <ul className="m-0 p-0 list-none space-y-2">
-            {retrainQueue.map(row => (
-              <li key={row.id} className="rounded-xl border border-line p-3 spread items-center gap-2 flex-wrap">
-                <div>
-                  <p className="text-sm font-semibold m-0">
-                    {row.traineeName} · {itemById.get(row.itemId)?.title || row.itemId}
-                  </p>
-                  <p className="hint m-0">Miss streak {row.missStreak}</p>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  disabled={busy}
-                  onClick={() => void approveRetrain(row)}
-                >
-                  Approve retrain
-                </button>
-              </li>
-            ))}
-          </ul>
+          {missStrikeRows.length ? (
+            <ul className="m-0 p-0 list-none space-y-2">
+              {missStrikeRows.map(row => {
+                const item = itemById.get(row.itemId);
+                const slots = buildMissStrikeSlots(row.missStreak, item?.retrainThreshold || 2);
+                const needsApproval = row.status === 'needs_retrain';
+                return (
+                  <li
+                    key={row.id}
+                    className="rounded-xl border border-line p-3 space-y-2"
+                    data-status={needsApproval ? 'critical' : slots.atThreshold ? 'flagged' : 'info'}
+                  >
+                    <div className="spread items-start gap-2 flex-wrap">
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-sm font-semibold m-0">
+                          {row.traineeName} · {item?.title || row.itemId}
+                        </p>
+                        <div
+                          className="cluster gap-1.5"
+                          role="img"
+                          aria-label={`${slots.filled} of ${slots.total} miss strikes`}
+                        >
+                          {Array.from({ length: slots.total }, (_, i) => (
+                            <span
+                              key={i}
+                              className={`inline-block h-3 w-3 rounded-full border ${
+                                i < slots.filled
+                                  ? 'bg-[var(--critical)] border-[var(--critical)]'
+                                  : 'bg-transparent border-line'
+                              }`}
+                              aria-hidden
+                            />
+                          ))}
+                          <span className="text-xs text-ink-muted ml-1">
+                            {slots.filled}/{slots.total}
+                          </span>
+                          {needsApproval ? (
+                            <span className="badge" data-status="critical">
+                              Needs retrain
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                      {needsApproval ? (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          disabled={busy}
+                          onClick={() => void approveRetrain(row)}
+                        >
+                          Approve retrain
+                        </button>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <EmptyState
+              icon={<CheckCircle2 className="h-7 w-7" aria-hidden />}
+              title="No miss strikes yet"
+            >
+              Link curriculum steps to inspection questions. When a previous-user question is flagged,
+              their strike row appears here.
+            </EmptyState>
+          )}
         </section>
       )}
 
@@ -799,8 +874,8 @@ function TrainingDashboard() {
           <div>
             <h2 className="card-title text-base m-0">Curriculum</h2>
             <p className="hint m-0 mt-1">
-              Add and delete steps. Drag by the grip handle to reorder — same as dashboard cards. Assigning
-              people happens in Onboarding.
+              Add steps, drag to reorder, and link Settings inspection questions (e.g. Chemical caddy).
+              Onboarding assigns people separately.
             </p>
           </div>
           <form onSubmit={e => void addItem(e)} className="flex flex-col sm:flex-row gap-2">
@@ -820,10 +895,12 @@ function TrainingDashboard() {
           {items.length ? (
             <CurriculumSortList
               items={items}
+              questions={checklistQuestions}
               busy={busy}
               onReorder={ids => void reorderByIds(ids)}
               onDelete={id => void deleteItem(id)}
               onSettingsBlur={(item, patch) => void saveItemSettings(item, patch)}
+              onToggleLinkedQuestion={(item, questionId) => void toggleLink(item, questionId)}
             />
           ) : (
             <EmptyState icon={<Plus className="h-7 w-7" aria-hidden />} title="No training steps yet">

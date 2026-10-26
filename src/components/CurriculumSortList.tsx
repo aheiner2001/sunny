@@ -2,14 +2,16 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GridLayout, useContainerWidth, type Layout } from 'react-grid-layout';
-import { GripVertical, Trash2 } from 'lucide-react';
+import { GripVertical, Link2, Trash2 } from 'lucide-react';
 import type { TrainingItem } from '@/lib/training/types';
+import type { ChecklistQuestion } from '@/types';
 
-/** ~3 grid rows so days/retrain fields fit under the drag handle (matches dashboard rowHeight 56). */
-const ROW_H = 3;
+/** Tall enough for days/retrain + linked-question checkboxes. */
+const ROW_H = 5;
 
 type Props = {
   items: TrainingItem[];
+  questions: ChecklistQuestion[];
   busy?: boolean;
   onReorder: (orderedIds: string[]) => void;
   onDelete: (itemId: string) => void;
@@ -17,9 +19,18 @@ type Props = {
     item: TrainingItem,
     patch: { withinDays?: number; retrainThreshold?: number },
   ) => void;
+  onToggleLinkedQuestion: (item: TrainingItem, questionId: string) => void;
 };
 
-export function CurriculumSortList({ items, busy, onReorder, onDelete, onSettingsBlur }: Props) {
+export function CurriculumSortList({
+  items,
+  questions,
+  busy,
+  onReorder,
+  onDelete,
+  onSettingsBlur,
+  onToggleLinkedQuestion,
+}: Props) {
   const { width, mounted, containerRef } = useContainerWidth({ measureBeforeMount: true });
   const [working, setWorking] = useState<Layout | null>(null);
   const active = useRef(false);
@@ -60,6 +71,14 @@ export function CurriculumSortList({ items, busy, onReorder, onDelete, onSetting
     [items, onReorder],
   );
 
+  const linkableQuestions = useMemo(
+    () =>
+      [...questions]
+        .filter(q => q.enabled !== false && (q.type === 'yes_no' || q.type === 'pass_fail'))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    [questions],
+  );
+
   if (!items.length) return null;
 
   return (
@@ -68,7 +87,10 @@ export function CurriculumSortList({ items, busy, onReorder, onDelete, onSetting
       className="curriculum-grid dashboard-grid"
       aria-label="Curriculum steps"
     >
-      <p className="hint m-0 mb-2">Drag steps by their handles to reorder.</p>
+      <p className="hint m-0 mb-2">
+        Drag by the grip handle to reorder. Link inspection questions so a miss ticks training (previous
+        user when that question holds them accountable).
+      </p>
       {mounted && width > 0 && (
         <GridLayout
           width={width}
@@ -77,7 +99,7 @@ export function CurriculumSortList({ items, busy, onReorder, onDelete, onSetting
           dragConfig={{
             enabled: true,
             handle: '.dashboard-drag-handle',
-            cancel: 'a,button:not(.dashboard-drag-handle),input,select,textarea',
+            cancel: 'a,button:not(.dashboard-drag-handle),input,select,textarea,label',
           }}
           resizeConfig={{ enabled: false }}
           onDragStart={() => {
@@ -111,7 +133,7 @@ export function CurriculumSortList({ items, busy, onReorder, onDelete, onSetting
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </header>
-              <div className="dashboard-card-body px-3 pb-3 space-y-2">
+              <div className="dashboard-card-body px-3 pb-3 space-y-2 overflow-auto">
                 <p className="hint m-0">
                   Due in {item.withinDays || 7} days · retrain after {item.retrainThreshold} misses
                 </p>
@@ -153,6 +175,43 @@ export function CurriculumSortList({ items, busy, onReorder, onDelete, onSetting
                       }}
                     />
                   </div>
+                </div>
+
+                <div className="rounded-xl border border-line bg-surface-sunk/40 p-2 space-y-1.5">
+                  <p className="text-2xs font-bold uppercase tracking-wider text-ink-muted m-0 cluster gap-1">
+                    <Link2 className="h-3 w-3" aria-hidden />
+                    Linked inspection questions
+                  </p>
+                  {linkableQuestions.length ? (
+                    <ul className="m-0 p-0 list-none space-y-1 max-h-28 overflow-y-auto">
+                      {linkableQuestions.map(q => {
+                        const checked = item.linkedQuestionIds.includes(q.id);
+                        return (
+                          <li key={q.id}>
+                            <label className="flex items-start gap-2 text-xs cursor-pointer">
+                              <input
+                                type="checkbox"
+                                className="mt-0.5"
+                                checked={checked}
+                                disabled={busy}
+                                onChange={() => onToggleLinkedQuestion(item, q.id)}
+                              />
+                              <span className="min-w-0">
+                                <span className="font-medium text-ink">{q.text}</span>
+                                {q.holdPreviousUserAccountable ? (
+                                  <span className="badge ml-1" data-status="flagged">
+                                    Prev. user
+                                  </span>
+                                ) : null}
+                              </span>
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="hint m-0">No yes/no or pass/fail questions yet — add them in Settings.</p>
+                  )}
                 </div>
               </div>
             </section>
