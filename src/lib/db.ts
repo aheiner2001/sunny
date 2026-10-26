@@ -493,6 +493,7 @@ class DataStore {
       // Training + previous-user: hydrate localStorage from cloud so curriculum/onboarding
       // survive new preview URLs / devices (writes already went to these collections).
       onSnapshot(collection(db, 'trainingItems'), (snapshot) => {
+        if (snapshot.metadata?.hasPendingWrites) return;
         if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
           const list: TrainingItem[] = [];
           snapshot.forEach(d => list.push(d.data() as TrainingItem));
@@ -503,6 +504,7 @@ class DataStore {
       }, err => console.warn('Firestore trainingItems listener:', err.message));
 
       onSnapshot(collection(db, 'trainingAssignments'), (snapshot) => {
+        if (snapshot.metadata?.hasPendingWrites) return;
         if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
           const list: TrainingAssignment[] = [];
           snapshot.forEach(d => list.push(d.data() as TrainingAssignment));
@@ -512,6 +514,7 @@ class DataStore {
       }, err => console.warn('Firestore trainingAssignments listener:', err.message));
 
       onSnapshot(collection(db, 'traineeTrainers'), (snapshot) => {
+        if (snapshot.metadata?.hasPendingWrites) return;
         if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
           const list: TraineeTrainerLink[] = [];
           snapshot.forEach(d => list.push(d.data() as TraineeTrainerLink));
@@ -521,6 +524,7 @@ class DataStore {
       }, err => console.warn('Firestore traineeTrainers listener:', err.message));
 
       onSnapshot(collection(db, 'previousUserFlags'), (snapshot) => {
+        if (snapshot.metadata?.hasPendingWrites) return;
         if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
           const list: PreviousUserFlag[] = [];
           snapshot.forEach(d => list.push({ ...(d.data() as PreviousUserFlag), id: (d.data() as PreviousUserFlag).id || d.id }));

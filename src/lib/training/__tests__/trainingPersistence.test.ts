@@ -3,16 +3,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const commit = vi.fn().mockRejectedValue(new Error('Firestore permission denied'));
 const batchSet = vi.fn();
 const batchDelete = vi.fn();
+const listeners = new Map<string, (snapshot: unknown) => void>();
 vi.mock('../../firebase', () => ({ db: {}, ensureAuth: vi.fn().mockResolvedValue({ uid: 'test' }) }));
 vi.mock('firebase/firestore', () => ({
-  collection: vi.fn(),
+  collection: (_db: unknown, path: string) => ({ path }),
   doc: (_db: unknown, path: string, id: string) => ({ path, id }),
   setDoc: vi.fn(),
   deleteDoc: vi.fn(),
   getDoc: vi.fn(),
   getDocs: vi.fn(async () => ({ forEach: () => {}, empty: true })),
   updateDoc: vi.fn(),
-  onSnapshot: vi.fn(() => () => {}),
+  onSnapshot: (ref: { path: string }, callback: (snapshot: unknown) => void) => {
+    listeners.set(ref.path, callback);
+    return () => {};
+  },
   writeBatch: vi.fn(() => ({ set: batchSet, delete: batchDelete, commit })),
   arrayUnion: vi.fn(),
   runTransaction: vi.fn(),
@@ -68,5 +72,16 @@ describe('training curriculum persistence', () => {
     expect(dbService.getTraineeTrainerLinks()).toEqual([
       { traineeId: 'emp-2', trainerIds: ['emp-1'], updatedAt: '2026-10-26T12:00:00Z' },
     ]);
+  });
+
+  it('ignores optimistic trainingItems snapshots while writes are pending', () => {
+    dbService.getTrainingItems();
+    expect(dbService.getTrainingItems()).toHaveLength(0);
+    listeners.get('trainingItems')?.({
+      empty: false,
+      metadata: { hasPendingWrites: true },
+      forEach: (cb: (doc: { data: () => TrainingItem }) => void) => cb({ data: () => item() }),
+    });
+    expect(dbService.getTrainingItems()).toHaveLength(0);
   });
 });
