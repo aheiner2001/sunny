@@ -3288,7 +3288,7 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
         alert: {
           inspectionId,
           vehicleId: vehicle.id,
-          inspectionKind: (data.type as 'pretrip' | 'return') || 'pretrip',
+          inspectionKind: newInspection.kind === 'return' ? 'return' : 'pretrip',
           reportedById: data.submittedById || data.userId || 'anon',
           reportedAt: nowIso,
         },
