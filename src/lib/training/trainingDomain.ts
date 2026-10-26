@@ -155,6 +155,60 @@ export function applyApproveRetrain(
 }
 
 /**
+ * Manager can require retrain at any time — even with no miss flags.
+ * Reopens completed / needs_retrain work, or creates a fresh assignment.
+ */
+export function applyManagerRequireRetrain(input: {
+  item: TrainingItem;
+  trainee: { id: string; name: string };
+  actor: { id: string; name: string };
+  nowIso: string;
+  existing: TrainingAssignment | null;
+}): TrainingAssignment {
+  const { item, trainee, actor, nowIso, existing } = input;
+  if (
+    existing &&
+    (existing.status === 'assigned' ||
+      existing.status === 'awaiting_trainee' ||
+      existing.status === 'overdue')
+  ) {
+    throw new Error('This step is already open for training — no need to re-assign.');
+  }
+
+  const event = {
+    id: newEventId(),
+    type: 'manager_retrain' as const,
+    at: nowIso,
+    actorId: actor.id,
+    actorName: actor.name,
+    note: 'Manager required retrain',
+  };
+
+  if (existing) {
+    const next = appendTrainingEvent(existing, event);
+    return {
+      ...next,
+      status: 'assigned',
+      dueAt: computeTrainingDueAt(item, nowIso),
+      missStreak: 0,
+    };
+  }
+
+  return {
+    id: `asg-${Date.now()}-${item.id}-${Math.random().toString(36).slice(2, 6)}`,
+    traineeId: trainee.id,
+    traineeName: trainee.name,
+    itemId: item.id,
+    status: 'assigned',
+    dueAt: computeTrainingDueAt(item, nowIso),
+    missStreak: 0,
+    events: [event],
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+}
+
+/**
  * Onboard: one assignment per active curriculum step that is not already completed.
  * Skips items that already have a completed assignment for this trainee.
  */
@@ -243,6 +297,21 @@ export function reorderTrainingItems(items: TrainingItem[], fromIndex: number, t
   const [moved] = next.splice(fromIndex, 1);
   next.splice(toIndex, 0, moved);
   const now = new Date().toISOString();
+  return next.map((item, index) => ({ ...item, order: index + 1, updatedAt: now }));
+}
+
+/** Persist order after a dashboard-style drag (ordered ids from grid layout). */
+export function reorderTrainingItemsByIds(items: TrainingItem[], orderedIds: string[]): TrainingItem[] {
+  const byId = new Map(items.map(item => [item.id, item]));
+  const now = new Date().toISOString();
+  const next: TrainingItem[] = [];
+  for (const id of orderedIds) {
+    const item = byId.get(id);
+    if (!item) continue;
+    next.push(item);
+    byId.delete(id);
+  }
+  Array.from(byId.values()).forEach(leftover => next.push(leftover));
   return next.map((item, index) => ({ ...item, order: index + 1, updatedAt: now }));
 }
 

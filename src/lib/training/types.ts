@@ -13,6 +13,7 @@ export type TrainingEventType =
   | 'miss'
   | 'retrain_required'
   | 'retrain_approved'
+  | 'manager_retrain'
   | 'deadline_passed'
   | 'assigned'
   | 'onboarded'

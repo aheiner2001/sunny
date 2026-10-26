@@ -4,30 +4,29 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle,
-  ArrowDown,
-  ArrowUp,
   CheckCircle2,
   Clock3,
   GraduationCap,
   Plus,
-  Trash2,
   UserPlus,
   Users,
 } from 'lucide-react';
 import { ManagerOnly } from '@/components/ManagerOnly';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
+import { CurriculumSortList } from '@/components/CurriculumSortList';
 import { TrainingLearnChart } from '@/components/TrainingLearnChart';
 import { useAuth } from '@/context/AuthContext';
 import { dbService } from '@/lib/db';
 import {
   applyApproveRetrain,
+  applyManagerRequireRetrain,
   applyTraineeCertify,
   applyTrainerSignOff,
   buildMarkedTrainedAssignment,
   buildOnboardingAssignments,
   removeTrainingItem,
-  reorderTrainingItems,
+  reorderTrainingItemsByIds,
 } from '@/lib/training/trainingDomain';
 import {
   buildTraineeLearnRows,
@@ -53,12 +52,12 @@ function TrainingDashboard() {
   const [employees, setEmployees] = useState<User[]>([]);
   const [title, setTitle] = useState('');
   const [onboardTraineeId, setOnboardTraineeId] = useState('');
+  const [reviewEmployeeId, setReviewEmployeeId] = useState('');
   const [pairTraineeId, setPairTraineeId] = useState('');
   const [pairTrainerId, setPairTrainerId] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const isManager = role === 'manager';
   const canTrain = isManager || Boolean(user?.isDesignatedTrainer);
 
@@ -88,7 +87,8 @@ function TrainingDashboard() {
   useEffect(() => {
     if (!pairTraineeId && employees[0]) setPairTraineeId(employees[0].id);
     if (!onboardTraineeId && employees[0]) setOnboardTraineeId(employees[0].id);
-  }, [employees, pairTraineeId, onboardTraineeId]);
+    if (!reviewEmployeeId && employees[0]) setReviewEmployeeId(employees[0].id);
+  }, [employees, pairTraineeId, onboardTraineeId, reviewEmployeeId]);
 
   const learnRows = useMemo(
     () => buildTraineeLearnRows({ employees, items, assignments }),
@@ -166,9 +166,9 @@ function TrainingDashboard() {
     );
   };
 
-  const moveItem = async (fromIndex: number, toIndex: number) => {
+  const reorderByIds = async (orderedIds: string[]) => {
     if (!isManager) return;
-    const next = reorderTrainingItems(items, fromIndex, toIndex);
+    const next = reorderTrainingItemsByIds(items, orderedIds);
     await runAction(
       async () => {
         await dbService.saveTrainingItems(next);
@@ -283,6 +283,39 @@ function TrainingDashboard() {
     );
   };
 
+  const requireRetrain = async (traineeId: string, itemId: string) => {
+    if (!isManager || !user?.id) return;
+    const trainee = employees.find(e => e.id === traineeId);
+    const item = items.find(i => i.id === itemId);
+    if (!trainee || !item) return;
+    const existing =
+      assignments.find(a => a.traineeId === traineeId && a.itemId === itemId) || null;
+    try {
+      const next = applyManagerRequireRetrain({
+        item,
+        trainee: { id: trainee.id, name: trainee.name },
+        actor: { id: user.id, name: user.name },
+        nowIso: new Date().toISOString(),
+        existing,
+      });
+      await runAction(
+        async () => {
+          await dbService.saveTrainingAssignment(next);
+        },
+        `Retrain required for ${trainee.name} on “${item.title}”.`,
+        'Could not require retrain.',
+      );
+    } catch (err) {
+      setError(formatTrainingActionError(err, 'Could not require retrain.'));
+      setMessage('');
+    }
+  };
+
+  const openEmployeeReview = (employeeId: string) => {
+    setReviewEmployeeId(employeeId);
+    document.getElementById('employee-training-review')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   const pairTrainer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isManager) return;
@@ -336,7 +369,7 @@ function TrainingDashboard() {
     <div className="page max-w-5xl mx-auto space-y-6 pb-12">
       <PageHeader
         title="Training"
-        subtitle="Build the curriculum once. Onboard people into every step. Approve retrain when misses pile up."
+        subtitle="Build the curriculum once. Onboard people into every step. Require retrain anytime — with or without miss flags."
         actions={
           <Link href={isManager ? '/dashboard' : '/home'} className="btn btn-secondary btn-sm">
             Back
@@ -436,19 +469,30 @@ function TrainingDashboard() {
                         ? `${row.completed}/${row.totalSteps} curriculum steps complete`
                         : 'No curriculum yet'}
                     </p>
-                    {status === 'needs_training' && row.totalSteps > 0 && row.notStarted > 0 && (
+                    <div className="cluster gap-2 flex-wrap">
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm"
-                        disabled={busy}
-                        onClick={() => {
-                          setOnboardTraineeId(row.traineeId);
-                          document.getElementById('onboarding-section')?.scrollIntoView({ behavior: 'smooth' });
-                        }}
+                        onClick={() => openEmployeeReview(row.traineeId)}
                       >
-                        Onboard…
+                        View / retrain
                       </button>
-                    )}
+                      {status === 'needs_training' && row.totalSteps > 0 && row.notStarted > 0 && (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          disabled={busy}
+                          onClick={() => {
+                            setOnboardTraineeId(row.traineeId);
+                            document
+                              .getElementById('onboarding-section')
+                              ?.scrollIntoView({ behavior: 'smooth' });
+                          }}
+                        >
+                          Onboard…
+                        </button>
+                      )}
+                    </div>
                   </li>
                 );
               })}
@@ -456,6 +500,89 @@ function TrainingDashboard() {
           ) : (
             <EmptyState icon={<Users className="h-7 w-7" aria-hidden />} title="No employees yet">
               Add people on Employees, then return here to onboard them.
+            </EmptyState>
+          )}
+        </section>
+      )}
+
+      {isManager && (
+        <section id="employee-training-review" className="card card-pad space-y-3">
+          <h2 className="card-title text-base m-0 cluster gap-2">
+            <GraduationCap className="h-4 w-4" aria-hidden />
+            Employee training
+          </h2>
+          <p className="hint m-0">
+            Select anyone and require retrain on a step — even if they have no miss flags and are already
+            up to date.
+          </p>
+          <div className="field max-w-sm">
+            <label className="label" htmlFor="review-employee">
+              Employee
+            </label>
+            <select
+              id="review-employee"
+              className="select"
+              value={reviewEmployeeId}
+              onChange={e => setReviewEmployeeId(e.target.value)}
+            >
+              {employees.map(e => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {reviewEmployeeId && items.filter(i => i.active).length > 0 ? (
+            <ul className="m-0 p-0 list-none space-y-2">
+              {items
+                .filter(i => i.active)
+                .map(item => {
+                  const row = assignments.find(
+                    a => a.traineeId === reviewEmployeeId && a.itemId === item.id,
+                  );
+                  const status = row?.status;
+                  const open =
+                    status === 'assigned' || status === 'awaiting_trainee' || status === 'overdue';
+                  return (
+                    <li
+                      key={item.id}
+                      className="rounded-xl border border-line p-3 spread items-center gap-2 flex-wrap"
+                    >
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-sm font-semibold m-0">{item.title}</p>
+                        {status ? (
+                          <span className="badge" data-status={trainingStatusTone(status)}>
+                            {trainingStatusLabel(status)}
+                          </span>
+                        ) : (
+                          <span className="badge" data-status="idle">
+                            Not started
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={busy || open}
+                        title={
+                          open
+                            ? 'Already open for training'
+                            : 'Require this person to train on this step again'
+                        }
+                        onClick={() => void requireRetrain(reviewEmployeeId, item.id)}
+                      >
+                        Require retrain
+                      </button>
+                    </li>
+                  );
+                })}
+            </ul>
+          ) : (
+            <EmptyState
+              icon={<GraduationCap className="h-7 w-7" aria-hidden />}
+              title="No curriculum steps"
+            >
+              Add curriculum steps first, then you can require retrain per person.
             </EmptyState>
           )}
         </section>
@@ -672,7 +799,8 @@ function TrainingDashboard() {
           <div>
             <h2 className="card-title text-base m-0">Curriculum</h2>
             <p className="hint m-0 mt-1">
-              Add, reorder, and delete steps. Assigning people happens in Onboarding — not here.
+              Add and delete steps. Drag by the grip handle to reorder — same as dashboard cards. Assigning
+              people happens in Onboarding.
             </p>
           </div>
           <form onSubmit={e => void addItem(e)} className="flex flex-col sm:flex-row gap-2">
@@ -689,106 +817,19 @@ function TrainingDashboard() {
             </button>
           </form>
 
-          <ul className="space-y-2 m-0 p-0 list-none">
-            {items.map((item, idx) => (
-              <li
-                key={item.id}
-                className={`rounded-xl border border-line p-3 space-y-3 ${
-                  dragIndex === idx ? 'opacity-70 ring-2 ring-[var(--line-strong)]' : ''
-                }`}
-                draggable
-                onDragStart={() => setDragIndex(idx)}
-                onDragOver={e => e.preventDefault()}
-                onDrop={() => {
-                  if (dragIndex === null) return;
-                  void moveItem(dragIndex, idx);
-                  setDragIndex(null);
-                }}
-                onDragEnd={() => setDragIndex(null)}
-              >
-                <div className="spread items-start gap-3 flex-wrap">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold m-0">{item.title}</p>
-                    <p className="hint m-0 mt-0.5">
-                      Due in {item.withinDays || 7} days · retrain after {item.retrainThreshold} misses ·
-                      drag to reorder
-                    </p>
-                  </div>
-                  <div className="cluster gap-1">
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      disabled={busy || idx === 0}
-                      aria-label="Move up"
-                      onClick={() => void moveItem(idx, idx - 1)}
-                    >
-                      <ArrowUp className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      disabled={busy || idx === items.length - 1}
-                      aria-label="Move down"
-                      onClick={() => void moveItem(idx, idx + 1)}
-                    >
-                      <ArrowDown className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm text-[var(--critical)]"
-                      disabled={busy}
-                      aria-label="Delete step"
-                      onClick={() => void deleteItem(item.id)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <div className="field">
-                    <label className="label">Days</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={90}
-                      className="input w-20"
-                      defaultValue={item.withinDays || 7}
-                      onBlur={e => {
-                        const withinDays = Number(e.target.value);
-                        if (!Number.isFinite(withinDays) || withinDays === (item.withinDays || 7)) return;
-                        void saveItemSettings(item, { withinDays });
-                      }}
-                    />
-                  </div>
-                  <div className="field">
-                    <label className="label">Retrain after misses</label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={20}
-                      className="input w-20"
-                      defaultValue={item.retrainThreshold}
-                      onBlur={e => {
-                        const retrainThreshold = Number(e.target.value);
-                        if (
-                          !Number.isFinite(retrainThreshold) ||
-                          retrainThreshold === item.retrainThreshold
-                        ) {
-                          return;
-                        }
-                        void saveItemSettings(item, { retrainThreshold });
-                      }}
-                    />
-                  </div>
-                </div>
-              </li>
-            ))}
-            {!items.length && (
-              <EmptyState icon={<Plus className="h-7 w-7" aria-hidden />} title="No training steps yet">
-                Add curriculum titles above. Onboard people after the list looks right.
-              </EmptyState>
-            )}
-          </ul>
+          {items.length ? (
+            <CurriculumSortList
+              items={items}
+              busy={busy}
+              onReorder={ids => void reorderByIds(ids)}
+              onDelete={id => void deleteItem(id)}
+              onSettingsBlur={(item, patch) => void saveItemSettings(item, patch)}
+            />
+          ) : (
+            <EmptyState icon={<Plus className="h-7 w-7" aria-hidden />} title="No training steps yet">
+              Add curriculum titles above. Onboard people after the list looks right.
+            </EmptyState>
+          )}
         </section>
       )}
 

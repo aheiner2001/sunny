@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyApproveRetrain,
+  applyManagerRequireRetrain,
   applyTrainerSignOff,
   applyTraineeCertify,
   applyTrainingMiss,
@@ -9,6 +10,7 @@ import {
   markOverdueIfNeeded,
   removeTrainingItem,
   reorderTrainingItems,
+  reorderTrainingItemsByIds,
 } from '../trainingDomain';
 import type { TrainingAssignment, TrainingItem } from '../types';
 
@@ -115,6 +117,29 @@ describe('training domain', () => {
     expect(next.events.some(e => e.type === 'retrain_approved')).toBe(true);
   });
 
+  it('lets a manager require retrain with no miss flags', () => {
+    const done = assignment({ status: 'completed', missStreak: 0 });
+    const next = applyManagerRequireRetrain({
+      item: item(),
+      trainee: { id: 'alex', name: 'Alex' },
+      actor: { id: 'mgr', name: 'Morgan' },
+      nowIso: '2026-10-26T12:00:00Z',
+      existing: done,
+    });
+    expect(next.status).toBe('assigned');
+    expect(next.events.some(e => e.type === 'manager_retrain')).toBe(true);
+
+    const fresh = applyManagerRequireRetrain({
+      item: item({ id: 'i-new' }),
+      trainee: { id: 'alex', name: 'Alex' },
+      actor: { id: 'mgr', name: 'Morgan' },
+      nowIso: '2026-10-26T12:00:00Z',
+      existing: null,
+    });
+    expect(fresh.status).toBe('assigned');
+    expect(fresh.itemId).toBe('i-new');
+  });
+
   it('reorders and deletes curriculum steps', () => {
     const a = item({ id: 'a', order: 1, title: 'A' });
     const b = item({ id: 'b', order: 2, title: 'B' });
@@ -122,5 +147,6 @@ describe('training domain', () => {
     expect(reordered.map(i => i.id)).toEqual(['b', 'a']);
     expect(reordered.map(i => i.order)).toEqual([1, 2]);
     expect(removeTrainingItem(reordered, 'a').map(i => i.id)).toEqual(['b']);
+    expect(reorderTrainingItemsByIds([a, b], ['b', 'a']).map(i => i.id)).toEqual(['b', 'a']);
   });
 });
