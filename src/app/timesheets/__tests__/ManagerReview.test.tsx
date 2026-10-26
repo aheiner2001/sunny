@@ -342,6 +342,71 @@ describe('TimesheetsClient (Manager Review)', () => {
     });
     approveSpy.mockRestore();
   });
+
+  it('lists employee correction requests on Manager Review and allows approve', async () => {
+    const aliceShift = timesheetStore.getAllShifts().find((s) => s.employeeId === 'emp-alice');
+    expect(aliceShift).toBeDefined();
+
+    await timesheetService.requestCorrection({
+      shiftId: aliceShift!.id,
+      employee: { id: 'emp-alice', name: 'Alice' },
+      proposedStart: '2026-10-14T14:00:00.000Z',
+      proposedEnd: '2026-10-14T21:00:00.000Z',
+      proposedBreakSeconds: 1800,
+      reason: 'Forgot unpaid break',
+      baseRevision: aliceShift!.revision,
+    });
+
+    render(<TimesheetsClient />);
+
+    const queue = screen.getByLabelText(/pending correction requests/i);
+    expect(within(queue).getByText(/correction requests \(1\)/i)).toBeDefined();
+    expect(within(queue).getByText('Forgot unpaid break')).toBeDefined();
+    expect(
+      within(queue).getByText((content) => content.startsWith('Shift correction ·')),
+    ).toBeDefined();
+
+    fireEvent.click(within(queue).getByRole('button', { name: /^approve$/i }));
+
+    await waitFor(() => {
+      const requests = timesheetStore.getCorrectionRequestsByEmployee('emp-alice');
+      expect(requests.some((r) => r.status === 'approved' && r.reason === 'Forgot unpaid break')).toBe(
+        true,
+      );
+      expect(screen.getByText(/approved correction for alice/i)).toBeDefined();
+    });
+
+    expect(within(queue).getByText(/^no pending correction requests\.?$/i)).toBeDefined();
+  });
+
+  it('lets a manager reject a correction request with a required note', async () => {
+    await timesheetService.requestCorrection({
+      shiftId: null,
+      employee: { id: 'emp-alice', name: 'Alice' },
+      proposedStart: '2026-10-14T15:00:00.000Z',
+      proposedEnd: '2026-10-14T19:00:00.000Z',
+      proposedBreakSeconds: 0,
+      reason: 'Missed clock-in after pretrip',
+    });
+
+    render(<TimesheetsClient />);
+
+    const queue = screen.getByLabelText(/pending correction requests/i);
+    fireEvent.click(within(queue).getByRole('button', { name: /^reject$/i }));
+
+    expect(screen.getByRole('heading', { name: /reject correction request/i })).toBeDefined();
+    fireEvent.change(screen.getByLabelText(/reject reason/i), {
+      target: { value: 'Need vehicle return checklist first' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /reject request/i }));
+
+    await waitFor(() => {
+      const requests = timesheetStore.getCorrectionRequestsByEmployee('emp-alice');
+      expect(requests[0]?.status).toBe('rejected');
+      expect(requests[0]?.reviewNote).toBe('Need vehicle return checklist first');
+      expect(screen.getByText(/rejected correction for alice/i)).toBeDefined();
+    });
+  });
 });
 
 beforeAll(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-10-14T22:00:00Z')); });

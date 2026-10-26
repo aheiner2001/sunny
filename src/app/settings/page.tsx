@@ -32,10 +32,16 @@ import {
   Fuel,
   ToggleLeft,
   ToggleRight,
+  UserCheck,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { ChecklistQuestion, ChecklistCategoryConfig, QuestionType, ChecklistConfig, EquipmentOption, FleetTask, FlagCondition, PhotoRequirement } from '@/types';
 import { listDistinctEquipmentFamilies } from '@/lib/checklistPairing';
+import {
+  applyPreviousUserQuestionSettings,
+  canHoldPreviousUserAccountable,
+  togglePreviousUserAccountable,
+} from '@/lib/previousUserQuestionSettings';
 import { useAuth } from '@/context/AuthContext';
 import { ManagerOnly } from '@/components/ManagerOnly';
 import { AiImportModal } from '@/components/AiImportModal';
@@ -120,6 +126,8 @@ function SettingsPageContent() {
     flagCondition: FlagCondition;
     photoRequirement: PhotoRequirement;
     equipmentFamily: string;
+    holdPreviousUserAccountable: boolean;
+    previousUserMessage: string;
     visibility: 'always' | 'temporary' | 'seasonal';
     isTemporary: boolean;
     expiresAt: string;
@@ -140,6 +148,8 @@ function SettingsPageContent() {
     flagCondition: 'on_no',
     photoRequirement: 'optional',
     equipmentFamily: '',
+    holdPreviousUserAccountable: false,
+    previousUserMessage: '',
     visibility: 'always',
     isTemporary: false,
     expiresAt: '',
@@ -441,6 +451,8 @@ function SettingsPageContent() {
       flagCondition: 'on_no',
       photoRequirement: 'optional',
       equipmentFamily: '',
+      holdPreviousUserAccountable: false,
+      previousUserMessage: '',
       visibility: 'always',
       isTemporary: false,
       expiresAt: '',
@@ -467,6 +479,8 @@ function SettingsPageContent() {
       flagCondition: q.flagCondition || 'on_no',
       photoRequirement: q.photoRequirement || 'optional',
       equipmentFamily: q.equipmentFamily || '',
+      holdPreviousUserAccountable: Boolean(q.holdPreviousUserAccountable),
+      previousUserMessage: q.previousUserMessage || '',
       visibility: q.isSeasonal ? 'seasonal' : q.isTemporary ? 'temporary' : 'always',
       isTemporary: Boolean(q.isTemporary),
       expiresAt: q.expiresAt || '',
@@ -490,7 +504,7 @@ function SettingsPageContent() {
     let updatedQs: ChecklistQuestion[];
 
     if (editingQuestion) {
-      updatedQs = questions.map(q => q.id === editingQuestion.id ? {
+      updatedQs = questions.map(q => q.id === editingQuestion.id ? applyPreviousUserQuestionSettings({
         ...q,
         text: questionForm.text.trim(),
         category: questionForm.category,
@@ -509,9 +523,12 @@ function SettingsPageContent() {
         seasonEnd: questionForm.visibility === 'seasonal' ? questionForm.seasonEnd : null,
         forceActive: questionForm.visibility === 'seasonal' ? questionForm.seasonControl === 'force_on' : undefined,
         forcePaused: questionForm.visibility === 'seasonal' ? questionForm.seasonControl === 'paused' : undefined
-      } : q);
+      }, {
+        holdPreviousUserAccountable: questionForm.holdPreviousUserAccountable,
+        previousUserMessage: questionForm.previousUserMessage,
+      }) : q);
     } else {
-      const newQ: ChecklistQuestion = {
+      const newQ: ChecklistQuestion = applyPreviousUserQuestionSettings({
         id: `q-${Date.now()}`,
         text: questionForm.text.trim(),
         category: questionForm.category,
@@ -531,7 +548,10 @@ function SettingsPageContent() {
         seasonEnd: questionForm.visibility === 'seasonal' ? questionForm.seasonEnd : null,
         forceActive: questionForm.visibility === 'seasonal' ? questionForm.seasonControl === 'force_on' : undefined,
         forcePaused: questionForm.visibility === 'seasonal' ? questionForm.seasonControl === 'paused' : undefined
-      };
+      }, {
+        holdPreviousUserAccountable: questionForm.holdPreviousUserAccountable,
+        previousUserMessage: questionForm.previousUserMessage,
+      });
       updatedQs = [...questions, newQ];
     }
 
@@ -549,11 +569,33 @@ function SettingsPageContent() {
 
 
   const handleToggleQuestionEnabled = async (qId: string) => {
+    const previous = questions;
     const updatedQs = questions.map((q) =>
       q.id === qId ? { ...q, enabled: q.enabled === false ? true : false } : q
     );
     setQuestions(updatedQs);
-    await dbService.saveChecklistQuestions(updatedQs);
+    try {
+      await dbService.saveChecklistQuestions(updatedQs);
+    } catch (err) {
+      setQuestions(previous);
+      alert(err instanceof Error ? err.message : 'Could not update question visibility.');
+    }
+  };
+
+  const handleTogglePreviousUserAccountable = async (qId: string) => {
+    const target = questions.find((q) => q.id === qId);
+    if (!target || !canHoldPreviousUserAccountable(target.type)) return;
+    const toggled = togglePreviousUserAccountable(target);
+    if (!toggled) return;
+    const previous = questions;
+    const updatedQs = questions.map((q) => (q.id === qId ? toggled : q));
+    setQuestions(updatedQs);
+    try {
+      await dbService.saveChecklistQuestions(updatedQs);
+    } catch (err) {
+      setQuestions(previous);
+      alert(err instanceof Error ? err.message : 'Could not update previous-user check.');
+    }
   };
 
 
@@ -916,6 +958,12 @@ function SettingsPageContent() {
                           Required
                         </span>
                       )}
+                      {q.holdPreviousUserAccountable && (
+                        <span className="text-[10px] font-bold text-amber-900 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-flex items-center gap-1">
+                          <UserCheck className="w-3 h-3" aria-hidden />
+                          Prev. user
+                        </span>
+                      )}
                       {q.equipmentFamily && (
                         <span className="text-[10px] font-medium text-ink-muted bg-surface-sunk px-1.5 py-0.5 rounded">
                           Tagged: {q.equipmentFamily}
@@ -958,6 +1006,30 @@ function SettingsPageContent() {
                       <ToggleRight className="w-4 h-4" />
                     )}
                   </button>
+                  {canHoldPreviousUserAccountable(q.type) && (
+                    <button
+                      type="button"
+                      onClick={() => void handleTogglePreviousUserAccountable(q.id)}
+                      className={`p-1.5 rounded-lg hover:bg-amber-50 ${
+                        q.holdPreviousUserAccountable
+                          ? 'text-amber-700 bg-amber-50'
+                          : 'text-ink-faint hover:text-amber-700'
+                      }`}
+                      title={
+                        q.holdPreviousUserAccountable
+                          ? 'Previous-user check on — click to turn off'
+                          : 'Mark as previous-user check (prior driver must Acknowledge if flagged)'
+                      }
+                      aria-pressed={Boolean(q.holdPreviousUserAccountable)}
+                      aria-label={
+                        q.holdPreviousUserAccountable
+                          ? 'Turn off previous-user check'
+                          : 'Turn on previous-user check'
+                      }
+                    >
+                      <UserCheck className="w-4 h-4" />
+                    </button>
+                  )}
                   <button
                     onClick={() => handleOpenEditQuestion(q)}
                     className="p-1.5 rounded-lg text-ink-muted hover:text-slate-800 hover:bg-surface-sunk"
@@ -1503,6 +1575,42 @@ function SettingsPageContent() {
                     <option value="on_yes">Yes indicates issue</option>
                     <option value="never">Informational (never)</option>
                   </select>
+                </div>
+              )}
+
+              {(questionForm.type === 'yes_no' || questionForm.type === 'pass_fail') && (
+                <div className="space-y-2 rounded-xl border border-line bg-surface-2/40 p-3">
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      id="holdPreviousUser"
+                      checked={questionForm.holdPreviousUserAccountable}
+                      onChange={(e) =>
+                        setQuestionForm({ ...questionForm, holdPreviousUserAccountable: e.target.checked })
+                      }
+                      className="mt-0.5 w-4 h-4 text-ink rounded border-slate-300 focus:ring-sky-500"
+                    />
+                    <label htmlFor="holdPreviousUser" className="text-xs font-bold text-ink cursor-pointer">
+                      Hold previous user accountable
+                      <span className="block font-normal text-ink-faint mt-0.5">
+                        If answered as an issue, the prior driver must Acknowledge before their next QR scan on any truck.
+                      </span>
+                    </label>
+                  </div>
+                  {questionForm.holdPreviousUserAccountable && (
+                    <div>
+                      <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
+                        Message / measures for previous user
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="e.g. Clean the cab before you leave next time."
+                        value={questionForm.previousUserMessage}
+                        onChange={(e) => setQuestionForm({ ...questionForm, previousUserMessage: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 

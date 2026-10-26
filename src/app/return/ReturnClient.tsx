@@ -21,6 +21,7 @@ import {
 } from '@/lib/checklistPairing';
 import { activeChecklistQuestions } from '@/lib/checklistQuestions';
 import { VehicleDamageCapture, type VehicleDamageCaptureHandle } from '@/components/VehicleDamageCapture';
+import PreviousUserFlagGate from '@/components/PreviousUserFlagGate';
 import type {
   ChecklistQuestion,
   InspectionResponse,
@@ -450,6 +451,7 @@ export default function ReturnClient() {
   }
 
   return (
+    <PreviousUserFlagGate employeeId={user?.id}>
     <div className="max-w-lg mx-auto px-4 py-8 space-y-5">
       <div>
         <p className="text-2xs font-bold uppercase tracking-wider text-ink-muted">Shop exit</p>
@@ -662,5 +664,6 @@ export default function ReturnClient() {
         </button>
       </form>
     </div>
+    </PreviousUserFlagGate>
   );
 }

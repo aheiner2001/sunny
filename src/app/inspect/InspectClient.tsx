@@ -42,6 +42,7 @@ import { occupancyKind, formatCheckoutStarted, vehicleInspectedOnLocalDay } from
 import { RecentInspectors } from '@/components/RecentInspectors';
 import { RejectedInspectionBanner } from '@/components/RejectedInspectionBanner';
 import { SignaturePad } from '@/components/SignaturePad';
+import PreviousUserFlagGate from '@/components/PreviousUserFlagGate';
 import { timesheetStore } from '@/lib/timesheets/timesheetStore';
 import { isEveningTime, DEFAULT_TIMEZONE } from '@/lib/timesheets/timeCalculations';
 
@@ -1023,6 +1024,7 @@ export default function InspectClient() {
     : 0;
 
   return (
+    <PreviousUserFlagGate employeeId={user?.id}>
     <div className="page max-w-2xl mx-auto space-y-5 pb-12">
       {user?.role === 'employee' && punchStatus !== 'saved' && (
         <div className="card card-pad text-sm" role="alert">
@@ -1825,5 +1827,6 @@ export default function InspectClient() {
         
       </form>
     </div>
+    </PreviousUserFlagGate>
   );
 }

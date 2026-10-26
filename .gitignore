@@ -17,6 +17,9 @@ build/
 *.pem
 .superpowers/
 
+# Local-only Cursor/agent defs — never push
+/agents/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

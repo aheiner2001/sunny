@@ -33,7 +33,8 @@ import {
   DamageRegion,
   VehicleDamageEvent,
   VehicleSide,
-  VehicleAssignment
+  VehicleAssignment,
+  PreviousUserFlag,
 } from '@/types';
 import { validDay, dateOnly, validateProfile, validateService } from './maintenance';
 import { effectiveServices, validateMaintenanceRule } from './maintenanceRules';
@@ -45,6 +46,10 @@ import { DEFAULT_RETURN_QUESTIONS, hasReturnForShift, normalizeReturnQuestions, 
 import { repairDuplicateCategoryIds } from './checklistCategories';
 import { compactConfirmedInspections } from './inspectionCache';
 import { assertDamagePayload, normalizeRegion } from './vehicleDamage';
+import { buildPreviousUserAccountabilityFlags } from './previousUserAccountability';
+import type { TrainingAssignment, TrainingItem, TraineeTrainerLink } from './training/types';
+import { applyTrainingMiss } from './training/trainingDomain';
+import { resolveTrainingMissTargets } from './training/trainingMissTargets';
 import { 
   computeLifespanStatus,
   calculateLifespanDueDate,
@@ -108,6 +113,10 @@ const STORAGE_KEYS = {
   OVERNIGHT_RECONCILED: 'sunny_overnight_reconciled',
   VEHICLE_DAMAGE: 'sunny_vehicle_damage',
   VEHICLE_ASSIGNMENTS: 'sunny_vehicle_assignments',
+  PREVIOUS_USER_FLAGS: 'sunny_previous_user_flags',
+  TRAINING_ITEMS: 'sunny_training_items',
+  TRAINING_ASSIGNMENTS: 'sunny_training_assignments',
+  TRAINEE_TRAINERS: 'sunny_trainee_trainers',
 };
 
 const DEFAULT_CHECKLIST_ID = 'standard-detailing-checklist';
@@ -481,6 +490,49 @@ class DataStore {
         console.warn('Firestore vehicleDamage listener (using local cache):', err.message);
       });
 
+      // Training + previous-user: hydrate localStorage from cloud so curriculum/onboarding
+      // survive new preview URLs / devices (writes already went to these collections).
+      onSnapshot(collection(db, 'trainingItems'), { includeMetadataChanges: true }, (snapshot) => {
+        if (snapshot.metadata?.hasPendingWrites) return;
+        if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
+          const list: TrainingItem[] = [];
+          snapshot.forEach(d => list.push(d.data() as TrainingItem));
+          list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+          localStorage.setItem(STORAGE_KEYS.TRAINING_ITEMS, JSON.stringify(list));
+          window.dispatchEvent(new Event('sunny_db_update'));
+        }
+      }, err => console.warn('Firestore trainingItems listener:', err.message));
+
+      onSnapshot(collection(db, 'trainingAssignments'), { includeMetadataChanges: true }, (snapshot) => {
+        if (snapshot.metadata?.hasPendingWrites) return;
+        if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
+          const list: TrainingAssignment[] = [];
+          snapshot.forEach(d => list.push(d.data() as TrainingAssignment));
+          localStorage.setItem(STORAGE_KEYS.TRAINING_ASSIGNMENTS, JSON.stringify(list));
+          window.dispatchEvent(new Event('sunny_db_update'));
+        }
+      }, err => console.warn('Firestore trainingAssignments listener:', err.message));
+
+      onSnapshot(collection(db, 'traineeTrainers'), { includeMetadataChanges: true }, (snapshot) => {
+        if (snapshot.metadata?.hasPendingWrites) return;
+        if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
+          const list: TraineeTrainerLink[] = [];
+          snapshot.forEach(d => list.push(d.data() as TraineeTrainerLink));
+          localStorage.setItem(STORAGE_KEYS.TRAINEE_TRAINERS, JSON.stringify(list));
+          window.dispatchEvent(new Event('sunny_db_update'));
+        }
+      }, err => console.warn('Firestore traineeTrainers listener:', err.message));
+
+      onSnapshot(collection(db, 'previousUserFlags'), { includeMetadataChanges: true }, (snapshot) => {
+        if (snapshot.metadata?.hasPendingWrites) return;
+        if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true') {
+          const list: PreviousUserFlag[] = [];
+          snapshot.forEach(d => list.push({ ...(d.data() as PreviousUserFlag), id: (d.data() as PreviousUserFlag).id || d.id }));
+          localStorage.setItem(STORAGE_KEYS.PREVIOUS_USER_FLAGS, JSON.stringify(list));
+          window.dispatchEvent(new Event('sunny_db_update'));
+        }
+      }, err => console.warn('Firestore previousUserFlags listener:', err.message));
+
     } catch (e: any) {
       console.warn('Could not attach Firestore listeners:', e.message);
     }
@@ -551,6 +603,19 @@ class DataStore {
       const checklistConfig = this.getChecklistConfig();
       const checklistRef = doc(db, 'checklists', DEFAULT_CHECKLIST_ID);
       batch.set(checklistRef, sanitizeForFirestore(checklistConfig));
+
+      this.getTrainingItems().forEach(item => {
+        batch.set(doc(db, 'trainingItems', item.id), sanitizeForFirestore(item));
+      });
+      this.getTrainingAssignments().forEach(row => {
+        batch.set(doc(db, 'trainingAssignments', row.id), sanitizeForFirestore(row));
+      });
+      this.getTraineeTrainerLinks().forEach(link => {
+        batch.set(doc(db, 'traineeTrainers', link.traineeId), sanitizeForFirestore(link));
+      });
+      this.getPreviousUserFlags().forEach(flag => {
+        batch.set(doc(db, 'previousUserFlags', flag.id), sanitizeForFirestore(flag));
+      });
 
       await batch.commit();
       localStorage.setItem(STORAGE_KEYS.FIREBASE_SYNCED, 'true');
@@ -847,6 +912,7 @@ class DataStore {
     avatarUrl?: string;
     avatarStyle?: User['avatarStyle'];
     passcode?: string;
+    isDesignatedTrainer?: boolean;
   }): Promise<User> {
     if (!this.isClient()) throw new Error('Client only');
     this.init();
@@ -865,6 +931,7 @@ class DataStore {
       role: userData.role,
       status: userData.status || 'active',
       avatarUrl: userData.avatarUrl?.trim() || undefined,
+      isDesignatedTrainer: userData.role === 'employee' ? Boolean(userData.isDesignatedTrainer) : false,
       avatarStyle: userData.avatarStyle || 'circle',
       passcode: userData.passcode?.trim() || undefined
     };
@@ -3234,6 +3301,78 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       }
     }
 
+    try {
+      const config = this.getChecklistConfig();
+      const questions = [...(config.questions || []), ...(config.returnQuestions || [])];
+      const primaryAlert = alerts[0] || {
+        inspectionId,
+        vehicleId: vehicle.id,
+        inspectionKind: 'pretrip' as const,
+        reportedById: data.submittedById || data.userId || 'anon',
+        reportedAt: nowIso,
+      };
+      const drafts = buildPreviousUserAccountabilityFlags({
+        inspection: newInspection,
+        alert: primaryAlert,
+        questions,
+        assignments: this.getVehicleAssignments(),
+        inspections: this.getInspections(),
+        now: nowIso,
+      });
+      if (drafts.length) {
+        const flags = drafts.map((draft, idx) => ({
+          ...draft,
+          id: `puf-${inspectionId}-${idx}`,
+        }));
+        await this.savePreviousUserFlags(flags);
+      }
+    } catch (error) {
+      console.warn('Previous-user accountability flags were not saved:', error);
+    }
+
+    try {
+      const configForTraining = this.getChecklistConfig();
+      const allQuestions = [
+        ...(configForTraining.questions || []),
+        ...(configForTraining.returnQuestions || []),
+      ];
+      const missTargets = resolveTrainingMissTargets({
+        items: this.getTrainingItems(),
+        assignments: this.getTrainingAssignments(),
+        questions: allQuestions,
+        inspection: newInspection,
+        alert: {
+          inspectionId,
+          vehicleId: vehicle.id,
+          inspectionKind: newInspection.kind === 'return' ? 'return' : 'pretrip',
+          reportedById: data.submittedById || data.userId || 'anon',
+          reportedAt: nowIso,
+        },
+        assignmentsHistory: this.getVehicleAssignments(),
+        inspectionsHistory: this.getInspections(),
+        submitterId: data.userId || '',
+      });
+      const itemById = new Map(this.getTrainingItems().map(i => [i.id, i]));
+      for (const target of missTargets) {
+        const item = itemById.get(target.itemId);
+        if (!item) continue;
+        const rows = this.getTrainingAssignments().filter(
+          a => a.traineeId === target.traineeId && a.itemId === target.itemId,
+        );
+        for (const row of rows) {
+          const next = applyTrainingMiss(
+            row,
+            item,
+            { id: 'system', name: 'Inspection' },
+            nowIso,
+          );
+          await this.saveTrainingAssignment(next);
+        }
+      }
+    } catch (error) {
+      console.warn('Training miss updates were not saved:', error);
+    }
+
     window.dispatchEvent(new Event('sunny_db_update'));
     return { inspection: newInspection, newIssues, localCacheWarning };
   }
@@ -3605,6 +3744,138 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
     this.init();
     const raw = localStorage.getItem(STORAGE_KEYS.ALERTS);
     return raw ? JSON.parse(raw) : [];
+  }
+
+  public getPreviousUserFlags(): PreviousUserFlag[] {
+    if (!this.isClient()) return [];
+    this.init();
+    const raw = localStorage.getItem(STORAGE_KEYS.PREVIOUS_USER_FLAGS);
+    return raw ? (JSON.parse(raw) as PreviousUserFlag[]) : [];
+  }
+
+  public getOpenPreviousUserFlagsForEmployee(employeeId: string): PreviousUserFlag[] {
+    return this.getPreviousUserFlags().filter(f => f.employeeId === employeeId && f.status === 'open');
+  }
+
+  public async savePreviousUserFlags(flags: PreviousUserFlag[]): Promise<PreviousUserFlag[]> {
+    if (!this.isClient()) return [];
+    this.init();
+    if (!flags.length) return [];
+    if (db) {
+      await ensureAuth();
+      const batch = writeBatch(db);
+      for (const flag of flags) {
+        batch.set(doc(db, 'previousUserFlags', flag.id), sanitizeForFirestore(flag));
+      }
+      await batch.commit();
+    }
+    const byId = new Map(this.getPreviousUserFlags().map(f => [f.id, f]));
+    for (const flag of flags) byId.set(flag.id, flag);
+    localStorage.setItem(STORAGE_KEYS.PREVIOUS_USER_FLAGS, JSON.stringify(Array.from(byId.values())));
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return flags;
+  }
+
+  public async acknowledgePreviousUserFlags(
+    employeeId: string,
+    acknowledgedAt = new Date().toISOString(),
+  ): Promise<PreviousUserFlag[]> {
+    if (!this.isClient()) return [];
+    this.init();
+    const open = this.getOpenPreviousUserFlagsForEmployee(employeeId);
+    if (!open.length) return [];
+    const cleared = open.map(f => ({
+      ...f,
+      status: 'acknowledged' as const,
+      acknowledgedAt,
+    }));
+    if (db) {
+      await ensureAuth();
+      const batch = writeBatch(db);
+      for (const flag of cleared) {
+        batch.set(doc(db, 'previousUserFlags', flag.id), sanitizeForFirestore(flag));
+      }
+      await batch.commit();
+    }
+    const byId = new Map(this.getPreviousUserFlags().map(f => [f.id, f]));
+    for (const flag of cleared) byId.set(flag.id, flag);
+    localStorage.setItem(STORAGE_KEYS.PREVIOUS_USER_FLAGS, JSON.stringify(Array.from(byId.values())));
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return cleared;
+  }
+
+  public getTrainingItems(): TrainingItem[] {
+    if (!this.isClient()) return [];
+    this.init();
+    const raw = localStorage.getItem(STORAGE_KEYS.TRAINING_ITEMS);
+    return raw ? (JSON.parse(raw) as TrainingItem[]) : [];
+  }
+
+  public async saveTrainingItems(items: TrainingItem[]): Promise<TrainingItem[]> {
+    if (!this.isClient()) return [];
+    this.init();
+    if (db) {
+      await ensureAuth();
+      const existing = await getDocs(collection(db, 'trainingItems'));
+      const keep = new Set(items.map(item => item.id));
+      const batch = writeBatch(db);
+      existing?.forEach(d => {
+        if (!keep.has(d.id)) batch.delete(d.ref);
+      });
+      for (const item of items) {
+        batch.set(doc(db, 'trainingItems', item.id), sanitizeForFirestore(item));
+      }
+      await batch.commit();
+    }
+    localStorage.setItem(STORAGE_KEYS.TRAINING_ITEMS, JSON.stringify(items));
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return items;
+  }
+
+  public getTrainingAssignments(): TrainingAssignment[] {
+    if (!this.isClient()) return [];
+    this.init();
+    const raw = localStorage.getItem(STORAGE_KEYS.TRAINING_ASSIGNMENTS);
+    return raw ? (JSON.parse(raw) as TrainingAssignment[]) : [];
+  }
+
+  public async saveTrainingAssignment(assignment: TrainingAssignment): Promise<TrainingAssignment> {
+    if (!this.isClient()) return assignment;
+    this.init();
+    if (db) {
+      await ensureAuth();
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'trainingAssignments', assignment.id), sanitizeForFirestore(assignment));
+      await batch.commit();
+    }
+    const byId = new Map(this.getTrainingAssignments().map(a => [a.id, a]));
+    byId.set(assignment.id, assignment);
+    localStorage.setItem(STORAGE_KEYS.TRAINING_ASSIGNMENTS, JSON.stringify(Array.from(byId.values())));
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return assignment;
+  }
+
+  public getTraineeTrainerLinks(): TraineeTrainerLink[] {
+    if (!this.isClient()) return [];
+    this.init();
+    const raw = localStorage.getItem(STORAGE_KEYS.TRAINEE_TRAINERS);
+    return raw ? (JSON.parse(raw) as TraineeTrainerLink[]) : [];
+  }
+
+  public async saveTraineeTrainerLink(link: TraineeTrainerLink): Promise<TraineeTrainerLink> {
+    if (!this.isClient()) return link;
+    this.init();
+    if (db) {
+      await ensureAuth();
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'traineeTrainers', link.traineeId), sanitizeForFirestore(link));
+      await batch.commit();
+    }
+    const byId = new Map(this.getTraineeTrainerLinks().map(l => [l.traineeId, l]));
+    byId.set(link.traineeId, link);
+    localStorage.setItem(STORAGE_KEYS.TRAINEE_TRAINERS, JSON.stringify(Array.from(byId.values())));
+    window.dispatchEvent(new Event('sunny_db_update'));
+    return link;
   }
 
   public async moveIssuesToPending(
