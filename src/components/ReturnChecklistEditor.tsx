@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { ArrowDown, ArrowUp, Edit2, ListChecks, Plus, ToggleLeft, ToggleRight, Trash2, X } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { normalizeReturnQuestions } from '@/lib/returnFlow';
+import { applyPreviousUserQuestionSettings } from '@/lib/previousUserQuestionSettings';
 import type { ChecklistQuestion, QuestionType } from '@/types';
 
 const TYPE_LABEL: Record<string, string> = {
@@ -23,6 +24,8 @@ export function ReturnChecklistEditor() {
     type: 'yes_no' as QuestionType,
     required: true,
     helperText: '',
+    holdPreviousUserAccountable: false,
+    previousUserMessage: '',
   });
 
   const load = () => {
@@ -44,7 +47,14 @@ export function ReturnChecklistEditor() {
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ text: '', type: 'yes_no', required: true, helperText: '' });
+    setForm({
+      text: '',
+      type: 'yes_no',
+      required: true,
+      helperText: '',
+      holdPreviousUserAccountable: false,
+      previousUserMessage: '',
+    });
     setIsModalOpen(true);
   };
 
@@ -55,6 +65,8 @@ export function ReturnChecklistEditor() {
       type: q.type,
       required: q.required,
       helperText: q.helperText || '',
+      holdPreviousUserAccountable: Boolean(q.holdPreviousUserAccountable),
+      previousUserMessage: q.previousUserMessage || '',
     });
     setIsModalOpen(true);
   };
@@ -66,26 +78,38 @@ export function ReturnChecklistEditor() {
       await persist(
         questions.map((q) =>
           q.id === editing.id
-            ? {
-                ...q,
-                text: form.text.trim(),
-                type: form.type,
-                required: form.required,
-                helperText: form.helperText.trim() || undefined,
-              }
+            ? applyPreviousUserQuestionSettings(
+                {
+                  ...q,
+                  text: form.text.trim(),
+                  type: form.type,
+                  required: form.required,
+                  helperText: form.helperText.trim() || undefined,
+                },
+                {
+                  holdPreviousUserAccountable: form.holdPreviousUserAccountable,
+                  previousUserMessage: form.previousUserMessage,
+                },
+              )
             : q
         )
       );
     } else {
-      const newQ: ChecklistQuestion = {
-        id: `return-q-${Date.now()}`,
-        text: form.text.trim(),
-        category: 'general',
-        type: form.type,
-        required: form.required,
-        order: questions.length + 1,
-        helperText: form.helperText.trim() || undefined,
-      };
+      const newQ: ChecklistQuestion = applyPreviousUserQuestionSettings(
+        {
+          id: `return-q-${Date.now()}`,
+          text: form.text.trim(),
+          category: 'general',
+          type: form.type,
+          required: form.required,
+          order: questions.length + 1,
+          helperText: form.helperText.trim() || undefined,
+        },
+        {
+          holdPreviousUserAccountable: form.holdPreviousUserAccountable,
+          previousUserMessage: form.previousUserMessage,
+        },
+      );
       await persist([...questions, newQ]);
     }
     setIsModalOpen(false);
@@ -244,6 +268,33 @@ export function ReturnChecklistEditor() {
                   className="w-full px-3 py-2 text-xs rounded-xl border border-line"
                 />
               </div>
+              {(form.type === 'yes_no' || form.type === 'pass_fail') && (
+                <div className="space-y-2 rounded-xl border border-line p-3">
+                  <label className="flex items-start gap-2 text-xs font-bold cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.holdPreviousUserAccountable}
+                      onChange={(e) => setForm({ ...form, holdPreviousUserAccountable: e.target.checked })}
+                      className="mt-0.5 w-4 h-4"
+                    />
+                    <span>
+                      Hold previous user accountable
+                      <span className="block font-normal text-ink-faint mt-0.5">
+                        Issue answers notify the prior driver before their next scan.
+                      </span>
+                    </span>
+                  </label>
+                  {form.holdPreviousUserAccountable && (
+                    <textarea
+                      rows={2}
+                      placeholder="Message / measures for the previous user"
+                      value={form.previousUserMessage}
+                      onChange={(e) => setForm({ ...form, previousUserMessage: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-line"
+                    />
+                  )}
+                </div>
+              )}
               <label className="flex items-center gap-2 pt-1 text-xs font-bold cursor-pointer">
                 <input
                   type="checkbox"

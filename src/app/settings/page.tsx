@@ -36,6 +36,7 @@ import {
 import { dbService } from '@/lib/db';
 import { ChecklistQuestion, ChecklistCategoryConfig, QuestionType, ChecklistConfig, EquipmentOption, FleetTask, FlagCondition, PhotoRequirement } from '@/types';
 import { listDistinctEquipmentFamilies } from '@/lib/checklistPairing';
+import { applyPreviousUserQuestionSettings } from '@/lib/previousUserQuestionSettings';
 import { useAuth } from '@/context/AuthContext';
 import { ManagerOnly } from '@/components/ManagerOnly';
 import { AiImportModal } from '@/components/AiImportModal';
@@ -120,6 +121,8 @@ function SettingsPageContent() {
     flagCondition: FlagCondition;
     photoRequirement: PhotoRequirement;
     equipmentFamily: string;
+    holdPreviousUserAccountable: boolean;
+    previousUserMessage: string;
     visibility: 'always' | 'temporary' | 'seasonal';
     isTemporary: boolean;
     expiresAt: string;
@@ -140,6 +143,8 @@ function SettingsPageContent() {
     flagCondition: 'on_no',
     photoRequirement: 'optional',
     equipmentFamily: '',
+    holdPreviousUserAccountable: false,
+    previousUserMessage: '',
     visibility: 'always',
     isTemporary: false,
     expiresAt: '',
@@ -441,6 +446,8 @@ function SettingsPageContent() {
       flagCondition: 'on_no',
       photoRequirement: 'optional',
       equipmentFamily: '',
+      holdPreviousUserAccountable: false,
+      previousUserMessage: '',
       visibility: 'always',
       isTemporary: false,
       expiresAt: '',
@@ -467,6 +474,8 @@ function SettingsPageContent() {
       flagCondition: q.flagCondition || 'on_no',
       photoRequirement: q.photoRequirement || 'optional',
       equipmentFamily: q.equipmentFamily || '',
+      holdPreviousUserAccountable: Boolean(q.holdPreviousUserAccountable),
+      previousUserMessage: q.previousUserMessage || '',
       visibility: q.isSeasonal ? 'seasonal' : q.isTemporary ? 'temporary' : 'always',
       isTemporary: Boolean(q.isTemporary),
       expiresAt: q.expiresAt || '',
@@ -490,7 +499,7 @@ function SettingsPageContent() {
     let updatedQs: ChecklistQuestion[];
 
     if (editingQuestion) {
-      updatedQs = questions.map(q => q.id === editingQuestion.id ? {
+      updatedQs = questions.map(q => q.id === editingQuestion.id ? applyPreviousUserQuestionSettings({
         ...q,
         text: questionForm.text.trim(),
         category: questionForm.category,
@@ -509,9 +518,12 @@ function SettingsPageContent() {
         seasonEnd: questionForm.visibility === 'seasonal' ? questionForm.seasonEnd : null,
         forceActive: questionForm.visibility === 'seasonal' ? questionForm.seasonControl === 'force_on' : undefined,
         forcePaused: questionForm.visibility === 'seasonal' ? questionForm.seasonControl === 'paused' : undefined
-      } : q);
+      }, {
+        holdPreviousUserAccountable: questionForm.holdPreviousUserAccountable,
+        previousUserMessage: questionForm.previousUserMessage,
+      }) : q);
     } else {
-      const newQ: ChecklistQuestion = {
+      const newQ: ChecklistQuestion = applyPreviousUserQuestionSettings({
         id: `q-${Date.now()}`,
         text: questionForm.text.trim(),
         category: questionForm.category,
@@ -531,7 +543,10 @@ function SettingsPageContent() {
         seasonEnd: questionForm.visibility === 'seasonal' ? questionForm.seasonEnd : null,
         forceActive: questionForm.visibility === 'seasonal' ? questionForm.seasonControl === 'force_on' : undefined,
         forcePaused: questionForm.visibility === 'seasonal' ? questionForm.seasonControl === 'paused' : undefined
-      };
+      }, {
+        holdPreviousUserAccountable: questionForm.holdPreviousUserAccountable,
+        previousUserMessage: questionForm.previousUserMessage,
+      });
       updatedQs = [...questions, newQ];
     }
 
@@ -1503,6 +1518,42 @@ function SettingsPageContent() {
                     <option value="on_yes">Yes indicates issue</option>
                     <option value="never">Informational (never)</option>
                   </select>
+                </div>
+              )}
+
+              {(questionForm.type === 'yes_no' || questionForm.type === 'pass_fail') && (
+                <div className="space-y-2 rounded-xl border border-line bg-surface-2/40 p-3">
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      id="holdPreviousUser"
+                      checked={questionForm.holdPreviousUserAccountable}
+                      onChange={(e) =>
+                        setQuestionForm({ ...questionForm, holdPreviousUserAccountable: e.target.checked })
+                      }
+                      className="mt-0.5 w-4 h-4 text-ink rounded border-slate-300 focus:ring-sky-500"
+                    />
+                    <label htmlFor="holdPreviousUser" className="text-xs font-bold text-ink cursor-pointer">
+                      Hold previous user accountable
+                      <span className="block font-normal text-ink-faint mt-0.5">
+                        If answered as an issue, the prior driver must Acknowledge before their next QR scan on any truck.
+                      </span>
+                    </label>
+                  </div>
+                  {questionForm.holdPreviousUserAccountable && (
+                    <div>
+                      <label className="block text-xs font-bold text-ink uppercase tracking-wider mb-1">
+                        Message / measures for previous user
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="e.g. Clean the cab before you leave next time."
+                        value={questionForm.previousUserMessage}
+                        onChange={(e) => setQuestionForm({ ...questionForm, previousUserMessage: e.target.value })}
+                        className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -46,6 +46,7 @@ import { DEFAULT_RETURN_QUESTIONS, hasReturnForShift, normalizeReturnQuestions, 
 import { repairDuplicateCategoryIds } from './checklistCategories';
 import { compactConfirmedInspections } from './inspectionCache';
 import { assertDamagePayload, normalizeRegion } from './vehicleDamage';
+import { buildPreviousUserAccountabilityFlags } from './previousUserAccountability';
 import { 
   computeLifespanStatus,
   calculateLifespanDueDate,
@@ -3234,6 +3235,35 @@ public async saveChecklistCategories(categories: ChecklistCategoryConfig[]): Pro
       if (task && task.status !== 'completed') {
         saveLocally(() => this.updateTask({ ...task, status: 'completed', completedAt: nowIso, completedInspectionId: inspectionId }));
       }
+    }
+
+    try {
+      const config = this.getChecklistConfig();
+      const questions = [...(config.questions || []), ...(config.returnQuestions || [])];
+      const primaryAlert = alerts[0] || {
+        inspectionId,
+        vehicleId: vehicle.id,
+        inspectionKind: 'pretrip' as const,
+        reportedById: data.submittedById || data.userId || 'anon',
+        reportedAt: nowIso,
+      };
+      const drafts = buildPreviousUserAccountabilityFlags({
+        inspection: newInspection,
+        alert: primaryAlert,
+        questions,
+        assignments: this.getVehicleAssignments(),
+        inspections: this.getInspections(),
+        now: nowIso,
+      });
+      if (drafts.length) {
+        const flags = drafts.map((draft, idx) => ({
+          ...draft,
+          id: `puf-${inspectionId}-${idx}`,
+        }));
+        await this.savePreviousUserFlags(flags);
+      }
+    } catch (error) {
+      console.warn('Previous-user accountability flags were not saved:', error);
     }
 
     window.dispatchEvent(new Event('sunny_db_update'));
