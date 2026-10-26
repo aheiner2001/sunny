@@ -117,6 +117,10 @@ export default function TimesheetsClient() {
   const [returnModalShift, setReturnModalShift] = useState<ShiftRecord | null>(null);
   const [returnFeedback, setReturnFeedback] = useState('');
 
+  // Manager correction-request review (reject note)
+  const [rejectingRequest, setRejectingRequest] = useState<CorrectionRequest | null>(null);
+  const [rejectNote, setRejectNote] = useState('');
+
   // Manager edit drawer
   const [managerEditShift, setManagerEditShift] = useState<ShiftRecord | null>(null);
   const [managerEditForm, setManagerEditForm] = useState({
@@ -181,6 +185,15 @@ export default function TimesheetsClient() {
     const all = timesheetStore.getAllShifts();
     setShifts(all);
 
+    // Managers need the full correction queue; employees only see their own.
+    if (isManager) {
+      setCorrectionRequests(timesheetStore.getAllCorrectionRequests());
+    } else if (user?.id) {
+      setCorrectionRequests(timesheetStore.getCorrectionRequestsByEmployee(user.id));
+    } else {
+      setCorrectionRequests([]);
+    }
+
     if (user?.id) {
       const guard = timesheetStore.getActiveShiftGuard(user.id);
       if (guard?.activeShiftId) {
@@ -190,14 +203,10 @@ export default function TimesheetsClient() {
         const active = all.find((s) => s.employeeId === user.id && s.status === 'active');
         setActiveShift(active || null);
       }
-
-      const userCorrections = timesheetStore.getCorrectionRequestsByEmployee(user.id);
-      setCorrectionRequests(userCorrections);
     } else {
       setActiveShift(null);
-      setCorrectionRequests([]);
     }
-  }, [user?.id]);
+  }, [user?.id, isManager]);
 
   useEffect(() => {
     timesheetStore.init();
@@ -288,6 +297,19 @@ export default function TimesheetsClient() {
       return true;
     });
   }, [teamWeekShifts, managerEmployeeFilter, managerStatusFilter]);
+
+  /** Pending employee correction / missing-hours requests for the selected week. */
+  const pendingCorrectionRequests = useMemo(() => {
+    const startMs = new Date(weekStartUtc).getTime();
+    const endMs = new Date(weekEndUtc).getTime();
+    return correctionRequests
+      .filter((r) => {
+        if (r.status !== 'pending') return false;
+        const t = new Date(r.proposedStart).getTime();
+        return t >= startMs && t <= endMs;
+      })
+      .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+  }, [correctionRequests, weekStartUtc, weekEndUtc]);
 
   // Employee punch actions
   const handleClockIn = async (forceEvening: boolean = false) => {
@@ -465,6 +487,62 @@ export default function TimesheetsClient() {
       refreshData();
     } catch (err: any) {
       setNotification({ type: 'error', message: err.message || 'Error approving shift' });
+    }
+  };
+
+  const handleApproveCorrectionRequest = async (request: CorrectionRequest) => {
+    if (!user?.id) return;
+    try {
+      await timesheetService.reviewCorrectionRequest(
+        request.id,
+        { id: user.id, name: user.name || user.email || 'Manager' },
+        'approve',
+        '',
+      );
+      setNotification({
+        type: 'success',
+        message: `Approved correction for ${request.employeeName}`,
+      });
+      refreshData();
+    } catch (err: unknown) {
+      setNotification({
+        type: 'error',
+        message: humanizeTimesheetError(err, 'approve correction request'),
+      });
+    }
+  };
+
+  const handleOpenRejectCorrection = (request: CorrectionRequest) => {
+    setRejectingRequest(request);
+    setRejectNote('');
+  };
+
+  const handleConfirmRejectCorrection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.id || !rejectingRequest) return;
+    if (!rejectNote.trim()) {
+      setNotification({ type: 'error', message: 'Enter a reason for rejecting this request.' });
+      return;
+    }
+    try {
+      await timesheetService.reviewCorrectionRequest(
+        rejectingRequest.id,
+        { id: user.id, name: user.name || user.email || 'Manager' },
+        'reject',
+        rejectNote.trim(),
+      );
+      setRejectingRequest(null);
+      setRejectNote('');
+      setNotification({
+        type: 'success',
+        message: `Rejected correction for ${rejectingRequest.employeeName}`,
+      });
+      refreshData();
+    } catch (err: unknown) {
+      setNotification({
+        type: 'error',
+        message: humanizeTimesheetError(err, 'reject correction request'),
+      });
     }
   };
 
@@ -1055,6 +1133,74 @@ export default function TimesheetsClient() {
           <div className="space-y-4">
             {isManager && user && <HistoricalHoursRecovery actor={{ id: user.id, name: user.name }}
               weekStartUtc={weekStartUtc} weekEndUtc={weekEndUtc} />}
+
+            <section
+              className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/50 rounded-xl p-4 space-y-3 shadow-sm"
+              aria-label="Pending correction requests"
+            >
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h2 className="text-lg font-semibold flex items-center gap-2 m-0">
+                  <AlertCircle className="w-5 h-5 text-amber-600" aria-hidden />
+                  Correction requests ({pendingCorrectionRequests.length})
+                </h2>
+                <p className="text-xs text-slate-500 m-0">
+                  Shift corrections and missing-hours requests from employees this week.
+                </p>
+              </div>
+              {pendingCorrectionRequests.length === 0 ? (
+                <p className="text-sm text-slate-500 m-0">No pending correction requests for this week.</p>
+              ) : (
+                <ul className="m-0 p-0 list-none space-y-3">
+                  {pendingCorrectionRequests.map((req) => {
+                    const startLocal = DateTime.fromISO(req.proposedStart, {
+                      zone: DEFAULT_TIMEZONE,
+                    }).toFormat('LLL d, h:mm a');
+                    const endLocal = DateTime.fromISO(req.proposedEnd, {
+                      zone: DEFAULT_TIMEZONE,
+                    }).toFormat('LLL d, h:mm a');
+                    const breakMin = Math.round(req.proposedBreakSeconds / 60);
+                    return (
+                      <li
+                        key={req.id}
+                        className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-2"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0 space-y-1">
+                            <p className="text-sm font-semibold m-0">{req.employeeName}</p>
+                            <p className="text-xs text-slate-500 m-0">
+                              {req.shiftId ? 'Shift correction' : 'Missing hours'} · {startLocal} →{' '}
+                              {endLocal}
+                              {breakMin > 0 ? ` · ${breakMin}m break` : ''}
+                            </p>
+                            <p className="text-sm text-slate-700 dark:text-slate-300 m-0">
+                              <span className="font-medium">Reason: </span>
+                              {req.reason}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
+                              onClick={() => void handleApproveCorrectionRequest(req)}
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+                              onClick={() => handleOpenRejectCorrection(req)}
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <Shield className="w-5 h-5 text-indigo-600" />
@@ -1549,6 +1695,69 @@ export default function TimesheetsClient() {
                   className="px-5 py-2 text-sm font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white"
                 >
                   Submit Request
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reject correction request (Manager) */}
+      {rejectingRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-lg text-slate-900 dark:text-slate-100">
+                Reject correction request
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setRejectingRequest(null);
+                  setRejectNote('');
+                }}
+                className="text-slate-400 hover:text-slate-600"
+                aria-label="Close reject dialog"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={(e) => void handleConfirmRejectCorrection(e)} className="space-y-4">
+              <p className="text-sm text-slate-600 dark:text-slate-400 m-0">
+                Rejecting request from{' '}
+                <span className="font-semibold">{rejectingRequest.employeeName}</span>. Tell them what
+                to fix or why it was denied.
+              </p>
+              <div>
+                <label htmlFor="reject-correction-note" className="block text-xs font-semibold text-slate-500 mb-1">
+                  Reject reason (Required)
+                </label>
+                <textarea
+                  id="reject-correction-note"
+                  required
+                  rows={3}
+                  value={rejectNote}
+                  onChange={(e) => setRejectNote(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                  placeholder="e.g. End time must match the return checklist"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRejectingRequest(null);
+                    setRejectNote('');
+                  }}
+                  className="px-4 py-2 text-sm font-medium rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-sm font-semibold rounded-xl bg-rose-600 hover:bg-rose-700 text-white"
+                >
+                  Reject request
                 </button>
               </div>
             </form>
