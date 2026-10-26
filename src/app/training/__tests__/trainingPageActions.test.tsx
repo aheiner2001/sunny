@@ -11,6 +11,10 @@ const getUsers = vi.fn(() => [
   { id: 'emp-1', name: 'Alex', role: 'employee', status: 'active', isDesignatedTrainer: true },
   { id: 'emp-2', name: 'Sam', role: 'employee', status: 'active' },
 ]);
+let currentAuth = {
+  user: { id: 'mgr-1', name: 'Morgan', role: 'manager' },
+  role: 'manager',
+};
 
 vi.mock('@/lib/db', () => ({
   dbService: {
@@ -42,15 +46,8 @@ vi.mock('@/components/CurriculumSortList', () => ({
   CurriculumSortList: () => <div data-testid="curriculum-sort-list" />,
 }));
 
-vi.mock('@/components/TrainingLearnChart', () => ({
-  TrainingLearnChart: () => <div data-testid="learn-chart" />,
-}));
-
 vi.mock('@/context/AuthContext', () => ({
-  useAuth: () => ({
-    user: { id: 'mgr-1', name: 'Morgan', role: 'manager' },
-    role: 'manager',
-  }),
+  useAuth: () => currentAuth,
 }));
 
 vi.mock('@/components/ManagerOnly', () => ({
@@ -66,6 +63,21 @@ describe('Training page primary actions', () => {
     getTrainingItems.mockReturnValue([]);
     getTrainingAssignments.mockReturnValue([]);
     saveTrainingItems.mockRejectedValue(new Error('Firestore permission denied'));
+    currentAuth = {
+      user: { id: 'mgr-1', name: 'Morgan', role: 'manager' },
+      role: 'manager',
+    };
+  });
+
+  it('does not show manager-irrelevant sections', () => {
+    render(<TrainingPage />);
+
+    expect(screen.queryByRole('heading', { name: /^my training$/i })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /^onboarding$/i })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /^all assignments$/i })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /^learn chart$/i })).toBeNull();
+    expect(screen.getByRole('heading', { name: /^people$/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /^needs attention$/i })).toBeTruthy();
   });
 
   it('asks for a title when Add is clicked with an empty field', async () => {
@@ -94,5 +106,36 @@ describe('Training page primary actions', () => {
     fireEvent.click(screen.getByRole('button', { name: /add/i }));
     await waitFor(() => expect(saveTrainingItems).toHaveBeenCalled());
     expect((await screen.findByRole('status')).textContent).toMatch(/training step saved/i);
+  });
+
+  it('shows employee certification without manager sections', async () => {
+    currentAuth = {
+      user: { id: 'emp-2', name: 'Sam', role: 'employee' },
+      role: 'employee',
+    };
+    getTrainingAssignments.mockReturnValue([
+      {
+        id: 'assignment-1',
+        traineeId: 'emp-2',
+        traineeName: 'Sam',
+        itemId: 'item-1',
+        status: 'awaiting_trainee',
+        dueAt: null,
+        missStreak: 0,
+        events: [],
+        createdAt: '2026-10-26T12:00:00Z',
+        updatedAt: '2026-10-26T12:00:00Z',
+      },
+    ]);
+
+    render(<TrainingPage />);
+
+    expect(
+      await screen.findByRole('button', { name: /^i was trained — certify$/i }),
+    ).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /^my training$/i })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: /^people$/i })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /^needs attention$/i })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /^curriculum$/i })).toBeNull();
   });
 });
