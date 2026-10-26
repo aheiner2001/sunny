@@ -376,7 +376,7 @@ describe('TimesheetsClient (Manager Review)', () => {
       expect(screen.getByText(/approved correction for alice/i)).toBeDefined();
     });
 
-    expect(within(queue).getByText(/no pending correction requests/i)).toBeDefined();
+    expect(within(queue).getByText(/^no pending correction requests\.?$/i)).toBeDefined();
   });
 
   it('lets a manager reject a correction request with a required note', async () => {

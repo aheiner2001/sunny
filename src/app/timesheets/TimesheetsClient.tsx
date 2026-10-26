@@ -120,6 +120,7 @@ export default function TimesheetsClient() {
   // Manager correction-request review (reject note)
   const [rejectingRequest, setRejectingRequest] = useState<CorrectionRequest | null>(null);
   const [rejectNote, setRejectNote] = useState('');
+  const [correctionReviewBusy, setCorrectionReviewBusy] = useState(false);
 
   // Manager edit drawer
   const [managerEditShift, setManagerEditShift] = useState<ShiftRecord | null>(null);
@@ -298,18 +299,20 @@ export default function TimesheetsClient() {
     });
   }, [teamWeekShifts, managerEmployeeFilter, managerStatusFilter]);
 
-  /** Pending employee correction / missing-hours requests for the selected week. */
+  /** All pending employee correction / missing-hours requests (not week-gated). */
   const pendingCorrectionRequests = useMemo(() => {
-    const startMs = new Date(weekStartUtc).getTime();
-    const endMs = new Date(weekEndUtc).getTime();
     return correctionRequests
-      .filter((r) => {
-        if (r.status !== 'pending') return false;
-        const t = new Date(r.proposedStart).getTime();
-        return t >= startMs && t <= endMs;
-      })
+      .filter((r) => r.status === 'pending')
       .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
-  }, [correctionRequests, weekStartUtc, weekEndUtc]);
+  }, [correctionRequests]);
+
+  const isProposedInSelectedWeek = useCallback(
+    (proposedStart: string) => {
+      const t = new Date(proposedStart).getTime();
+      return t >= new Date(weekStartUtc).getTime() && t <= new Date(weekEndUtc).getTime();
+    },
+    [weekStartUtc, weekEndUtc],
+  );
 
   // Employee punch actions
   const handleClockIn = async (forceEvening: boolean = false) => {
@@ -491,7 +494,8 @@ export default function TimesheetsClient() {
   };
 
   const handleApproveCorrectionRequest = async (request: CorrectionRequest) => {
-    if (!user?.id) return;
+    if (!user?.id || correctionReviewBusy) return;
+    setCorrectionReviewBusy(true);
     try {
       await timesheetService.reviewCorrectionRequest(
         request.id,
@@ -509,21 +513,25 @@ export default function TimesheetsClient() {
         type: 'error',
         message: humanizeTimesheetError(err, 'approve correction request'),
       });
+    } finally {
+      setCorrectionReviewBusy(false);
     }
   };
 
   const handleOpenRejectCorrection = (request: CorrectionRequest) => {
+    if (correctionReviewBusy) return;
     setRejectingRequest(request);
     setRejectNote('');
   };
 
   const handleConfirmRejectCorrection = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user?.id || !rejectingRequest) return;
+    if (!user?.id || !rejectingRequest || correctionReviewBusy) return;
     if (!rejectNote.trim()) {
       setNotification({ type: 'error', message: 'Enter a reason for rejecting this request.' });
       return;
     }
+    setCorrectionReviewBusy(true);
     try {
       await timesheetService.reviewCorrectionRequest(
         rejectingRequest.id,
@@ -543,6 +551,8 @@ export default function TimesheetsClient() {
         type: 'error',
         message: humanizeTimesheetError(err, 'reject correction request'),
       });
+    } finally {
+      setCorrectionReviewBusy(false);
     }
   };
 
@@ -1144,11 +1154,11 @@ export default function TimesheetsClient() {
                   Correction requests ({pendingCorrectionRequests.length})
                 </h2>
                 <p className="text-xs text-slate-500 m-0">
-                  Shift corrections and missing-hours requests from employees this week.
+                  All pending shift corrections and missing-hours requests from employees.
                 </p>
               </div>
               {pendingCorrectionRequests.length === 0 ? (
-                <p className="text-sm text-slate-500 m-0">No pending correction requests for this week.</p>
+                <p className="text-sm text-slate-500 m-0">No pending correction requests.</p>
               ) : (
                 <ul className="m-0 p-0 list-none space-y-3">
                   {pendingCorrectionRequests.map((req) => {
@@ -1159,6 +1169,7 @@ export default function TimesheetsClient() {
                       zone: DEFAULT_TIMEZONE,
                     }).toFormat('LLL d, h:mm a');
                     const breakMin = Math.round(req.proposedBreakSeconds / 60);
+                    const inWeek = isProposedInSelectedWeek(req.proposedStart);
                     return (
                       <li
                         key={req.id}
@@ -1166,7 +1177,14 @@ export default function TimesheetsClient() {
                       >
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div className="min-w-0 space-y-1">
-                            <p className="text-sm font-semibold m-0">{req.employeeName}</p>
+                            <p className="text-sm font-semibold m-0 cluster gap-2 flex-wrap">
+                              {req.employeeName}
+                              {!inWeek ? (
+                                <span className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                                  Outside selected week
+                                </span>
+                              ) : null}
+                            </p>
                             <p className="text-xs text-slate-500 m-0">
                               {req.shiftId ? 'Shift correction' : 'Missing hours'} · {startLocal} →{' '}
                               {endLocal}
@@ -1180,14 +1198,16 @@ export default function TimesheetsClient() {
                           <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
-                              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
+                              className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
+                              disabled={correctionReviewBusy}
                               onClick={() => void handleApproveCorrectionRequest(req)}
                             >
                               Approve
                             </button>
                             <button
                               type="button"
-                              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+                              className="px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-60"
+                              disabled={correctionReviewBusy}
                               onClick={() => handleOpenRejectCorrection(req)}
                             >
                               Reject

@@ -109,7 +109,14 @@ function TrainingDashboard() {
     setError('');
     setMessage('');
     try {
-      await work();
+      await Promise.race([
+        work(),
+        new Promise<never>((_, reject) => {
+          window.setTimeout(() => {
+            reject(new Error('Cloud save timed out. Check your connection and try again.'));
+          }, 20000);
+        }),
+      ]);
       setMessage(success);
       refresh();
     } catch (err) {
