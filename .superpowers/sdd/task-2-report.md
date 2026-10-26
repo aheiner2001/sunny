@@ -91,3 +91,23 @@ Test Files  1 passed (1)
      Tests  4 passed (4)
    Duration  ~1.9s
 ```
+
+---
+
+## Re-review fix: includeMetadataChanges (2026-10-26)
+
+**Finding:** With `hasPendingWrites` early return only, Firestore may not deliver a follow-up snapshot when pending metadata clears unless `includeMetadataChanges: true` is set on the listener.
+
+**Change:** All four training/previous-user listeners pass `{ includeMetadataChanges: true }` as the `onSnapshot` options argument; `hasPendingWrites` guard unchanged.
+
+**Tests:** Mock records listener options; asserts all four collections; adds pending→committed hydration case for `trainingItems`.
+
+```text
+npx vitest run src/lib/training/__tests__/trainingPersistence.test.ts
+```
+
+```
+Test Files  1 passed (1)
+     Tests  6 passed (6)
+   Duration  ~1.9s
+```
