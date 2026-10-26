@@ -248,7 +248,7 @@ function TrainingDashboard() {
         async () => {
           await dbService.saveTrainingAssignment(row);
         },
-        `Marked ${trainee.name} trained on â€œ${item.title}â€.`,
+        `Marked ${trainee.name} trained on "${item.title}".`,
         'Could not mark trained.',
       );
     } catch (err) {
@@ -298,7 +298,7 @@ function TrainingDashboard() {
         async () => {
           await dbService.saveTrainingAssignment(next);
         },
-        `Retrain required for ${trainee.name} on â€œ${item.title}â€.`,
+        `Retrain required for ${trainee.name} on "${item.title}".`,
         'Could not require retrain.',
       );
     } catch (err) {
@@ -463,7 +463,7 @@ function TrainingDashboard() {
                       <div className="spread items-start gap-2 flex-wrap">
                         <div className="min-w-0 space-y-1">
                           <p className="text-sm font-semibold m-0">
-                            {row.traineeName} Â· {item?.title || row.itemId}
+                            {row.traineeName} - {item?.title || row.itemId}
                           </p>
                           <div
                             className="cluster gap-1.5"
@@ -522,7 +522,7 @@ function TrainingDashboard() {
               <h2 className="card-title text-base m-0">Curriculum</h2>
               <p className="hint m-0 mt-1">
                 Add steps and drag to reorder. Tap <strong>Link</strong> only when you want inspection
-                misses to count â€” usually previous-user questions.
+                misses to count - usually previous-user questions.
               </p>
             </div>
             <form onSubmit={e => void addItem(e)} className="flex flex-col sm:flex-row gap-2">
