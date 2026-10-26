@@ -734,4 +734,14 @@
 .curriculum-grid .react-grid-item.react-draggable-dragging { z-index: 10; box-shadow: 0 14px 35px rgba(15,23,36,.24); }
 .curriculum-grid .dashboard-drag-handle:focus-visible { outline: 2px solid #037996; outline-offset: 2px; }
 .curriculum-grid .curriculum-step-card { background: var(--surface); }
+/* Link dropdown must escape fixed grid-card height / overflow:hidden. */
+.curriculum-grid .react-grid-item,
+.curriculum-grid .dashboard-grid-card,
+.curriculum-grid .dashboard-card-body {
+  overflow: visible;
+}
+.curriculum-grid .react-grid-item:has(.curriculum-link-open),
+.curriculum-grid .curriculum-step-card.curriculum-link-open {
+  z-index: 20;
+}
 .dashboard-grid-colorful .dashboard-card-body .stat { color: inherit; }

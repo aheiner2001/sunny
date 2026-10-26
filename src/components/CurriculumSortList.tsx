@@ -86,8 +86,6 @@ export function CurriculumSortList({
     return prevOnly.length ? prevOnly : all;
   }, [questions, showAllQuestions]);
 
-  const linkingItem = items.find(i => i.id === linkingItemId) || null;
-
   if (!items.length) return null;
 
   return (
@@ -119,10 +117,13 @@ export function CurriculumSortList({
         >
           {items.map(item => {
             const linkCount = item.linkedQuestionIds.length;
+            const isLinking = linkingItemId === item.id;
             return (
               <section
                 key={item.id}
-                className="dashboard-grid-card curriculum-step-card min-w-0 flex flex-col rounded-2xl border border-line bg-surface shadow-sm overflow-hidden"
+                className={`dashboard-grid-card curriculum-step-card min-w-0 flex flex-col rounded-2xl border border-line bg-surface shadow-sm ${
+                  isLinking ? 'curriculum-link-open' : ''
+                }`}
               >
                 <header className="dashboard-card-header flex flex-wrap items-center justify-between gap-2 px-2 py-1">
                   <button
@@ -134,12 +135,14 @@ export function CurriculumSortList({
                     <GripVertical className="w-4 h-4 shrink-0" aria-hidden="true" />
                     <span className="truncate max-w-[12rem] sm:max-w-none">{item.title}</span>
                   </button>
-                  <div className="cluster gap-1">
+                  <div className="cluster gap-1 relative">
                     <button
                       type="button"
-                      className={`btn btn-secondary btn-sm ${linkCount ? '' : ''}`}
+                      className="btn btn-secondary btn-sm"
                       disabled={busy}
-                      aria-expanded={linkingItemId === item.id}
+                      aria-expanded={isLinking}
+                      aria-haspopup="dialog"
+                      aria-controls={isLinking ? `link-menu-${item.id}` : undefined}
                       aria-label={`Link inspection questions for ${item.title}`}
                       onClick={() =>
                         setLinkingItemId(current => (current === item.id ? null : item.id))
@@ -162,6 +165,78 @@ export function CurriculumSortList({
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
+                    {isLinking ? (
+                      <div
+                        id={`link-menu-${item.id}`}
+                        className="absolute right-0 top-full mt-1 z-30 w-[min(calc(100vw-2rem),22rem)] rounded-2xl border border-line bg-surface p-3 space-y-3 shadow-lg"
+                        role="dialog"
+                        aria-label={`Link questions for ${item.title}`}
+                        onMouseDown={e => e.stopPropagation()}
+                        onPointerDown={e => e.stopPropagation()}
+                      >
+                        <div className="spread items-start gap-2">
+                          <div className="min-w-0">
+                            <h3 className="card-title text-sm m-0 cluster gap-2">
+                              <Link2 className="h-4 w-4 shrink-0" aria-hidden />
+                              <span className="truncate">Link questions</span>
+                            </h3>
+                            <p className="hint m-0 mt-1">
+                              Prefer previous-user questions so a miss ticks that person&apos;s
+                              training.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm shrink-0"
+                            aria-label="Close link menu"
+                            onClick={() => setLinkingItemId(null)}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <label className="flex items-center gap-2 text-xs text-ink-muted">
+                          <input
+                            type="checkbox"
+                            checked={showAllQuestions}
+                            onChange={e => setShowAllQuestions(e.target.checked)}
+                          />
+                          Show all yes/no questions (not only previous-user)
+                        </label>
+                        {linkableQuestions.length ? (
+                          <ul className="m-0 p-0 list-none space-y-2 max-h-56 overflow-y-auto">
+                            {linkableQuestions.map(q => {
+                              const checked = item.linkedQuestionIds.includes(q.id);
+                              return (
+                                <li key={q.id}>
+                                  <label className="flex items-start gap-2 text-sm cursor-pointer rounded-xl border border-line p-2 hover:bg-surface-sunk/50">
+                                    <input
+                                      type="checkbox"
+                                      className="mt-1"
+                                      checked={checked}
+                                      disabled={busy}
+                                      onChange={() => onToggleLinkedQuestion(item, q.id)}
+                                    />
+                                    <span className="min-w-0">
+                                      <span className="font-medium text-ink">{q.text}</span>
+                                      {q.holdPreviousUserAccountable ? (
+                                        <span className="badge ml-1" data-status="flagged">
+                                          Prev. user
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                  </label>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        ) : (
+                          <p className="hint m-0">
+                            No matching questions yet. Add yes/no items in Settings and tag
+                            previous-user when needed.
+                          </p>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                 </header>
                 <div className="dashboard-card-body px-3 pb-3 space-y-2">
@@ -214,74 +289,6 @@ export function CurriculumSortList({
             );
           })}
         </GridLayout>
-      )}
-
-      {linkingItem && (
-        <div
-          className="mt-3 rounded-2xl border border-line bg-surface p-4 space-y-3 shadow-sm"
-          role="dialog"
-          aria-label={`Link questions for ${linkingItem.title}`}
-        >
-          <div className="spread items-start gap-2">
-            <div>
-              <h3 className="card-title text-sm m-0 cluster gap-2">
-                <Link2 className="h-4 w-4" aria-hidden />
-                Link questions — {linkingItem.title}
-              </h3>
-              <p className="hint m-0 mt-1">
-                Optional. Prefer previous-user questions so a miss ticks that person&apos;s training.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              aria-label="Close link panel"
-              onClick={() => setLinkingItemId(null)}
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          <label className="flex items-center gap-2 text-xs text-ink-muted">
-            <input
-              type="checkbox"
-              checked={showAllQuestions}
-              onChange={e => setShowAllQuestions(e.target.checked)}
-            />
-            Show all yes/no questions (not only previous-user)
-          </label>
-          {linkableQuestions.length ? (
-            <ul className="m-0 p-0 list-none space-y-2 max-h-56 overflow-y-auto">
-              {linkableQuestions.map(q => {
-                const checked = linkingItem.linkedQuestionIds.includes(q.id);
-                return (
-                  <li key={q.id}>
-                    <label className="flex items-start gap-2 text-sm cursor-pointer rounded-xl border border-line p-2 hover:bg-surface-sunk/50">
-                      <input
-                        type="checkbox"
-                        className="mt-1"
-                        checked={checked}
-                        disabled={busy}
-                        onChange={() => onToggleLinkedQuestion(linkingItem, q.id)}
-                      />
-                      <span className="min-w-0">
-                        <span className="font-medium text-ink">{q.text}</span>
-                        {q.holdPreviousUserAccountable ? (
-                          <span className="badge ml-1" data-status="flagged">
-                            Prev. user
-                          </span>
-                        ) : null}
-                      </span>
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="hint m-0">
-              No matching questions yet. Add yes/no items in Settings and tag previous-user when needed.
-            </p>
-          )}
-        </div>
       )}
     </div>
   );
