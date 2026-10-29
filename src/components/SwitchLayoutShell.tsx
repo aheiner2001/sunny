@@ -1,60 +1,91 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { SwitchTopBar } from '@/components/SwitchTopBar';
-import { SwitchFooter } from '@/components/SwitchFooter';
+import { SwitchHomeScreen } from '@/components/SwitchHomeScreen';
 import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
 import { QRScannerModal } from '@/components/QRScannerModal';
 import { ProfileModal } from '@/components/ProfileModal';
-import { QrCode, X } from 'lucide-react';
-import { dbService } from '@/lib/db';
+import { QrCode, X, ArrowLeft } from 'lucide-react';
+import { playSwitchSound } from '@/lib/switchAudio';
 
 export function SwitchLayoutShell({ children }: { children: React.ReactNode }) {
-  const { role, logout } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+  const { role } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const [pendingCount, setPendingCount] = useState(0);
 
-  useEffect(() => {
-    if (role !== 'manager') return;
-    const refresh = () => {
-      try {
-        const count = dbService.getInspectionAlerts().filter(a => a.status === 'pending').length;
-        setPendingCount(count);
-      } catch {
-        // Safe fallback
-      }
-    };
-    refresh();
-    window.addEventListener('sunny_db_update', refresh);
-    return () => window.removeEventListener('sunny_db_update', refresh);
-  }, [role]);
-
-  // If user is a manager, present the authentic Nintendo Switch OS Shell
+  // If user is a manager
   if (role === 'manager') {
-    return (
-      <div className="flex flex-col h-full min-h-0 bg-[#ebebeb] text-[#2c2c2c] overflow-hidden select-none">
-        {/* Switch Top Bar (Profile, Clock, Battery, WiFi) */}
-        <SwitchTopBar onProfileClick={() => setProfileModalOpen(true)} />
+    const isHomeScreen = pathname === '/dashboard' || pathname === '/';
 
-        {/* Central Viewport */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-8 py-4 sm:py-6">
-          <main id="main-content" className="w-full max-w-[1400px] mx-auto">
+    // 1. Full authentic Switch Home Screen (Pure White, Centered Carousel)
+    if (isHomeScreen) {
+      return (
+        <div className="w-screen h-screen overflow-hidden bg-white">
+          <SwitchHomeScreen
+            onScanClick={() => setScannerOpen(true)}
+            onProfileClick={() => setProfileModalOpen(true)}
+          />
+
+          <QRScannerModal
+            isOpen={scannerOpen}
+            onClose={() => setScannerOpen(false)}
+          />
+          <ProfileModal
+            isOpen={profileModalOpen}
+            onClose={() => setProfileModalOpen(false)}
+          />
+        </div>
+      );
+    }
+
+    // 2. Sub-Pages opened as a native Switch App with top (B) HOME return bar
+    return (
+      <div className="flex flex-col w-screen h-screen overflow-hidden bg-white text-[#2c2c2c] select-none">
+        {/* Switch App Header */}
+        <header className="h-16 px-6 bg-white border-b border-[#e5e5e5] flex items-center justify-between shrink-0 shadow-sm z-30">
+          <button
+            type="button"
+            onClick={() => {
+              playSwitchSound('home');
+              router.push('/dashboard');
+            }}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full border-2 border-[#504F4E] hover:border-[#1b98c6] hover:scale-105 transition-all text-[#333] font-bold text-sm"
+          >
+            <span className="switch-glyph-btn text-[#ff4554] border-[#ff4554]">B</span>
+            <span className="tracking-wide">HOME</span>
+          </button>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs uppercase font-extrabold tracking-wider px-2 py-0.5 rounded bg-[#f0f0f0] text-[#666]">
+              Switch App
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                playSwitchSound('popup');
+                setScannerOpen(true);
+              }}
+              className="p-2 rounded-full border border-[#d5d5d5] hover:border-[#ffa524] text-[#ffa524]"
+              title="Scan QR"
+            >
+              <QrCode className="w-5 h-5" />
+            </button>
+          </div>
+        </header>
+
+        {/* The original app content pane */}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-[#fafafa]">
+          <main id="main-content" className="w-full max-w-[1400px] mx-auto px-4 sm:px-8 py-6 pb-20">
             {children}
           </main>
         </div>
 
-        {/* Switch Bottom Action Tray */}
-        <SwitchFooter
-          onScanClick={() => setScannerOpen(true)}
-          onLogoutClick={logout}
-          pendingCount={pendingCount}
-        />
-
-        {/* Global Modals */}
         <QRScannerModal
           isOpen={scannerOpen}
           onClose={() => setScannerOpen(false)}
@@ -67,7 +98,7 @@ export function SwitchLayoutShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Employee Mode: Original reliable workflow
+  // Employee Mode: Original workflow intact
   return (
     <div className="flex h-full min-h-0">
       <div className="hidden lg:flex h-full shrink-0">

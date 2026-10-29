@@ -96,24 +96,33 @@
   --tap: 44px;            /* minimum touch target, gloves in a yard */
 
   /* Nintendo Switch UI Design Tokens */
-  --switch-bg: #ebebeb;
-  --switch-card-bg: #ffffff;
-  --switch-card-border: #d7d7d7;
-  --switch-cyan: #00c3e3;
-  --switch-cyan-glow: rgba(0, 195, 227, 0.45);
+  --switch-bg: #ffffff;
+  --switch-card-bg: #fcfcfc;
+  --switch-card-border: #ffffff;
+  --switch-cyan: #62EFDF;
+  --switch-cyan-glow: rgba(98, 239, 223, 0.6);
+  --switch-blue: #1b98c6;
   --switch-neon-red: #ff4554;
   --switch-text: #2c2c2c;
   --switch-text-muted: #6e6e6e;
 }
 
-/* Nintendo Switch Animations & Components */
-@keyframes switchPulse {
-  0%, 100% {
-    box-shadow: 0 0 0 4px var(--switch-cyan), 0 8px 24px var(--switch-cyan-glow);
-  }
-  50% {
-    box-shadow: 0 0 0 5px var(--switch-cyan), 0 12px 30px rgba(0, 195, 227, 0.6);
-  }
+/* Authentic Nintendo Switch Pulsing Glow Animation from Books App */
+@keyframes switchBorderPulse {
+  0% { border-color: #62EFDF; box-shadow: 0 0 16px rgba(98, 239, 223, 0.65); }
+  50% { border-color: #1b98c6; box-shadow: 0 0 22px rgba(27, 152, 198, 0.75); }
+  100% { border-color: #62EFDF; box-shadow: 0 0 16px rgba(98, 239, 223, 0.65); }
+}
+
+.switch-viewport {
+  width: 100%;
+  height: 100vh;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 2.5vh 3.5vw 2vh;
+  box-sizing: border-box;
 }
 
 .switch-glow {
@@ -121,33 +130,41 @@
 }
 
 .switch-glow:hover,
-.switch-glow:focus-visible {
-  transform: translateY(-4px) scale(1.02);
-  animation: switchPulse 1.8s infinite;
-  border-color: var(--switch-cyan) !important;
-  z-index: 10;
+.switch-glow:focus-visible,
+.switch-glow.is-selected {
+  transform: scale(1.1) !important;
+  animation: switchBorderPulse 1.2s infinite !important;
+  border-color: #62EFDF !important;
+  z-index: 20 !important;
 }
 
-.switch-btn-pill {
-  display: inline-flex;
+.switch-circle-btn {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1.5px solid #dcdcdc;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 9999px;
-  font-weight: 600;
-  border: 2px solid transparent;
-  transition: all 0.15s ease;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.15s ease, outline 0.15s ease, border-color 0.15s ease;
 }
 
-.switch-btn-pill:hover {
-  transform: scale(1.04);
+.switch-circle-btn:hover {
+  outline: 3.5px solid #1b98c6;
+  border-color: #1b98c6;
+  transform: scale(1.12);
 }
 
 .switch-glyph-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   border: 1.5px solid currentColor;
   font-size: 11px;
