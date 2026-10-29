@@ -36,7 +36,6 @@ import { loadDashboardColor, saveDashboardColor } from '@/lib/dashboardAppearanc
 import {
   filterTodaysIssues,
 } from '@/lib/dashboardLayout';
-import { SwitchManagerCarousel } from '@/components/SwitchManagerCarousel';
 
 const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
   stock_low_inventory: 'Stock / Low Inventory',
