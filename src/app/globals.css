@@ -94,6 +94,65 @@
 
   --focus: var(--ink);
   --tap: 44px;            /* minimum touch target, gloves in a yard */
+
+  /* Nintendo Switch UI Design Tokens */
+  --switch-bg: #ebebeb;
+  --switch-card-bg: #ffffff;
+  --switch-card-border: #d7d7d7;
+  --switch-cyan: #00c3e3;
+  --switch-cyan-glow: rgba(0, 195, 227, 0.45);
+  --switch-neon-red: #ff4554;
+  --switch-text: #2c2c2c;
+  --switch-text-muted: #6e6e6e;
+}
+
+/* Nintendo Switch Animations & Components */
+@keyframes switchPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 4px var(--switch-cyan), 0 8px 24px var(--switch-cyan-glow);
+  }
+  50% {
+    box-shadow: 0 0 0 5px var(--switch-cyan), 0 12px 30px rgba(0, 195, 227, 0.6);
+  }
+}
+
+.switch-glow {
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.25, 1), box-shadow 0.18s ease;
+}
+
+.switch-glow:hover,
+.switch-glow:focus-visible {
+  transform: translateY(-4px) scale(1.02);
+  animation: switchPulse 1.8s infinite;
+  border-color: var(--switch-cyan) !important;
+  z-index: 10;
+}
+
+.switch-btn-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  font-weight: 600;
+  border: 2px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.switch-btn-pill:hover {
+  transform: scale(1.04);
+}
+
+.switch-glyph-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 /* ==========================================================================

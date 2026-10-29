@@ -36,6 +36,7 @@ import { loadDashboardColor, saveDashboardColor } from '@/lib/dashboardAppearanc
 import {
   filterTodaysIssues,
 } from '@/lib/dashboardLayout';
+import { SwitchManagerCarousel } from '@/components/SwitchManagerCarousel';
 
 const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
   stock_low_inventory: 'Stock / Low Inventory',
@@ -207,6 +208,9 @@ export default function DashboardPage() {
 
   return (
     <div className="page max-w-full overflow-x-clip stack gap-6">
+      {/* Nintendo Switch OS Game/App Carousel */}
+      <SwitchManagerCarousel />
+
       {/* 1.2 Urgent Vehicle Safety Banner */}
       {urgentSafetyVehicles.length > 0 && !safetyAlertDismissed && (
         <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400 flex items-center justify-between flex-wrap gap-3" role="status" aria-live="polite">
