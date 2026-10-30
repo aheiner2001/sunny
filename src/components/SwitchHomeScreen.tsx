@@ -81,13 +81,13 @@ export function SwitchHomeScreen({
     return () => window.removeEventListener('sunny_db_update', refreshStats);
   }, []);
 
-  // Ordered strictly according to daily manager priority with custom Switch 3D icon artwork:
+  // Ordered strictly according to daily manager priority with clean minimalist vector Switch app icons:
   const apps: SwitchAppTile[] = [
     {
       title: 'Inspections Log',
       subtitle: 'Completed vehicle audits',
       href: '/inspections',
-      imageSrc: '/switch-icons/inspections.jpg',
+      imageSrc: '/switch-icons/inspections.svg',
       icon: ClipboardCheck,
       accentColor: '#10b981',
     },
@@ -95,24 +95,24 @@ export function SwitchHomeScreen({
       title: 'Timesheets',
       subtitle: 'Hours, edits & overtime',
       href: '/timesheets',
-      imageSrc: '/switch-icons/timesheets.jpg',
+      imageSrc: '/switch-icons/timesheets.svg',
       icon: Clock,
-      accentColor: '#06b6d4',
+      accentColor: '#00c3e3',
     },
     {
       title: 'Vehicles & Fleet',
       subtitle: `${activeVehicles} active units`,
       href: '/vehicles',
-      imageSrc: '/switch-icons/vehicles.jpg',
+      imageSrc: '/switch-icons/vehicles.svg',
       icon: Truck,
-      accentColor: '#00c3e3',
+      accentColor: '#0284c7',
       badge: activeVehicles > 0 ? activeVehicles : undefined,
     },
     {
       title: 'Pending Alerts',
       subtitle: 'Manager review queue',
       href: '/pending',
-      imageSrc: '/switch-icons/pending.jpg',
+      imageSrc: '/switch-icons/pending.svg',
       icon: Bell,
       accentColor: '#ff4554',
       badge: pendingAlerts > 0 ? pendingAlerts : undefined,
@@ -121,15 +121,15 @@ export function SwitchHomeScreen({
       title: 'Training & Skills',
       subtitle: 'Certifications & modules',
       href: '/training',
-      imageSrc: '/switch-icons/training.jpg',
+      imageSrc: '/switch-icons/training.svg',
       icon: GraduationCap,
-      accentColor: '#eab308',
+      accentColor: '#f59e0b',
     },
     {
       title: 'Equipment & Supplies',
       subtitle: 'Tools, stock & lifespans',
       href: '/equipment',
-      imageSrc: '/switch-icons/equipment.jpg',
+      imageSrc: '/switch-icons/equipment.svg',
       icon: Wrench,
       accentColor: '#8b5cf6',
     },
@@ -137,16 +137,16 @@ export function SwitchHomeScreen({
       title: 'Issues & Repairs',
       subtitle: 'Fleet maintenance requests',
       href: '/issues',
-      imageSrc: '/switch-icons/issues.jpg',
+      imageSrc: '/switch-icons/issues.svg',
       icon: AlertTriangle,
-      accentColor: '#f59e0b',
+      accentColor: '#f97316',
       badge: openIssues > 0 ? openIssues : undefined,
     },
     {
       title: 'Calendar Schedule',
       subtitle: 'Inspection appointments',
       href: '/calendar',
-      imageSrc: '/switch-icons/calendar.jpg',
+      imageSrc: '/switch-icons/calendar.svg',
       icon: CalendarDays,
       accentColor: '#3b82f6',
     },
@@ -154,7 +154,7 @@ export function SwitchHomeScreen({
       title: 'Employee Roster',
       subtitle: 'Security pins & access',
       href: '/employees',
-      imageSrc: '/switch-icons/employees.jpg',
+      imageSrc: '/switch-icons/employees.svg',
       icon: Users,
       accentColor: '#ec4899',
     },
@@ -318,12 +318,12 @@ export function SwitchHomeScreen({
               router.push('/inspections');
             }}
             className="switch-circle-btn group"
-            title="Album & Inspection Records"
+            title="Completed Inspection Records"
           >
-            <Image className="w-6 h-6 text-[#0885a5] group-hover:scale-110 transition-transform" />
+            <ClipboardCheck className="w-6 h-6 text-[#10b981] group-hover:scale-110 transition-transform" />
           </button>
 
-          {/* Controllers / Vehicles */}
+          {/* Fleet Vehicles */}
           <button
             type="button"
             onClick={() => {
@@ -331,9 +331,9 @@ export function SwitchHomeScreen({
               router.push('/vehicles');
             }}
             className="switch-circle-btn group"
-            title="Controllers & Fleet Fleet Vehicles"
+            title="Fleet Vehicles & Status"
           >
-            <Gamepad2 className="w-6 h-6 text-[#444] group-hover:scale-110 transition-transform" />
+            <Truck className="w-6 h-6 text-[#0284c7] group-hover:scale-110 transition-transform" />
           </button>
 
           {/* Settings */}

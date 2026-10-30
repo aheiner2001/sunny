@@ -1,31 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#4f46e5"/>
-      <stop offset="100%" stop-color="#312e81"/>
-    </linearGradient>
-    <linearGradient id="bar1" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#38bdf8"/>
-      <stop offset="100%" stop-color="#0284c7"/>
-    </linearGradient>
-    <linearGradient id="bar2" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#34d399"/>
-      <stop offset="100%" stop-color="#059669"/>
-    </linearGradient>
-    <linearGradient id="bar3" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#f472b6"/>
-      <stop offset="100%" stop-color="#db2777"/>
-    </linearGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000" flood-opacity="0.35"/>
-    </filter>
-  </defs>
-  <rect width="512" height="512" rx="110" fill="url(#bg)"/>
-  <g filter="url(#glow)">
-    <rect x="110" y="260" width="64" height="160" rx="16" fill="url(#bar1)"/>
-    <rect x="224" y="180" width="64" height="240" rx="16" fill="url(#bar2)"/>
-    <rect x="338" y="120" width="64" height="300" rx="16" fill="url(#bar3)"/>
-    <path d="M130 230 L240 150 L350 80" fill="none" stroke="#ffffff" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
-    <polygon points="350,60 380,80 350,100" fill="#ffffff"/>
-  </g>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+    <rect width="200" height="200" rx="48" fill="#6366f1"/>
+    <!-- Clean bar chart with upward trendline -->
+    <rect x="50" y="110" width="24" height="44" rx="7" fill="#ffffff" opacity="0.85"/>
+    <rect x="88" y="82" width="24" height="72" rx="7" fill="#ffffff"/>
+    <rect x="126" y="58" width="24" height="96" rx="7" fill="#38bdf8"/>
+    <path d="M58 96 L98 70 L136 46" fill="none" stroke="#a5f3fc" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="136,38 148,48 134,54" fill="#a5f3fc"/>
+  </svg>
