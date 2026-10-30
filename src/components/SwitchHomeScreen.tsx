@@ -26,6 +26,7 @@ import { playSwitchSound } from '@/lib/switchAudio';
 import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { getResolvedAvatarUrl } from '@/lib/avatarPresets';
+import { asset } from '@/lib/basePath';
 
 interface SwitchAppTile {
   title: string;
@@ -87,7 +88,7 @@ export function SwitchHomeScreen({
       title: 'Inspections Log',
       subtitle: 'Completed vehicle audits',
       href: '/inspections',
-      imageSrc: '/switch-icons/inspections.svg',
+      imageSrc: asset('/switch-icons/inspections.svg'),
       icon: ClipboardCheck,
       accentColor: '#10b981',
     },
@@ -95,7 +96,7 @@ export function SwitchHomeScreen({
       title: 'Timesheets',
       subtitle: 'Hours, edits & overtime',
       href: '/timesheets',
-      imageSrc: '/switch-icons/timesheets.svg',
+      imageSrc: asset('/switch-icons/timesheets.svg'),
       icon: Clock,
       accentColor: '#00c3e3',
     },
@@ -103,7 +104,7 @@ export function SwitchHomeScreen({
       title: 'Vehicles & Fleet',
       subtitle: `${activeVehicles} active units`,
       href: '/vehicles',
-      imageSrc: '/switch-icons/vehicles.svg',
+      imageSrc: asset('/switch-icons/vehicles.svg'),
       icon: Truck,
       accentColor: '#0284c7',
       badge: activeVehicles > 0 ? activeVehicles : undefined,
@@ -112,7 +113,7 @@ export function SwitchHomeScreen({
       title: 'Pending Alerts',
       subtitle: 'Manager review queue',
       href: '/pending',
-      imageSrc: '/switch-icons/pending.svg',
+      imageSrc: asset('/switch-icons/pending.svg'),
       icon: Bell,
       accentColor: '#ff4554',
       badge: pendingAlerts > 0 ? pendingAlerts : undefined,
@@ -121,7 +122,7 @@ export function SwitchHomeScreen({
       title: 'Training & Skills',
       subtitle: 'Certifications & modules',
       href: '/training',
-      imageSrc: '/switch-icons/training.svg',
+      imageSrc: asset('/switch-icons/training.svg'),
       icon: GraduationCap,
       accentColor: '#f59e0b',
     },
@@ -129,7 +130,7 @@ export function SwitchHomeScreen({
       title: 'Equipment & Supplies',
       subtitle: 'Tools, stock & lifespans',
       href: '/equipment',
-      imageSrc: '/switch-icons/equipment.svg',
+      imageSrc: asset('/switch-icons/equipment.svg'),
       icon: Wrench,
       accentColor: '#8b5cf6',
     },
@@ -137,7 +138,7 @@ export function SwitchHomeScreen({
       title: 'Issues & Repairs',
       subtitle: 'Fleet maintenance requests',
       href: '/issues',
-      imageSrc: '/switch-icons/issues.svg',
+      imageSrc: asset('/switch-icons/issues.svg'),
       icon: AlertTriangle,
       accentColor: '#f97316',
       badge: openIssues > 0 ? openIssues : undefined,
@@ -146,7 +147,7 @@ export function SwitchHomeScreen({
       title: 'Calendar Schedule',
       subtitle: 'Inspection appointments',
       href: '/calendar',
-      imageSrc: '/switch-icons/calendar.svg',
+      imageSrc: asset('/switch-icons/calendar.svg'),
       icon: CalendarDays,
       accentColor: '#3b82f6',
     },
@@ -154,7 +155,7 @@ export function SwitchHomeScreen({
       title: 'Employee Roster',
       subtitle: 'Security pins & access',
       href: '/employees',
-      imageSrc: '/switch-icons/employees.svg',
+      imageSrc: asset('/switch-icons/employees.svg'),
       icon: Users,
       accentColor: '#ec4899',
     },
@@ -162,7 +163,7 @@ export function SwitchHomeScreen({
       title: 'Reports & Analytics',
       subtitle: 'PDF exports & KPI data',
       href: '/reports',
-      imageSrc: '/switch-icons/reports.svg',
+      imageSrc: asset('/switch-icons/reports.svg'),
       icon: BarChart3,
       accentColor: '#6366f1',
     },
@@ -170,7 +171,7 @@ export function SwitchHomeScreen({
       title: 'System Settings',
       subtitle: 'Form setup & database',
       href: '/settings',
-      imageSrc: '/switch-icons/settings.svg',
+      imageSrc: asset('/switch-icons/settings.svg'),
       icon: Settings,
       accentColor: '#64748b',
     },
@@ -178,35 +179,39 @@ export function SwitchHomeScreen({
 
   return (
     <div className="switch-viewport select-none">
-      {/* 1. TOP ROW: Profile Avatar & Status Icons */}
-      <div className="flex items-center justify-between h-[8vh] px-4 sm:px-8">
+      {/* 1. TOP ROW: Profile Avatar & Status Icons - Clean spacing to prevent any overlap */}
+      <div className="flex items-center justify-between h-[8vh] px-4 sm:px-8 border-b border-[#f0f0f0] bg-white">
         <button
           type="button"
           onClick={() => {
             playSwitchSound('user');
             onProfileClick();
           }}
-          className="flex items-center gap-3.5 group focus:outline-none"
+          className="flex items-center gap-3 group focus:outline-none shrink-0"
         >
-          <div className="w-13 h-13 rounded-full border-[3px] border-[#504F4E] group-hover:border-[#3db4ad] group-hover:scale-105 transition-all overflow-hidden bg-[#0885a5] shadow-sm flex items-center justify-center text-white font-bold text-lg">
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full border-[2.5px] border-[#504F4E] group-hover:border-[#00c3e3] group-hover:scale-105 transition-all overflow-hidden bg-[#0885a5] shadow-sm flex items-center justify-center text-white font-bold text-base">
             {avatarUrl ? (
               <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
             ) : (
               user?.name?.[0]?.toUpperCase() || 'M'
             )}
           </div>
-          <span className="text-xl font-medium text-[#333] group-hover:text-[#0885a5] transition-colors">
-            {user?.name || 'Manager'}
-          </span>
+          <div className="text-left flex flex-col justify-center">
+            <span className="text-base sm:text-lg font-bold text-[#222] group-hover:text-[#0885a5] transition-colors leading-tight">
+              {user?.name || 'Manager'}
+            </span>
+            <span className="text-[11px] font-semibold text-[#888] uppercase tracking-wider">
+              {role || 'Operations'}
+            </span>
+          </div>
         </button>
 
-        <div className="flex items-center gap-4 text-xl font-medium text-[#444]">
+        <div className="flex items-center gap-4 text-sm sm:text-base font-bold text-[#444] shrink-0">
           <span>{timeStr}</span>
-          <Wifi className="w-5 h-5 text-[#444]" />
-          <div className="flex items-center gap-1">
-            <span className="text-sm font-bold">100%</span>
-            <BatteryMedium className="w-6 h-6 text-[#444]" />
-          </div>
+          <div className="w-px h-4 bg-[#e0e0e0]" />
+          <span className="text-xs uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-[#f0f9ff] text-[#0284c7] border border-[#bae6fd]">
+            Sunny Fleet OS
+          </span>
         </div>
       </div>
 
@@ -275,7 +280,7 @@ export function SwitchHomeScreen({
         })}
       </div>
 
-      {/* 4. CIRCULAR OPTION BUTTONS & JOY-CON LEGEND */}
+      {/* 4. CIRCULAR OPTION BUTTONS & CONSOLE CONTROLS */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 h-[12vh] px-6 sm:px-12 pt-2">
         {/* Switch Action Tray */}
         <div className="flex items-center justify-center gap-4 sm:gap-6">
@@ -349,7 +354,7 @@ export function SwitchHomeScreen({
             <Settings className="w-6 h-6 text-[#444] group-hover:scale-110 transition-transform" />
           </button>
 
-          {/* Sleep / Logout */}
+          {/* Sleep / Logout placed cleanly at far right of tray */}
           <button
             type="button"
             onClick={() => {
@@ -357,22 +362,16 @@ export function SwitchHomeScreen({
               logout();
             }}
             className="switch-circle-btn group"
-            title="Sleep Console / Logout"
+            title="Lock Console / Sign Out"
           >
             <Power className="w-6 h-6 text-[#888] group-hover:text-[#ff4554] group-hover:scale-110 transition-all" />
           </button>
         </div>
 
-        {/* Joy-Con Controller Legend */}
-        <div className="flex items-center gap-5 text-sm font-bold text-[#666]">
-          <div className="flex items-center gap-1.5">
-            <span className="switch-glyph-btn text-[#00c3e3] border-[#00c3e3]">A</span>
-            <span>Start</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="switch-glyph-btn text-[#ff4554] border-[#ff4554]">B</span>
-            <span>Back</span>
-          </div>
+        {/* Clean right side status badge */}
+        <div className="flex items-center gap-3 text-xs font-bold text-[#888]">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] animate-pulse" />
+          <span className="tracking-wide uppercase text-[11px] font-extrabold text-[#555]">System Ready</span>
         </div>
       </div>
     </div>

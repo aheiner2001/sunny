@@ -1,9 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
-    <rect width="200" height="200" rx="48" fill="#6366f1"/>
-    <!-- Clean bar chart with upward trendline -->
-    <rect x="50" y="110" width="24" height="44" rx="7" fill="#ffffff" opacity="0.85"/>
-    <rect x="88" y="82" width="24" height="72" rx="7" fill="#ffffff"/>
-    <rect x="126" y="58" width="24" height="96" rx="7" fill="#38bdf8"/>
-    <path d="M58 96 L98 70 L136 46" fill="none" stroke="#a5f3fc" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-    <polygon points="136,38 148,48 134,54" fill="#a5f3fc"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+    <defs>
+      <linearGradient id="g-rep" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#6366f1"/>
+        <stop offset="100%" stop-color="#4338ca"/>
+      </linearGradient>
+    </defs>
+    <rect width="120" height="120" rx="28" fill="url(#g-rep)"/>
+    <!-- Clean bar chart with upward trend arrow -->
+    <rect x="30" y="66" width="14" height="28" rx="4" fill="#ffffff" opacity="0.85"/>
+    <rect x="53" y="49" width="14" height="45" rx="4" fill="#ffffff"/>
+    <rect x="76" y="34" width="14" height="60" rx="4" fill="#38bdf8"/>
+    <path d="M35 58 L59 42 L82 27" fill="none" stroke="#a5f3fc" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="82,22 90,28 81,32" fill="#a5f3fc"/>
   </svg>
