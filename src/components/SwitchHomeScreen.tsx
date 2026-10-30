@@ -31,6 +31,7 @@ interface SwitchAppTile {
   title: string;
   subtitle: string;
   href: string;
+  imageSrc?: string;
   icon: React.ElementType;
   accentColor: string;
   badge?: number | string;
@@ -80,12 +81,13 @@ export function SwitchHomeScreen({
     return () => window.removeEventListener('sunny_db_update', refreshStats);
   }, []);
 
-  // Ordered strictly according to daily manager priority with all pages included:
+  // Ordered strictly according to daily manager priority with custom Switch 3D icon artwork:
   const apps: SwitchAppTile[] = [
     {
       title: 'Inspections Log',
       subtitle: 'Completed vehicle audits',
       href: '/inspections',
+      imageSrc: '/switch-icons/inspections.jpg',
       icon: ClipboardCheck,
       accentColor: '#10b981',
     },
@@ -93,6 +95,7 @@ export function SwitchHomeScreen({
       title: 'Timesheets',
       subtitle: 'Hours, edits & overtime',
       href: '/timesheets',
+      imageSrc: '/switch-icons/timesheets.jpg',
       icon: Clock,
       accentColor: '#06b6d4',
     },
@@ -100,6 +103,7 @@ export function SwitchHomeScreen({
       title: 'Vehicles & Fleet',
       subtitle: `${activeVehicles} active units`,
       href: '/vehicles',
+      imageSrc: '/switch-icons/vehicles.jpg',
       icon: Truck,
       accentColor: '#00c3e3',
       badge: activeVehicles > 0 ? activeVehicles : undefined,
@@ -108,6 +112,7 @@ export function SwitchHomeScreen({
       title: 'Pending Alerts',
       subtitle: 'Manager review queue',
       href: '/pending',
+      imageSrc: '/switch-icons/pending.jpg',
       icon: Bell,
       accentColor: '#ff4554',
       badge: pendingAlerts > 0 ? pendingAlerts : undefined,
@@ -116,6 +121,7 @@ export function SwitchHomeScreen({
       title: 'Training & Skills',
       subtitle: 'Certifications & modules',
       href: '/training',
+      imageSrc: '/switch-icons/training.jpg',
       icon: GraduationCap,
       accentColor: '#eab308',
     },
@@ -123,6 +129,7 @@ export function SwitchHomeScreen({
       title: 'Equipment & Supplies',
       subtitle: 'Tools, stock & lifespans',
       href: '/equipment',
+      imageSrc: '/switch-icons/equipment.jpg',
       icon: Wrench,
       accentColor: '#8b5cf6',
     },
@@ -130,6 +137,7 @@ export function SwitchHomeScreen({
       title: 'Issues & Repairs',
       subtitle: 'Fleet maintenance requests',
       href: '/issues',
+      imageSrc: '/switch-icons/issues.jpg',
       icon: AlertTriangle,
       accentColor: '#f59e0b',
       badge: openIssues > 0 ? openIssues : undefined,
@@ -138,6 +146,7 @@ export function SwitchHomeScreen({
       title: 'Calendar Schedule',
       subtitle: 'Inspection appointments',
       href: '/calendar',
+      imageSrc: '/switch-icons/calendar.jpg',
       icon: CalendarDays,
       accentColor: '#3b82f6',
     },
@@ -145,6 +154,7 @@ export function SwitchHomeScreen({
       title: 'Employee Roster',
       subtitle: 'Security pins & access',
       href: '/employees',
+      imageSrc: '/switch-icons/employees.jpg',
       icon: Users,
       accentColor: '#ec4899',
     },
@@ -152,6 +162,7 @@ export function SwitchHomeScreen({
       title: 'Reports & Analytics',
       subtitle: 'PDF exports & KPI data',
       href: '/reports',
+      imageSrc: '/switch-icons/reports.svg',
       icon: BarChart3,
       accentColor: '#6366f1',
     },
@@ -159,6 +170,7 @@ export function SwitchHomeScreen({
       title: 'System Settings',
       subtitle: 'Form setup & database',
       href: '/settings',
+      imageSrc: '/switch-icons/settings.svg',
       icon: Settings,
       accentColor: '#64748b',
     },
@@ -231,13 +243,23 @@ export function SwitchHomeScreen({
                 </span>
               )}
 
-              <div className="flex items-center justify-center flex-1">
-                <div
-                  className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-inner transition-transform group-hover:scale-110"
-                  style={{ backgroundColor: `${app.accentColor}18`, color: app.accentColor }}
-                >
-                  <Icon className="w-10 h-10 stroke-[2.2]" />
-                </div>
+              <div className="flex items-center justify-center flex-1 my-1">
+                {app.imageSrc ? (
+                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden shadow-md group-hover:scale-105 transition-transform duration-150">
+                    <img
+                      src={app.imageSrc}
+                      alt={app.title}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-inner transition-transform group-hover:scale-110"
+                    style={{ backgroundColor: `${app.accentColor}18`, color: app.accentColor }}
+                  >
+                    <Icon className="w-10 h-10 stroke-[2.2]" />
+                  </div>
+                )}
               </div>
 
               <div>
