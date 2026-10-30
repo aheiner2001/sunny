@@ -4,17 +4,17 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  Truck,
   ClipboardCheck,
-  Wrench,
   Clock,
-  AlertTriangle,
+  Truck,
   Bell,
+  GraduationCap,
+  Wrench,
+  AlertTriangle,
   Users,
   BarChart3,
   Settings,
   CalendarDays,
-  LayoutDashboard,
   Wifi,
   BatteryMedium,
   Image,
@@ -47,7 +47,7 @@ export function SwitchHomeScreen({
   const { user, role, logout } = useAuth();
   const avatarUrl = getResolvedAvatarUrl(user);
   const [timeStr, setTimeStr] = useState('12:00 PM');
-  const [activeTitle, setActiveTitle] = useState('Vehicles & Fleet');
+  const [activeTitle, setActiveTitle] = useState('Inspections Log');
   const [pendingAlerts, setPendingAlerts] = useState(0);
   const [openIssues, setOpenIssues] = useState(0);
   const [activeVehicles, setActiveVehicles] = useState(0);
@@ -80,15 +80,8 @@ export function SwitchHomeScreen({
     return () => window.removeEventListener('sunny_db_update', refreshStats);
   }, []);
 
+  // Ordered strictly according to daily manager priority with all pages included:
   const apps: SwitchAppTile[] = [
-    {
-      title: 'Vehicles & Fleet',
-      subtitle: `${activeVehicles} active units`,
-      href: '/vehicles',
-      icon: Truck,
-      accentColor: '#00c3e3',
-      badge: activeVehicles > 0 ? activeVehicles : undefined,
-    },
     {
       title: 'Inspections Log',
       subtitle: 'Completed vehicle audits',
@@ -104,12 +97,34 @@ export function SwitchHomeScreen({
       accentColor: '#06b6d4',
     },
     {
+      title: 'Vehicles & Fleet',
+      subtitle: `${activeVehicles} active units`,
+      href: '/vehicles',
+      icon: Truck,
+      accentColor: '#00c3e3',
+      badge: activeVehicles > 0 ? activeVehicles : undefined,
+    },
+    {
       title: 'Pending Alerts',
       subtitle: 'Manager review queue',
       href: '/pending',
       icon: Bell,
       accentColor: '#ff4554',
       badge: pendingAlerts > 0 ? pendingAlerts : undefined,
+    },
+    {
+      title: 'Training & Skills',
+      subtitle: 'Certifications & modules',
+      href: '/training',
+      icon: GraduationCap,
+      accentColor: '#eab308',
+    },
+    {
+      title: 'Equipment & Supplies',
+      subtitle: 'Tools, stock & lifespans',
+      href: '/equipment',
+      icon: Wrench,
+      accentColor: '#8b5cf6',
     },
     {
       title: 'Issues & Repairs',
@@ -120,13 +135,6 @@ export function SwitchHomeScreen({
       badge: openIssues > 0 ? openIssues : undefined,
     },
     {
-      title: 'Equipment & Supplies',
-      subtitle: 'Tools, stock & lifespans',
-      href: '/equipment',
-      icon: Wrench,
-      accentColor: '#8b5cf6',
-    },
-    {
       title: 'Calendar Schedule',
       subtitle: 'Inspection appointments',
       href: '/calendar',
@@ -134,8 +142,8 @@ export function SwitchHomeScreen({
       accentColor: '#3b82f6',
     },
     {
-      title: 'Employees & Access',
-      subtitle: 'Roster & security pins',
+      title: 'Employee Roster',
+      subtitle: 'Security pins & access',
       href: '/employees',
       icon: Users,
       accentColor: '#ec4899',
@@ -149,7 +157,7 @@ export function SwitchHomeScreen({
     },
     {
       title: 'System Settings',
-      subtitle: 'Options & configurations',
+      subtitle: 'Form setup & database',
       href: '/settings',
       icon: Settings,
       accentColor: '#64748b',
@@ -159,7 +167,7 @@ export function SwitchHomeScreen({
   return (
     <div className="switch-viewport select-none">
       {/* 1. TOP ROW: Profile Avatar & Status Icons */}
-      <div className="flex items-center justify-between h-[8vh] px-2">
+      <div className="flex items-center justify-between h-[8vh] px-4 sm:px-8">
         <button
           type="button"
           onClick={() => {
@@ -197,8 +205,8 @@ export function SwitchHomeScreen({
         </span>
       </div>
 
-      {/* 3. CENTER CAROUSEL (Game Cards) */}
-      <div className="w-full flex items-center justify-start sm:justify-center gap-5 overflow-x-auto py-6 px-4 scrollbar-thin">
+      {/* 3. CENTER CAROUSEL (Game Cards) - Centered with safe side padding to eliminate left clipping */}
+      <div className="w-full flex items-center gap-6 overflow-x-auto py-8 px-12 sm:px-24 snap-x snap-mandatory scroll-px-12 sm:scroll-px-24 scrollbar-thin">
         {apps.map((app) => {
           const Icon = app.icon;
           const isSelected = activeTitle === app.title;
@@ -213,8 +221,8 @@ export function SwitchHomeScreen({
               onClick={() => {
                 playSwitchSound('popup');
               }}
-              className={`switch-glow relative shrink-0 w-48 h-48 sm:w-56 sm:h-56 rounded-xl bg-[#fcfcfc] border-[3.5px] p-5 flex flex-col justify-between text-center cursor-pointer shadow-md ${
-                isSelected ? 'is-selected border-[#62EFDF]' : 'border-white'
+              className={`switch-glow relative shrink-0 w-48 h-48 sm:w-56 sm:h-56 rounded-2xl bg-[#ffffff] border-[3.5px] p-5 flex flex-col justify-between text-center cursor-pointer shadow-md snap-center ${
+                isSelected ? 'is-selected border-[#62EFDF]' : 'border-[#f0f0f0]'
               }`}
             >
               {app.badge !== undefined && (
@@ -225,7 +233,7 @@ export function SwitchHomeScreen({
 
               <div className="flex items-center justify-center flex-1">
                 <div
-                  className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-inner"
+                  className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-inner transition-transform group-hover:scale-110"
                   style={{ backgroundColor: `${app.accentColor}18`, color: app.accentColor }}
                 >
                   <Icon className="w-10 h-10 stroke-[2.2]" />
@@ -246,7 +254,7 @@ export function SwitchHomeScreen({
       </div>
 
       {/* 4. CIRCULAR OPTION BUTTONS & JOY-CON LEGEND */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 h-[12vh] px-4 pt-2">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 h-[12vh] px-6 sm:px-12 pt-2">
         {/* Switch Action Tray */}
         <div className="flex items-center justify-center gap-4 sm:gap-6">
           {/* News / Alerts */}
