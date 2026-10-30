@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+    <defs>
+      <linearGradient id="g-veh" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#0284c7"/>
+        <stop offset="100%" stop-color="#1e40af"/>
+      </linearGradient>
+    </defs>
+    <rect width="120" height="120" rx="28" fill="url(#g-veh)"/>
+    <!-- Modern fleet van silhouette -->
+    <path d="M24 72 L24 48 C24 44 27 41 31 41 L68 41 C71 41 73 43 75 46 L86 60 L94 62 C97 63 99 66 99 69 L99 78 C99 81 97 83 94 83 L90 83 C90 76 84 70 77 70 C70 70 64 76 64 83 L50 83 C50 76 44 70 37 70 C30 70 24 76 24 83 Z" fill="#ffffff"/>
+    <rect x="38" y="47" width="25" height="11" rx="2" fill="#0284c7"/>
+    <path d="M68 47 L74 47 L83 58 L68 58 Z" fill="#0284c7"/>
+    <circle cx="37" cy="83" r="9" fill="#0f172a"/>
+    <circle cx="37" cy="83" r="4" fill="#ffffff"/>
+    <circle cx="77" cy="83" r="9" fill="#0f172a"/>
+    <circle cx="77" cy="83" r="4" fill="#ffffff"/>
+  </svg>

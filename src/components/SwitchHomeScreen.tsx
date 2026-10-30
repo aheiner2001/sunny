@@ -27,6 +27,7 @@ import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { getResolvedAvatarUrl } from '@/lib/avatarPresets';
 import { asset } from '@/lib/basePath';
+import { SWITCH_PNG_ICONS } from '@/lib/switchIconsData';
 
 interface SwitchAppTile {
   title: string;
@@ -82,13 +83,13 @@ export function SwitchHomeScreen({
     return () => window.removeEventListener('sunny_db_update', refreshStats);
   }, []);
 
-  // Ordered strictly according to daily manager priority with clean minimalist vector Switch app icons:
+  // Ordered strictly according to daily manager priority with guaranteed embedded PNG Switch app icons:
   const apps: SwitchAppTile[] = [
     {
       title: 'Inspections Log',
       subtitle: 'Completed vehicle audits',
       href: '/inspections',
-      imageSrc: asset('/switch-icons/inspections.svg'),
+      imageSrc: SWITCH_PNG_ICONS['inspections'],
       icon: ClipboardCheck,
       accentColor: '#10b981',
     },
@@ -96,7 +97,7 @@ export function SwitchHomeScreen({
       title: 'Timesheets',
       subtitle: 'Hours, edits & overtime',
       href: '/timesheets',
-      imageSrc: asset('/switch-icons/timesheets.svg'),
+      imageSrc: SWITCH_PNG_ICONS['timesheets'],
       icon: Clock,
       accentColor: '#00c3e3',
     },
@@ -104,7 +105,7 @@ export function SwitchHomeScreen({
       title: 'Vehicles & Fleet',
       subtitle: `${activeVehicles} active units`,
       href: '/vehicles',
-      imageSrc: asset('/switch-icons/vehicles.svg'),
+      imageSrc: SWITCH_PNG_ICONS['vehicles'],
       icon: Truck,
       accentColor: '#0284c7',
       badge: activeVehicles > 0 ? activeVehicles : undefined,
@@ -113,7 +114,7 @@ export function SwitchHomeScreen({
       title: 'Pending Alerts',
       subtitle: 'Manager review queue',
       href: '/pending',
-      imageSrc: asset('/switch-icons/pending.svg'),
+      imageSrc: SWITCH_PNG_ICONS['pending'],
       icon: Bell,
       accentColor: '#ff4554',
       badge: pendingAlerts > 0 ? pendingAlerts : undefined,
@@ -122,7 +123,7 @@ export function SwitchHomeScreen({
       title: 'Training & Skills',
       subtitle: 'Certifications & modules',
       href: '/training',
-      imageSrc: asset('/switch-icons/training.svg'),
+      imageSrc: SWITCH_PNG_ICONS['training'],
       icon: GraduationCap,
       accentColor: '#f59e0b',
     },
@@ -130,7 +131,7 @@ export function SwitchHomeScreen({
       title: 'Equipment & Supplies',
       subtitle: 'Tools, stock & lifespans',
       href: '/equipment',
-      imageSrc: asset('/switch-icons/equipment.svg'),
+      imageSrc: SWITCH_PNG_ICONS['equipment'],
       icon: Wrench,
       accentColor: '#8b5cf6',
     },
@@ -138,7 +139,7 @@ export function SwitchHomeScreen({
       title: 'Issues & Repairs',
       subtitle: 'Fleet maintenance requests',
       href: '/issues',
-      imageSrc: asset('/switch-icons/issues.svg'),
+      imageSrc: SWITCH_PNG_ICONS['issues'],
       icon: AlertTriangle,
       accentColor: '#f97316',
       badge: openIssues > 0 ? openIssues : undefined,
@@ -147,7 +148,7 @@ export function SwitchHomeScreen({
       title: 'Calendar Schedule',
       subtitle: 'Inspection appointments',
       href: '/calendar',
-      imageSrc: asset('/switch-icons/calendar.svg'),
+      imageSrc: SWITCH_PNG_ICONS['calendar'],
       icon: CalendarDays,
       accentColor: '#3b82f6',
     },
@@ -155,7 +156,7 @@ export function SwitchHomeScreen({
       title: 'Employee Roster',
       subtitle: 'Security pins & access',
       href: '/employees',
-      imageSrc: asset('/switch-icons/employees.svg'),
+      imageSrc: SWITCH_PNG_ICONS['employees'],
       icon: Users,
       accentColor: '#ec4899',
     },
@@ -163,7 +164,7 @@ export function SwitchHomeScreen({
       title: 'Reports & Analytics',
       subtitle: 'PDF exports & KPI data',
       href: '/reports',
-      imageSrc: asset('/switch-icons/reports.svg'),
+      imageSrc: SWITCH_PNG_ICONS['reports'],
       icon: BarChart3,
       accentColor: '#6366f1',
     },
@@ -171,7 +172,7 @@ export function SwitchHomeScreen({
       title: 'System Settings',
       subtitle: 'Form setup & database',
       href: '/settings',
-      imageSrc: asset('/switch-icons/settings.svg'),
+      imageSrc: SWITCH_PNG_ICONS['settings'],
       icon: Settings,
       accentColor: '#64748b',
     },
@@ -250,11 +251,11 @@ export function SwitchHomeScreen({
 
               <div className="flex items-center justify-center flex-1 my-1">
                 {app.imageSrc ? (
-                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden shadow-md group-hover:scale-105 transition-transform duration-150">
+                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-white shadow-sm border border-[#e5e7eb] p-2 flex items-center justify-center group-hover:scale-105 transition-transform duration-150">
                     <img
                       src={app.imageSrc}
                       alt={app.title}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain"
                     />
                   </div>
                 ) : (

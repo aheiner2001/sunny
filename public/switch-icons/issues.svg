@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+    <defs>
+      <linearGradient id="g-iss" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#f97316"/>
+        <stop offset="100%" stop-color="#ea580c"/>
+      </linearGradient>
+    </defs>
+    <rect width="120" height="120" rx="28" fill="url(#g-iss)"/>
+    <!-- Clean rounded hazard triangle -->
+    <path d="M60 26 C63 26 66 28 68 31 L98 83 C100 87 98 91 94 92 C93 93 91 93 89 93 L31 93 C27 93 24 90 24 86 C24 85 25 84 25 83 L55 31 C57 28 59 26 60 26 Z" fill="#ffffff"/>
+    <rect x="57" y="46" width="6" height="24" rx="3" fill="#f97316"/>
+    <circle cx="60" cy="80" r="4" fill="#f97316"/>
+  </svg>

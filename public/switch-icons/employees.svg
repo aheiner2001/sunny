@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%">
+    <defs>
+      <linearGradient id="g-emp" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#ec4899"/>
+        <stop offset="100%" stop-color="#be185d"/>
+      </linearGradient>
+    </defs>
+    <rect width="120" height="120" rx="28" fill="url(#g-emp)"/>
+    <!-- Modern rounded team silhouettes (no stick figures, elegant rounded shapes) -->
+    <!-- Center Person -->
+    <circle cx="60" cy="46" r="14" fill="#ffffff"/>
+    <path d="M39 88 C39 74 48 68 60 68 C72 68 81 74 81 88 Z" fill="#ffffff"/>
+    <!-- Left Person -->
+    <circle cx="36" cy="52" r="10" fill="#fce7f3"/>
+    <path d="M21 88 C21 78 28 73 38 73 C41 73 44 74 47 76 C43 80 41 84 40 88 Z" fill="#fce7f3"/>
+    <!-- Right Person -->
+    <circle cx="84" cy="52" r="10" fill="#fce7f3"/>
+    <path d="M99 88 C99 78 92 73 82 73 C79 73 76 74 73 76 C77 80 79 84 80 88 Z" fill="#fce7f3"/>
+  </svg>

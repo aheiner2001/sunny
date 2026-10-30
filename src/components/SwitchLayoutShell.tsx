@@ -55,15 +55,15 @@ export function SwitchLayoutShell({ children }: { children: React.ReactNode }) {
               playSwitchSound('home');
               router.push('/dashboard');
             }}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-full border-2 border-[#504F4E] hover:border-[#1b98c6] hover:scale-105 transition-all text-[#333] font-bold text-sm"
+            className="flex items-center gap-2 px-4 py-2 rounded-full border-2 border-[#2d2d2d] bg-[#f8fafc] hover:bg-white hover:border-[#00c3e3] hover:scale-105 transition-all text-[#2d2d2d] font-bold text-sm shadow-sm"
           >
-            <span className="switch-glyph-btn text-[#ff4554] border-[#ff4554]">B</span>
-            <span className="tracking-wide">HOME</span>
+            <ArrowLeft className="w-4 h-4 text-[#00c3e3]" />
+            <span className="tracking-wide">Home</span>
           </button>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase font-extrabold tracking-wider px-2 py-0.5 rounded bg-[#f0f0f0] text-[#666]">
-              Switch App
+          <div className="flex items-center gap-3">
+            <span className="text-xs uppercase font-extrabold tracking-wider px-2.5 py-1 rounded-full bg-[#f0f9ff] text-[#0284c7] border border-[#bae6fd]">
+              Sunny Fleet OS
             </span>
             <button
               type="button"
@@ -71,7 +71,7 @@ export function SwitchLayoutShell({ children }: { children: React.ReactNode }) {
                 playSwitchSound('popup');
                 setScannerOpen(true);
               }}
-              className="p-2 rounded-full border border-[#d5d5d5] hover:border-[#ffa524] text-[#ffa524]"
+              className="p-2.5 rounded-full border border-[#d5d5d5] bg-white hover:border-[#ffa524] text-[#ffa524] shadow-sm transition-all"
               title="Scan QR"
             >
               <QrCode className="w-5 h-5" />
