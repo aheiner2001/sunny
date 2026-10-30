@@ -305,7 +305,7 @@ function VehiclesPageContent() {
               />
             </div>
           </div>
-          <div className="cluster w-full sm:w-auto sm:justify-end">
+          <div className="switch-filter-capsule w-full sm:w-auto sm:justify-end">
             {([
               ['all', 'All'],
               ['in_use', 'In use'],
@@ -315,8 +315,11 @@ function VehiclesPageContent() {
               <button
                 key={st}
                 type="button"
-                onClick={() => setStatusFilter(st)}
-                className={`btn btn-sm ${statusFilter === st ? 'bg-surface-sunk text-ink font-semibold border border-line' : 'btn-secondary'}`}
+                onClick={() => {
+                  playSwitchSound('klick', 0.25);
+                  setStatusFilter(st);
+                }}
+                className={`switch-filter-tab ${statusFilter === st ? 'is-active' : ''}`}
               >
                 {label}
               </button>

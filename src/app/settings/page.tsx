@@ -672,13 +672,16 @@ function SettingsPageContent() {
         <Gauge className="w-6 h-6 shrink-0" aria-hidden />
       </Link>
 
-      <div className="cluster gap-2 flex-wrap">
+      <div className="switch-filter-capsule flex-wrap">
         {SETTINGS_TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
-            onClick={() => setActiveTab(tab.id)}
-            className={`btn btn-sm ${activeTab === tab.id ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => {
+              playSwitchSound('klick', 0.25);
+              setActiveTab(tab.id);
+            }}
+            className={`switch-filter-tab ${activeTab === tab.id ? 'is-active' : ''}`}
           >
             {tab.label}
           </button>

@@ -10,6 +10,8 @@ import { QRScannerModal } from '@/components/QRScannerModal';
 import { ProfileModal } from '@/components/ProfileModal';
 import { QrCode, X, ArrowLeft } from 'lucide-react';
 import { playSwitchSound } from '@/lib/switchAudio';
+import { NAV_ITEMS } from '@/lib/navItems';
+import { getPageTitle } from '@/lib/pageTitles';
 
 export function SwitchLayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -44,25 +46,45 @@ export function SwitchLayoutShell({ children }: { children: React.ReactNode }) {
       );
     }
 
-    // 2. Sub-Pages opened as a native Switch App with top (B) HOME return bar
+    // 2. Sub-Pages opened as a native Switch App with top (Home) return bar & active app badge
+    const activeTitle = getPageTitle(pathname || '');
+    const activeItem = NAV_ITEMS.find(item => item.label === activeTitle || (item.href !== '/dashboard' && pathname.startsWith(item.href)));
+    const ActiveIcon = activeItem?.icon;
+
     return (
       <div className="flex flex-col w-screen h-screen overflow-hidden bg-white text-[#2c2c2c] select-none">
-        {/* Switch App Header */}
-        <header className="h-16 px-6 bg-white border-b border-[#e5e5e5] flex items-center justify-between shrink-0 shadow-sm z-30">
-          <button
-            type="button"
-            onClick={() => {
-              playSwitchSound('home');
-              router.push('/dashboard');
-            }}
-            className="flex items-center gap-2 px-4 py-2 rounded-full border-2 border-[#2d2d2d] bg-[#f8fafc] hover:bg-white hover:border-[#00c3e3] hover:scale-105 transition-all text-[#2d2d2d] font-bold text-sm shadow-sm"
-          >
-            <ArrowLeft className="w-4 h-4 text-[#00c3e3]" />
-            <span className="tracking-wide">Home</span>
-          </button>
+        {/* Switch App Header with Active App Grounding */}
+        <header className="h-16 px-4 sm:px-8 bg-white border-b border-[#e5e5e5] flex items-center justify-between shrink-0 shadow-sm z-30">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                playSwitchSound('home');
+                router.push('/dashboard');
+              }}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-full border-2 border-[#2d2d2d] bg-[#ffffff] hover:border-[#00c3e3] hover:scale-105 transition-all text-[#2d2d2d] font-bold text-sm shadow-sm"
+              title="Return to Switch Home Carousel"
+            >
+              <ArrowLeft className="w-4 h-4 text-[#00c3e3]" />
+              <span className="tracking-wide">Home</span>
+            </button>
+
+            <div className="h-5 w-px bg-[#e2e8f0] hidden sm:block" />
+
+            <div className="flex items-center gap-2">
+              {ActiveIcon && (
+                <div className="w-8 h-8 rounded-lg bg-[#f0f9ff] border border-[#bae6fd] flex items-center justify-center text-[#0284c7]">
+                  <ActiveIcon className="w-4 h-4" />
+                </div>
+              )}
+              <span className="font-extrabold text-base sm:text-lg text-[#1e293b] tracking-tight">
+                {activeTitle}
+              </span>
+            </div>
+          </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs uppercase font-extrabold tracking-wider px-2.5 py-1 rounded-full bg-[#f0f9ff] text-[#0284c7] border border-[#bae6fd]">
+            <span className="hidden sm:inline-block text-xs uppercase font-extrabold tracking-wider px-2.5 py-1 rounded-full bg-[#f0f9ff] text-[#0284c7] border border-[#bae6fd]">
               Sunny Fleet OS
             </span>
             <button
@@ -71,7 +93,7 @@ export function SwitchLayoutShell({ children }: { children: React.ReactNode }) {
                 playSwitchSound('popup');
                 setScannerOpen(true);
               }}
-              className="p-2.5 rounded-full border border-[#d5d5d5] bg-white hover:border-[#ffa524] text-[#ffa524] shadow-sm transition-all"
+              className="p-2 rounded-full border border-[#d5d5d5] bg-white hover:border-[#ffa524] text-[#ffa524] shadow-sm transition-all"
               title="Scan QR"
             >
               <QrCode className="w-5 h-5" />
