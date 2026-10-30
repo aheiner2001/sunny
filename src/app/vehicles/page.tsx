@@ -21,6 +21,7 @@ import { ManagerOnly } from '@/components/ManagerOnly';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
 import { prepareImageUpload, imageErrorFallback } from '@/lib/imageUpload';
+import { playSwitchSound } from '@/lib/switchAudio';
 
 export default function VehiclesPage() {
   return (
@@ -335,7 +336,12 @@ function VehiclesPageContent() {
           const cardStatus = flaggedEqCount > 0 ? 'flagged' : vehicle.status === 'maintenance' ? 'critical' : 'ok';
 
           return (
-            <div key={vehicle.id} className="card card-pad flex flex-col justify-between" data-status={cardStatus}>
+            <div
+              key={vehicle.id}
+              className="vehicle-card card-pad flex flex-col justify-between"
+              data-status={cardStatus}
+              onMouseEnter={() => playSwitchSound('klick', 0.15)}
+            >
               <div className="stack-tight">
                 <div className="spread items-start gap-2">
                   <div className="cluster items-start min-w-0">
@@ -344,24 +350,24 @@ function VehiclesPageContent() {
                         src={vehicle.imageUrl}
                         alt=""
                         onError={imageErrorFallback}
-                        className="icon-tile-lg h-12 w-12 rounded-[var(--radius-lg)] object-cover"
+                        className="h-12 w-12 rounded-2xl object-cover border border-slate-200 shadow-sm"
                       />
                     ) : (
-                      <span className="icon-tile icon-tile-lg" data-status="info" aria-hidden>
+                      <span className="w-12 h-12 rounded-2xl bg-sky-50 border border-sky-200 flex items-center justify-center text-[#0284c7] shrink-0 shadow-sm" aria-hidden>
                         <Truck className="h-6 w-6" />
                       </span>
                     )}
                     <div className="min-w-0">
-                      <h2 className="card-title">{vehicle.vehicleNumber}</h2>
-                      <span className="unit-tag">{vehicle.licensePlate}</span>
+                      <h2 className="card-title text-slate-900 font-extrabold">{vehicle.vehicleNumber}</h2>
+                      <span className="unit-tag font-semibold text-xs text-slate-500">{vehicle.licensePlate}</span>
                     </div>
                   </div>
                   <VehicleStatusBadge status={vehicle.status} />
                 </div>
 
-                <p className="text-sm text-ink-muted font-medium">{vehicle.name}</p>
+                <p className="text-sm text-slate-600 font-medium">{vehicle.name}</p>
 
-                <div className="card card-pad bg-[var(--surface-alt)] stack-tight text-xs">
+                <div className="rounded-xl p-3.5 bg-slate-50/80 border border-slate-100 stack-tight text-xs">
                   <div className="spread">
                     <span className="text-ink-faint font-medium">Current Driver:</span>
                     <span className={vehicle.currentUserName ? 'font-bold text-ink' : 'text-ink-faint'}>{vehicle.currentUserName || '—'}</span>

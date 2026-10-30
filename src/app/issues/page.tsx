@@ -29,6 +29,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { QuantityModal } from '@/components/QuantityModal';
 import { EmptyState } from '@/components/EmptyState';
 import { parseQuantityInput } from '@/lib/quantityModal';
+import { playSwitchSound } from '@/lib/switchAudio';
 
 const ISSUE_TYPES: Array<{ value: IssueType; label: string }> = [
   { value: 'stock_low_inventory', label: 'Stock / Low Inventory' },
@@ -345,22 +346,30 @@ function IssuesPageContent() {
             </div>
           </div>
 
-          <div className="cluster w-full md:w-auto md:justify-end flex-wrap gap-2">
-            {STATUS_FILTERS.map((st) => (
-              <button
-                key={st}
-                type="button"
-                onClick={() => setStatusFilter(st)}
-                className={`btn btn-sm capitalize ${statusFilter === st ? 'btn-primary' : 'btn-secondary'}`}
-              >
-                {st === 'all' ? 'active' : st === 'fixed' ? 'resolved history' : st.replace('_', ' ')}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:justify-end">
+            <div className="switch-filter-capsule flex-wrap">
+              {STATUS_FILTERS.map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => {
+                    playSwitchSound('klick', 0.25);
+                    setStatusFilter(st);
+                  }}
+                  className={`switch-filter-tab capitalize ${statusFilter === st ? 'is-active' : ''}`}
+                >
+                  {st === 'all' ? 'active' : st === 'fixed' ? 'resolved history' : st.replace('_', ' ')}
+                </button>
+              ))}
+            </div>
 
             {/* 7.1 Priority Filter */}
             <select
               value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value)}
+              onChange={(e) => {
+                playSwitchSound('klick', 0.25);
+                setPriorityFilter(e.target.value);
+              }}
               className="select btn-sm w-auto text-xs"
               aria-label="Filter by priority"
             >
@@ -372,7 +381,10 @@ function IssuesPageContent() {
 
             <select
               value={vehicleFilter}
-              onChange={(e) => setVehicleFilter(e.target.value)}
+              onChange={(e) => {
+                playSwitchSound('klick', 0.25);
+                setVehicleFilter(e.target.value);
+              }}
               className="select btn-sm w-auto text-xs"
               aria-label="Filter by vehicle"
             >

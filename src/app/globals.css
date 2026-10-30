@@ -510,8 +510,49 @@
 
   .card:hover {
     transform: translateY(-2px);
-    border-color: #cbd5e1;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
+    border-color: #00c3e3;
+    box-shadow: 0 10px 28px rgba(0, 195, 227, 0.12);
+  }
+
+  /* Switch Software Gallery Card */
+  .switch-gallery-card,
+  .vehicle-card {
+    position: relative;
+    background: #ffffff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+    transition: all 0.2s cubic-bezier(0.2, 0.8, 0.25, 1);
+  }
+
+  .switch-gallery-card:hover,
+  .vehicle-card:hover {
+    transform: translateY(-3px);
+    border-color: #00c3e3;
+    box-shadow: 0 12px 32px rgba(0, 195, 227, 0.16), 0 0 0 2px #00c3e3;
+  }
+
+  /* Nintendo Switch Modal Dialogue */
+  .switch-modal-dialog {
+    position: relative;
+    background: #ffffff;
+    border: 2px solid #e2e8f0;
+    border-radius: 24px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+    animation: switchModalPop 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes switchModalPop {
+    from {
+      opacity: 0;
+      transform: scale(0.96) translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
   }
 
   /* Switch Filter Segmented Bar Container */
@@ -575,8 +616,8 @@
     justify-content: space-between;
     gap: var(--space-3);
     padding: var(--space-3) var(--space-5);
-    border-top: 1px solid #f0f0f0;
-    background: #fafafa;
+    border-top: 1px solid #f1f5f9;
+    background: #ffffff;
   }
 
   /* "View all vehicles →" — the repeated navigational affordance */
@@ -774,28 +815,51 @@
   .btn-block { width: 100%; }
 
   /* ------------------------------------------------------------------------
-     Badges — the text-side twin of the rail
+     Badges — Nintendo Switch Cartridge Status Pill
      ------------------------------------------------------------------------ */
   .badge {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
-    padding: 0.2em 0.6em;
-    border-radius: var(--radius-pill);
-    background: var(--idle-wash);
-    color: var(--idle);
-    font-family: var(--font-mono);
-    font-size: var(--text-2xs);
-    font-weight: 500;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   }
 
-  .badge[data-status='ok'] { background: var(--ok-wash); color: var(--ok); }
-  .badge[data-status='flagged'] { background: var(--amber-wash); color: var(--amber-text); }
-  .badge[data-status='critical'] { background: var(--critical-wash); color: var(--critical); }
-  .badge[data-status='info'] { background: var(--info-wash); color: var(--ink); }
+  .badge[data-status='ok'] {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+    color: #059669;
+  }
+  .badge[data-status='flagged'] {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: #d97706;
+  }
+  .badge[data-status='critical'] {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #dc2626;
+  }
+  .badge[data-status='info'] {
+    background: #f0f9ff;
+    border-color: #bae6fd;
+    color: #0284c7;
+  }
+  .badge[data-status='idle'] {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #64748b;
+  }
 
   /* Square icon holder that inherits the same status vocabulary */
   .icon-tile {

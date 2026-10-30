@@ -102,8 +102,8 @@ export function SwitchLayoutShell({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* The original app content pane */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-[#fafafa]">
-          <main id="main-content" className="w-full max-w-[1400px] mx-auto px-4 sm:px-8 py-6 pb-20">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-white">
+          <main id="main-content" className="w-full max-w-[1400px] mx-auto px-4 sm:px-8 py-6 pb-20 bg-white">
             {children}
           </main>
         </div>

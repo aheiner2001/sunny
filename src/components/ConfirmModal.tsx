@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
+import { playSwitchSound } from '@/lib/switchAudio';
 
 export function ConfirmModal({
   open,
@@ -26,10 +27,12 @@ export function ConfirmModal({
 
   useEffect(() => {
     if (!open) return;
+    playSwitchSound('popup', 0.3);
     confirmRef.current?.focus();
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
+        playSwitchSound('klick', 0.25);
         onCancel();
       }
     };
@@ -43,26 +46,44 @@ export function ConfirmModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-ink/60 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={onCancel}
+      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 transition-all"
+      onClick={() => {
+        playSwitchSound('klick', 0.25);
+        onCancel();
+      }}
     >
       <div
         ref={dialogRef}
-        className="card card-pad max-w-md w-full"
+        className="switch-modal-dialog p-6 sm:p-8 max-w-md w-full text-center"
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-modal-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="confirm-modal-title" className="card-title mb-2">
+        <h2 id="confirm-modal-title" className="text-xl sm:text-2xl font-extrabold text-slate-900 mb-3 tracking-tight">
           {title}
         </h2>
-        <p className="text-sm text-ink-muted mb-6">{message}</p>
-        <div className="cluster justify-end">
-          <button type="button" className="btn btn-secondary" onClick={onCancel}>
+        <p className="text-sm text-slate-600 mb-8 leading-relaxed">{message}</p>
+        <div className="flex items-center justify-center gap-3">
+          <button
+            type="button"
+            className="btn btn-secondary px-6"
+            onClick={() => {
+              playSwitchSound('klick', 0.25);
+              onCancel();
+            }}
+          >
             {cancelLabel}
           </button>
-          <button ref={confirmRef} type="button" className={confirmClass} onClick={onConfirm}>
+          <button
+            ref={confirmRef}
+            type="button"
+            className={`${confirmClass} px-6`}
+            onClick={() => {
+              playSwitchSound('klick', 0.25);
+              onConfirm();
+            }}
+          >
             {confirmLabel}
           </button>
         </div>

@@ -30,6 +30,7 @@ export function setSwitchSoundEnabled(enabled: boolean): void {
 
 export function playSwitchSound(name: SwitchSoundName, volume = 0.45) {
   if (typeof window === 'undefined') return;
+  if (typeof navigator !== 'undefined' && navigator.userAgent?.includes('jsdom')) return;
   if (!isSwitchSoundEnabled()) return;
 
   try {

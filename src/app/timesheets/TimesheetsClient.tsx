@@ -34,6 +34,7 @@ import { timesheetService } from '@/lib/timesheets/timesheetService';
 import { timesheetStore } from '@/lib/timesheets/timesheetStore';
 import { downloadTimesheetCsv } from '@/lib/timesheets/timesheetExport';
 import { humanizeTimesheetError } from '@/lib/timesheets/timesheetMessages';
+import { playSwitchSound } from '@/lib/switchAudio';
 import {
   DEFAULT_TIMEZONE,
   formatSecondsToHours,
@@ -754,24 +755,24 @@ export default function TimesheetsClient() {
 
           {/* Manager / Employee View Switcher */}
           {isManager && (
-            <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-xl self-start sm:self-center">
+            <div className="switch-filter-capsule self-start sm:self-center">
               <button
-                onClick={() => setActiveTab('employee')}
-                className={`px-4 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition-all ${
-                  activeTab === 'employee'
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
+                type="button"
+                onClick={() => {
+                  playSwitchSound('klick', 0.25);
+                  setActiveTab('employee');
+                }}
+                className={`switch-filter-tab ${activeTab === 'employee' ? 'is-active' : ''}`}
               >
                 My Timesheet
               </button>
               <button
-                onClick={() => setActiveTab('manager')}
-                className={`px-4 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition-all ${
-                  activeTab === 'manager'
-                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
+                type="button"
+                onClick={() => {
+                  playSwitchSound('klick', 0.25);
+                  setActiveTab('manager');
+                }}
+                className={`switch-filter-tab ${activeTab === 'manager' ? 'is-active' : ''}`}
               >
                 Manager Review
               </button>
@@ -878,40 +879,63 @@ export default function TimesheetsClient() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => setTableViewOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium transition-colors"
+              onClick={() => {
+                playSwitchSound('klick', 0.25);
+                setTableViewOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold transition-all hover:scale-105 active:scale-95"
             >
               <Table2 className="w-4 h-4" />
               View in table
             </button>
             <button
               type="button"
-              onClick={handleExportCsv}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium transition-colors"
+              onClick={() => {
+                playSwitchSound('popup', 0.25);
+                handleExportCsv();
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold transition-all hover:scale-105 active:scale-95"
             >
               <Download className="w-4 h-4" />
               Export CSV
             </button>
-            <button
-              onClick={handlePrevWeek}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              Previous Week
-            </button>
-            <button
-              onClick={handleThisWeek}
-              className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium transition-colors"
-            >
-              This Week
-            </button>
-            <button
-              onClick={handleNextWeek}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-medium transition-colors"
-            >
-              Next Week
-              <ChevronRight className="w-4 h-4" />
-            </button>
+            <div className="switch-filter-capsule">
+              <button
+                type="button"
+                onClick={() => {
+                  playSwitchSound('klick', 0.25);
+                  handlePrevWeek();
+                }}
+                className="switch-filter-tab flex items-center gap-1"
+                aria-label="Previous Week"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Previous Week</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playSwitchSound('klick', 0.25);
+                  handleThisWeek();
+                }}
+                className="switch-filter-tab is-active"
+                aria-label="This Week"
+              >
+                This Week
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playSwitchSound('klick', 0.25);
+                  handleNextWeek();
+                }}
+                className="switch-filter-tab flex items-center gap-1"
+                aria-label="Next Week"
+              >
+                <span>Next Week</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
 

@@ -24,6 +24,7 @@ import { InspectionStatusBadge } from '@/components/StatusBadges';
 import { useAuth } from '@/context/AuthContext';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState } from '@/components/EmptyState';
+import { playSwitchSound } from '@/lib/switchAudio';
 
 export default function InspectionsPage() {
   const { role, user } = useAuth();
@@ -284,40 +285,54 @@ const filteredInspections = inspections.filter((insp) => {
             </div>
           )}
 
-          <div className="cluster w-full md:w-auto md:justify-end">
-            {([
-              ['all', 'All kinds'],
-              ['pretrip', 'Pre-trip'],
-              ['return', 'Return'],
-            ] as const).map(([k, label]) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setKindFilter(k)}
-                className={`btn btn-sm ${kindFilter === k ? 'bg-surface-sunk text-ink font-semibold border border-line' : 'btn-secondary'}`}
-              >
-                {label}
-              </button>
-            ))}
-            {([
-              ['all', 'All'],
-              ['passed', 'Passed'],
-              ['issues_found', 'Issues found'],
-              ['in_progress', 'In progress'],
-            ] as const).map(([st, label]) => (
-              <button
-                key={st}
-                type="button"
-                onClick={() => setStatusFilter(st)}
-                className={`btn btn-sm ${statusFilter === st ? 'bg-surface-sunk text-ink font-semibold border border-line' : 'btn-secondary'}`}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto md:justify-end">
+            <div className="switch-filter-capsule">
+              {([
+                ['all', 'All kinds'],
+                ['pretrip', 'Pre-trip'],
+                ['return', 'Return'],
+              ] as const).map(([k, label]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => {
+                    playSwitchSound('klick', 0.25);
+                    setKindFilter(k);
+                  }}
+                  className={`switch-filter-tab ${kindFilter === k ? 'is-active' : ''}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="switch-filter-capsule">
+              {([
+                ['all', 'All'],
+                ['passed', 'Passed'],
+                ['issues_found', 'Issues found'],
+                ['in_progress', 'In progress'],
+              ] as const).map(([st, label]) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => {
+                    playSwitchSound('klick', 0.25);
+                    setStatusFilter(st);
+                  }}
+                  className={`switch-filter-tab ${statusFilter === st ? 'is-active' : ''}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
 
             <select
               value={vehicleFilter}
-              onChange={(e) => setVehicleFilter(e.target.value)}
+              onChange={(e) => {
+                playSwitchSound('klick', 0.25);
+                setVehicleFilter(e.target.value);
+              }}
               className="select btn-sm w-auto"
               aria-label="Filter by vehicle"
             >
@@ -331,7 +346,10 @@ const filteredInspections = inspections.filter((insp) => {
 
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+              onChange={(e) => {
+                playSwitchSound('klick', 0.25);
+                setSortBy(e.target.value as typeof sortBy);
+              }}
               className="select btn-sm w-auto"
               aria-label="Sort inspections"
             >

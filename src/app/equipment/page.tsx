@@ -42,6 +42,7 @@ import { EquipmentAllocationModal } from '@/components/EquipmentAllocationModal'
 import { LifespanActionModal } from '@/components/LifespanActionModal';
 import { groupEquipmentByFamily, getEquipmentFamilyKey } from '@/lib/equipmentGrouping';
 import { QRCodeSVG } from 'qrcode.react';
+import { playSwitchSound } from '@/lib/switchAudio';
 
 const emptyForm = {
   name: '',
@@ -1004,28 +1005,39 @@ function EquipmentPageContent() {
               />
             </div>
           </div>
-          <div className="cluster w-full sm:w-auto sm:justify-end flex-wrap gap-2">
-            {(['all', 'working', 'flagged'] as const).map((status) => (
-              <button
-                key={status}
-                type="button"
-                onClick={() => setStatusFilter(status)}
-                className={`btn btn-sm capitalize ${statusFilter === status ? 'bg-surface-sunk text-ink font-semibold border border-line' : 'btn-secondary'}`}
-              >
-                {status === 'all' ? 'All' : status}
-              </button>
-            ))}
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:justify-end">
+            <div className="switch-filter-capsule">
+              {(['all', 'working', 'flagged'] as const).map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => {
+                    playSwitchSound('klick', 0.25);
+                    setStatusFilter(status);
+                  }}
+                  className={`switch-filter-tab capitalize ${statusFilter === status ? 'is-active' : ''}`}
+                >
+                  {status === 'all' ? 'All' : status}
+                </button>
+              ))}
+            </div>
             <button
               type="button"
-              onClick={() => setFiltersOpen((v) => !v)}
-              className={`btn btn-sm ${filtersOpen || categoryFilter !== 'all' || lifespanFilter !== 'all' || !(statusFilter === 'all' || statusFilter === 'working' || statusFilter === 'flagged') ? 'bg-surface-sunk text-ink font-semibold border border-line' : 'btn-secondary'}`}
+              onClick={() => {
+                playSwitchSound('klick', 0.25);
+                setFiltersOpen((v) => !v);
+              }}
+              className={`btn btn-sm ${filtersOpen || categoryFilter !== 'all' || lifespanFilter !== 'all' || !(statusFilter === 'all' || statusFilter === 'working' || statusFilter === 'flagged') ? 'btn-primary' : 'btn-secondary'}`}
               aria-expanded={filtersOpen}
             >
               Filters
             </button>
             <button
               type="button"
-              onClick={toggleSelectAllFiltered}
+              onClick={() => {
+                playSwitchSound('klick', 0.25);
+                toggleSelectAllFiltered();
+              }}
               className="btn btn-ghost btn-sm cluster gap-1 text-xs"
             >
               {selectedEquipmentIds.length === filtered.length && filtered.length > 0 ? (
@@ -1037,12 +1049,15 @@ function EquipmentPageContent() {
           </div>
         </div>
         {filtersOpen && (
-          <div className="mt-3 pt-3 border-t border-line cluster flex-wrap gap-2">
+          <div className="mt-3 pt-3 border-t border-line flex flex-wrap items-center gap-2">
             <label className="cluster text-sm font-semibold text-ink-muted">
               View
               <select
                 value={sortMode}
-                onChange={e => setSortMode(e.target.value as "family" | "equipment" | "vehicle")}
+                onChange={e => {
+                  playSwitchSound('klick', 0.25);
+                  setSortMode(e.target.value as "family" | "equipment" | "vehicle");
+                }}
                 className="select btn-sm w-auto"
               >
                 <option value="family">By tool type</option>
@@ -1052,7 +1067,10 @@ function EquipmentPageContent() {
             </label>
             <select
               value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value as "all" | EquipmentCategory)}
+              onChange={(e) => {
+                playSwitchSound('klick', 0.25);
+                setCategoryFilter(e.target.value as "all" | EquipmentCategory);
+              }}
               className="select btn-sm w-auto"
               aria-label="Filter by category"
             >
@@ -1063,7 +1081,10 @@ function EquipmentPageContent() {
             </select>
             <select
               value={lifespanFilter}
-              onChange={(e) => applyLifespanFilter(e.target.value as LifespanFilter)}
+              onChange={(e) => {
+                playSwitchSound('klick', 0.25);
+                applyLifespanFilter(e.target.value as LifespanFilter);
+              }}
               className="select btn-sm w-auto font-semibold"
               aria-label="Filter by lifespan status"
             >
@@ -1072,16 +1093,21 @@ function EquipmentPageContent() {
               <option value="low">Getting low</option>
               <option value="tracked">Lifespan tracked</option>
             </select>
-            {ALL_STATUSES.filter((s) => s !== "all" && s !== "working" && s !== "flagged").map((status) => (
-              <button
-                key={status}
-                type="button"
-                onClick={() => setStatusFilter(status)}
-                className={`btn btn-sm capitalize ${statusFilter === status ? 'bg-surface-sunk text-ink font-semibold border border-line' : 'btn-secondary'}`}
-              >
-                {status === "low_stock" ? "Low Stock Par" : status.replace("_", " ")}
-              </button>
-            ))}
+            <div className="switch-filter-capsule flex-wrap">
+              {ALL_STATUSES.filter((s) => s !== "all" && s !== "working" && s !== "flagged").map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => {
+                    playSwitchSound('klick', 0.25);
+                    setStatusFilter(status);
+                  }}
+                  className={`switch-filter-tab capitalize ${statusFilter === status ? 'is-active' : ''}`}
+                >
+                  {status === "low_stock" ? "Low Stock Par" : status.replace("_", " ")}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>

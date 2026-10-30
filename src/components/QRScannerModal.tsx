@@ -7,6 +7,7 @@ import { dbService } from '@/lib/db';
 import { Vehicle } from '@/types';
 import { useAuth } from '@/context/AuthContext';
 import { PasscodePrompt } from '@/components/PasscodeGate';
+import { playSwitchSound } from '@/lib/switchAudio';
 
 export function QRScannerModal({
   isOpen,
@@ -32,7 +33,10 @@ export function QRScannerModal({
   }, [role]);
 
   useEffect(() => {
-    setVehicles(dbService.getVehicles());
+    if (isOpen) {
+      playSwitchSound('popup', 0.25);
+      setVehicles(dbService.getVehicles());
+    }
   }, [isOpen]);
 
   useEffect(() => {
@@ -166,33 +170,34 @@ export function QRScannerModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/70 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
       <div
-        className="card max-w-md w-full overflow-hidden flex flex-col max-h-[90vh]"
+        className="switch-modal-dialog max-w-md w-full overflow-hidden flex flex-col max-h-[90vh]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="qr-scanner-title"
       >
-        <div className="card-head bg-ink text-ink-inverse">
+        <div className="card-head bg-white border-b border-slate-200 text-slate-900">
           <div className="cluster">
-            <span className="icon-tile bg-hivis text-ink" aria-hidden>
+            <span className="w-8 h-8 rounded-lg bg-sky-50 border border-sky-200 flex items-center justify-center text-[#0284c7]" aria-hidden>
               <Camera className="h-4 w-4" />
             </span>
             <div>
-              <h2 id="qr-scanner-title" className="card-title text-ink-inverse">Scan Vehicle QR</h2>
-              <p className="text-2xs text-ink-faint">Point at van sticker to start</p>
+              <h2 id="qr-scanner-title" className="card-title text-slate-900 font-extrabold text-base">Scan Vehicle QR</h2>
+              <p className="text-2xs text-slate-500 font-medium">Point at van sticker to start</p>
             </div>
           </div>
           <button
             type="button"
             onClick={() => {
+              playSwitchSound('klick', 0.25);
               void stopScanner();
               onClose();
             }}
-            className="btn btn-ghost btn-sm text-ink-faint hover:text-ink-inverse"
+            className="btn btn-ghost btn-sm p-1.5 rounded-full"
             aria-label="Close scanner"
           >
-            <X className="h-5 w-5" aria-hidden />
+            <X className="h-4 w-4" aria-hidden />
           </button>
         </div>
 
