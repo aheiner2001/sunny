@@ -8,21 +8,23 @@ import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
 import { QRScannerModal } from '@/components/QRScannerModal';
 import { ProfileModal } from '@/components/ProfileModal';
-import { QrCode, X, ArrowLeft } from 'lucide-react';
+import { QrCode, X, ArrowLeft, LayoutDashboard } from 'lucide-react';
 import { playSwitchSound } from '@/lib/switchAudio';
 import { NAV_ITEMS } from '@/lib/navItems';
 import { getPageTitle } from '@/lib/pageTitles';
+import { useSwitchUiMode } from '@/lib/switchUiMode';
 
 export function SwitchLayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { role } = useAuth();
+  const [isSwitchMode, setSwitchMode] = useSwitchUiMode();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
 
-  // If user is a manager
-  if (role === 'manager') {
+  // If user is a manager AND Switch Mode is active
+  if (role === 'manager' && isSwitchMode) {
     const isHomeScreen = pathname === '/dashboard' || pathname === '/';
 
     // 1. Full authentic Switch Home Screen (Pure White, Centered Carousel)
@@ -32,6 +34,7 @@ export function SwitchLayoutShell({ children }: { children: React.ReactNode }) {
           <SwitchHomeScreen
             onScanClick={() => setScannerOpen(true)}
             onProfileClick={() => setProfileModalOpen(true)}
+            onSwitchModeToggle={() => setSwitchMode(false)}
           />
 
           <QRScannerModal
@@ -83,8 +86,19 @@ export function SwitchLayoutShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="hidden sm:inline-block text-xs uppercase font-extrabold tracking-wider px-2.5 py-1 rounded-full bg-[#f0f9ff] text-[#0284c7] border border-[#bae6fd]">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setSwitchMode(false);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border-2 border-slate-200 bg-white hover:border-slate-400 text-slate-700 text-xs font-bold transition-all shadow-sm"
+              title="Return to Classic Fleet UI"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 text-slate-500" />
+              <span className="hidden sm:inline">Classic UI</span>
+            </button>
+            <span className="hidden md:inline-block text-xs uppercase font-extrabold tracking-wider px-2.5 py-1 rounded-full bg-[#f0f9ff] text-[#0284c7] border border-[#bae6fd]">
               Sunny Fleet OS
             </span>
             <button

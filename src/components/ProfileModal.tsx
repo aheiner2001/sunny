@@ -4,13 +4,17 @@ import React, { useEffect, useState } from 'react';
 import { 
   Camera, 
   X, 
-  Check
+  Check,
+  Gamepad2
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { AVATAR_PRESETS, findAvatarPresetByUrl, getResolvedAvatarUrl } from '@/lib/avatarPresets';
+import { useSwitchUiMode } from '@/lib/switchUiMode';
+import { playSwitchSound } from '@/lib/switchAudio';
 
 export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { user, updateProfile } = useAuth();
+  const [isSwitchMode, setSwitchMode] = useSwitchUiMode();
 
   const [name, setName] = useState(user?.name || '');
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
@@ -179,6 +183,38 @@ export function ProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
               className="w-full px-3 py-2 text-xs rounded-xl border border-line focus:ring-2 focus:ring-sky-500 focus:outline-none font-semibold"
             />
           </div>
+
+          {/* Interface Experience Toggle for Managers */}
+          {user.role === 'manager' && (
+            <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                    <Gamepad2 className="w-4 h-4 text-[#00c3e3]" />
+                    <span>Nintendo Switch UI</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Switch between Classic Fleet OS and Nintendo Switch UI.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !isSwitchMode;
+                    setSwitchMode(next);
+                    if (next) playSwitchSound('popup');
+                  }}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                    isSwitchMode
+                      ? 'bg-[#00c3e3] text-white shadow-sm'
+                      : 'bg-white border border-slate-300 text-slate-600 hover:border-slate-400'
+                  }`}
+                >
+                  {isSwitchMode ? 'ON' : 'OFF'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="pt-3 border-t border-slate-100 flex gap-2">

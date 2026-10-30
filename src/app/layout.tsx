@@ -10,6 +10,7 @@ import { QrCode, X } from 'lucide-react';
 import { SPARedirectHandler } from '@/components/SPARedirectHandler';
 import { PasscodeGate } from '@/components/PasscodeGate';
 import { DashboardThemeSync } from '@/components/DashboardThemeSync';
+import { SwitchThemeSync } from '@/components/SwitchThemeSync';
 import { SwitchLayoutShell } from '@/components/SwitchLayoutShell';
 
 export default function RootLayout({
@@ -32,6 +33,7 @@ export default function RootLayout({
         </a>
         <AuthProvider>
           <DashboardThemeSync />
+          <SwitchThemeSync />
           <SPARedirectHandler />
           <PasscodeGate>
             <SwitchLayoutShell>

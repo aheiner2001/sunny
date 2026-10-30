@@ -18,7 +18,8 @@ import {
   QrCode,
   Power,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  LayoutDashboard
 } from 'lucide-react';
 import { playSwitchSound } from '@/lib/switchAudio';
 import { dbService } from '@/lib/db';
@@ -36,10 +37,12 @@ interface SwitchAppTile {
 
 export function SwitchHomeScreen({
   onScanClick,
-  onProfileClick
+  onProfileClick,
+  onSwitchModeToggle
 }: {
   onScanClick: () => void;
   onProfileClick: () => void;
+  onSwitchModeToggle?: () => void;
 }) {
   const router = useRouter();
   const { user, role, logout } = useAuth();
@@ -196,7 +199,20 @@ export function SwitchHomeScreen({
           </span>
         </button>
 
-        <div className="switch-status-tray">
+        <div className="switch-status-tray flex items-center gap-3">
+          {onSwitchModeToggle && (
+            <button
+              type="button"
+              onClick={() => {
+                onSwitchModeToggle();
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-300 hover:border-slate-500 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-sm"
+              title="Switch back to Classic Sunny Fleet UI"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5 text-slate-500" />
+              <span className="hidden sm:inline">Classic UI</span>
+            </button>
+          )}
           <span>{timeStr}</span>
           <span className="text-xs uppercase font-extrabold tracking-wider px-2.5 py-1 rounded-full bg-[#f0f9ff] text-[#0284c7] border border-[#bae6fd]">
             Sunny Fleet OS

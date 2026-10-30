@@ -12,7 +12,8 @@ import {
   Shield,
   User as UserIcon,
   Camera,
-  LogOut
+  LogOut,
+  Gamepad2
 } from 'lucide-react';
 import Link from 'next/link';
 import { dbService } from '@/lib/db';
@@ -20,6 +21,8 @@ import type { InspectionAlert } from '@/types';
 import { ProfileModal } from '@/components/ProfileModal';
 import { getResolvedAvatarUrl } from '@/lib/avatarPresets';
 import { asset } from '@/lib/basePath';
+import { setSwitchUiEnabled } from '@/lib/switchUiMode';
+import { playSwitchSound } from '@/lib/switchAudio';
 
 export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void }) {
   const pathname = usePathname();
@@ -74,6 +77,22 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
       </div>
 
       <div className="flex items-center gap-1 sm:gap-3 shrink-0" ref={menuRef}>
+        {/* Quick Toggle for Nintendo Switch UI */}
+        {role === 'manager' && (
+          <button
+            type="button"
+            onClick={() => {
+              setSwitchUiEnabled(true);
+              playSwitchSound('popup');
+            }}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-300 hover:border-[#00c3e3] bg-white hover:bg-sky-50 text-slate-800 text-xs font-bold transition-all shadow-sm"
+            title="Switch to Nintendo Switch UI Mode"
+          >
+            <Gamepad2 className="w-3.5 h-3.5 text-[#00c3e3]" />
+            <span>Switch UI</span>
+          </button>
+        )}
+
         {/* Notification Bell */}
         {role === 'manager' && <div className="relative shrink-0">
           <button
@@ -185,6 +204,25 @@ export function Header({ onMobileMenuToggle }: { onMobileMenuToggle?: () => void
                   <Camera className="w-4 h-4 text-ink-muted" />
                   <span>Customize photo</span>
                 </button>
+
+                {role === 'manager' && (
+                  <button
+                    onClick={() => {
+                      setUserMenuOpen(false);
+                      setSwitchUiEnabled(true);
+                      playSwitchSound('popup');
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-left text-xs text-ink hover:bg-sky-50 font-semibold transition-colors mt-0.5"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Gamepad2 className="w-4 h-4 text-[#00c3e3]" />
+                      <span>Nintendo Switch UI</span>
+                    </div>
+                    <span className="text-[10px] uppercase font-extrabold px-1.5 py-0.5 rounded bg-sky-100 text-[#0284c7]">
+                      Enable
+                    </span>
+                  </button>
+                )}
               </div>
 
               {/* Managers switch accounts freely; employees sign out instead. */}

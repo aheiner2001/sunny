@@ -50,7 +50,8 @@ import { ShopExitQRCode } from '@/components/ShopExitQRCode';
 import { mintCategoryId, planDeleteCategory } from '@/lib/checklistCategories';
 import { loadDashboardColor, saveDashboardColor } from '@/lib/dashboardAppearance';
 import { isSwitchSoundEnabled, setSwitchSoundEnabled, playSwitchSound } from '@/lib/switchAudio';
-import { Volume2, VolumeX } from 'lucide-react';
+import { useSwitchUiMode } from '@/lib/switchUiMode';
+import { Volume2, VolumeX, Gamepad2 } from 'lucide-react';
 
 type SettingsTab = 'checklist' | 'equipment' | 'tasks' | 'appearance' | 'danger';
 
@@ -74,6 +75,7 @@ function SettingsPageContent() {
   const { isTrueManager, user: currentUser } = useAuth();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<SettingsTab>('checklist');
+  const [isSwitchMode, setSwitchMode] = useSwitchUiMode();
 
   // Passcode change form (own account)
   const [passcodeForm, setPasscodeForm] = useState({ current: '', next: '', confirm: '' });
@@ -1146,6 +1148,42 @@ function SettingsPageContent() {
 
       {activeTab === 'appearance' && (
         <div className="stack">
+          {/* Master Interface Experience Toggle */}
+          <section className="card card-pad stack">
+            <div className="spread items-start flex-wrap gap-4">
+              <div>
+                <h2 className="card-title cluster gap-2">
+                  <Gamepad2 className="w-5 h-5 text-[#00c3e3]" />
+                  Interface Experience
+                </h2>
+                <p className="hint">
+                  Choose between the Classic Sunny Fleet enterprise layout (left sidebar, widget dashboard) or the Nintendo Switch UI (pure white home screen carousel, app shell, and tactile feedback).
+                </p>
+              </div>
+              <div className="switch-filter-capsule">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSwitchMode(false);
+                  }}
+                  className={`switch-filter-tab ${!isSwitchMode ? 'is-active' : ''}`}
+                >
+                  Classic Fleet OS
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSwitchMode(true);
+                    playSwitchSound('popup');
+                  }}
+                  className={`switch-filter-tab ${isSwitchMode ? 'is-active' : ''}`}
+                >
+                  Nintendo Switch UI
+                </button>
+              </div>
+            </div>
+          </section>
+
           {/* Nintendo Switch Sound Effects Toggle */}
           <section className="card card-pad stack">
             <div className="spread items-start flex-wrap gap-2">

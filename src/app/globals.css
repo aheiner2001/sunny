@@ -501,6 +501,15 @@
   .card {
     position: relative;
     overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow var(--duration) var(--ease),
+                border-color var(--duration) var(--ease);
+  }
+
+  body.switch-theme-active .card {
     background: #ffffff;
     border: 1.5px solid #e2e8f0;
     border-radius: 20px;
@@ -508,7 +517,7 @@
     transition: all 0.18s cubic-bezier(0.2, 0.8, 0.25, 1);
   }
 
-  .card:hover {
+  body.switch-theme-active .card:hover {
     transform: translateY(-2px);
     border-color: #00c3e3;
     box-shadow: 0 10px 28px rgba(0, 195, 227, 0.12);
@@ -518,16 +527,23 @@
   .switch-gallery-card,
   .vehicle-card {
     position: relative;
-    background: #ffffff;
-    border: 1.5px solid #e2e8f0;
-    border-radius: 20px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
     overflow: hidden;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
     transition: all 0.2s cubic-bezier(0.2, 0.8, 0.25, 1);
   }
 
-  .switch-gallery-card:hover,
-  .vehicle-card:hover {
+  body.switch-theme-active .switch-gallery-card,
+  body.switch-theme-active .vehicle-card {
+    background: #ffffff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 20px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  }
+
+  body.switch-theme-active .switch-gallery-card:hover,
+  body.switch-theme-active .vehicle-card:hover {
     transform: translateY(-3px);
     border-color: #00c3e3;
     box-shadow: 0 12px 32px rgba(0, 195, 227, 0.16), 0 0 0 2px #00c3e3;
@@ -722,30 +738,26 @@
     justify-content: center;
     gap: var(--space-2);
     min-height: var(--tap);
-    padding: 0 var(--space-5);
-    border: 1.5px solid transparent;
-    border-radius: 9999px; /* Authentic Switch pill buttons */
-    background: #ffffff;
-    color: #2c2c2c;
+    padding: 0 var(--space-4);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--ink);
     font-family: var(--font-display);
     font-size: var(--text-sm);
-    font-weight: 700;
-    letter-spacing: 0.02em;
+    font-weight: 600;
     white-space: nowrap;
+    text-decoration: none;
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
-    transition: all 0.16s cubic-bezier(0.2, 0.8, 0.25, 1);
+    transition: background-color var(--duration) var(--ease),
+                border-color var(--duration) var(--ease),
+                box-shadow var(--duration) var(--ease),
+                color var(--duration) var(--ease);
   }
 
-  .btn:hover:not(:disabled) {
-    transform: translateY(-2px) scale(1.02);
-    box-shadow: 0 6px 16px rgba(0, 195, 227, 0.25);
-  }
-
-  .btn:active {
-    transform: scale(0.95);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  }
+  .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .btn:hover:not(:disabled) { box-shadow: var(--shadow-sm); }
+  .btn:active:not(:disabled) { transform: translateY(1px); }
 
   .btn:disabled,
   .btn[aria-disabled='true'] {
@@ -756,34 +768,87 @@
   }
 
   .btn-primary {
+    background: var(--ink);
+    color: var(--ink-inverse);
+    border-color: var(--ink);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--ink-faint);
+    border-color: var(--ink-faint);
+  }
+  .btn-primary:focus-visible { outline-color: var(--focus); }
+
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--ink);
+    border-color: var(--line-strong);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--surface-alt);
+    border-color: var(--ink);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--ink-muted);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--surface-alt);
+    color: var(--ink);
+  }
+
+  /* Nintendo Switch UI active button overrides */
+  body.switch-theme-active .btn {
+    padding: 0 var(--space-5);
+    border: 1.5px solid transparent;
+    border-radius: 9999px; /* Authentic Switch pill buttons */
+    background: #ffffff;
+    color: #2c2c2c;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    transition: all 0.16s cubic-bezier(0.2, 0.8, 0.25, 1);
+  }
+
+  body.switch-theme-active .btn:hover:not(:disabled) {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 6px 16px rgba(0, 195, 227, 0.25);
+  }
+
+  body.switch-theme-active .btn:active {
+    transform: scale(0.95);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  body.switch-theme-active .btn-primary {
     background: #00c3e3;
     border-color: #00c3e3;
     color: #ffffff;
   }
-  .btn-primary:hover:not(:disabled) {
+  body.switch-theme-active .btn-primary:hover:not(:disabled) {
     background: #00b0cd;
     border-color: #00b0cd;
     box-shadow: 0 6px 20px rgba(0, 195, 227, 0.45);
   }
-  .btn-primary:focus-visible { outline-color: #00c3e3; }
+  body.switch-theme-active .btn-primary:focus-visible { outline-color: #00c3e3; }
 
-  .btn-secondary {
+  body.switch-theme-active .btn-secondary {
     background: #ffffff;
     border-color: #d8d8d8;
     color: #2c2c2c;
   }
-  .btn-secondary:hover:not(:disabled) {
+  body.switch-theme-active .btn-secondary:hover:not(:disabled) {
     background: #f8fafc;
     border-color: #00c3e3;
     color: #0885a5;
   }
 
-  .btn-ghost {
+  body.switch-theme-active .btn-ghost {
     background: #ffffff;
     border-color: #e5e7eb;
     color: #475569;
   }
-  .btn-ghost:hover:not(:disabled) {
+  body.switch-theme-active .btn-ghost:hover:not(:disabled) {
     background: #f1f5f9;
     border-color: #00c3e3;
     color: #0885a5;
@@ -815,12 +880,31 @@
   .btn-block { width: 100%; }
 
   /* ------------------------------------------------------------------------
-     Badges — Nintendo Switch Cartridge Status Pill
+     Badges — the text-side twin of the rail
      ------------------------------------------------------------------------ */
   .badge {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
+    padding: 0.2em 0.6em;
+    border-radius: var(--radius-pill);
+    background: var(--idle-wash);
+    color: var(--idle);
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .badge[data-status='ok'] { background: var(--ok-wash); color: var(--ok); }
+  .badge[data-status='flagged'] { background: var(--amber-wash); color: var(--amber-text); }
+  .badge[data-status='critical'] { background: var(--critical-wash); color: var(--critical); }
+  .badge[data-status='info'] { background: var(--info-wash); color: var(--ink); }
+
+  /* Nintendo Switch UI active badge overrides */
+  body.switch-theme-active .badge {
     padding: 0.25rem 0.75rem;
     border-radius: 9999px;
     background: #f1f5f9;
@@ -835,27 +919,27 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   }
 
-  .badge[data-status='ok'] {
+  body.switch-theme-active .badge[data-status='ok'] {
     background: #ecfdf5;
     border-color: #a7f3d0;
     color: #059669;
   }
-  .badge[data-status='flagged'] {
+  body.switch-theme-active .badge[data-status='flagged'] {
     background: #fffbeb;
     border-color: #fde68a;
     color: #d97706;
   }
-  .badge[data-status='critical'] {
+  body.switch-theme-active .badge[data-status='critical'] {
     background: #fef2f2;
     border-color: #fecaca;
     color: #dc2626;
   }
-  .badge[data-status='info'] {
+  body.switch-theme-active .badge[data-status='info'] {
     background: #f0f9ff;
     border-color: #bae6fd;
     color: #0284c7;
   }
-  .badge[data-status='idle'] {
+  body.switch-theme-active .badge[data-status='idle'] {
     background: #f8fafc;
     border-color: #e2e8f0;
     color: #64748b;
