@@ -123,24 +123,164 @@
   justify-content: space-between;
   padding: 2.5vh 3.5vw 2vh;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
-.switch-glow {
-  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.25, 1), box-shadow 0.18s ease;
+/* 1. TOP ROW: Profile & Status */
+.switch-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 7vh;
+  border-bottom: 1px solid #f0f0f0;
+  padding-bottom: 8px;
 }
 
-.switch-glow:hover,
-.switch-glow:focus-visible,
-.switch-glow.is-selected {
-  transform: scale(1.1) !important;
-  animation: switchBorderPulse 1.2s infinite !important;
+.switch-profiles {
+  display: flex;
+  align-items: center;
+  gap: 1.2vw;
+  cursor: pointer;
+}
+
+.switch-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 3px solid #504F4E;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  overflow: hidden;
+  background: #0885a5;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.switch-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.switch-avatar:hover {
+  transform: scale(1.08);
+  border-color: #3db4ad;
+}
+
+.switch-profile-name {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.switch-status-tray {
+  display: flex;
+  align-items: center;
+  gap: 1.5vw;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #444;
+}
+
+/* 2. ACTIVE SELECTION TITLE BANNER */
+.switch-active-title-wrap {
+  height: 5.5vh;
+  margin-top: 1vh;
+  text-align: center;
+}
+
+.switch-active-title {
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: #0885a5;
+  letter-spacing: 0.5px;
+}
+
+/* 3. CENTER CAROUSEL (Game Cards) */
+.switch-carousel-container {
+  width: 100%;
+  height: 44vh;
+  display: flex;
+  align-items: center;
+  gap: 2.5vw;
+  padding: 3vh 6vw;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: thin;
+}
+
+.switch-card {
+  position: relative;
+  width: 28vh;
+  height: 28vh;
+  min-width: 200px;
+  min-height: 200px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 3.5px solid #eaeaea;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 16px;
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.18s ease;
+  flex-shrink: 0;
+}
+
+.switch-card:hover,
+.switch-card.is-selected {
+  transform: scale(1.08);
+  z-index: 20;
   border-color: #62EFDF !important;
-  z-index: 20 !important;
+  animation: switchBorderPulse 1.2s infinite;
+}
+
+.switch-card .card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.switch-card .card-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #222;
+  margin-bottom: 2px;
+}
+
+.switch-card .card-subtitle {
+  font-size: 0.85rem;
+  color: #777;
+  font-weight: 500;
+}
+
+.switch-card .card-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: #ff4554;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  box-shadow: 0 2px 6px rgba(255, 69, 84, 0.4);
+}
+
+/* 4. CIRCULAR OPTION BUTTONS */
+.switch-options-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2.5vw;
+  height: 10vh;
 }
 
 .switch-circle-btn {
-  width: 58px;
-  height: 58px;
+  width: 62px;
+  height: 62px;
   border-radius: 50%;
   background: #ffffff;
   border: 1.5px solid #dcdcdc;
@@ -154,7 +294,7 @@
 }
 
 .switch-circle-btn:hover {
-  outline: 3.5px solid #1b98c6;
+  outline: 4px solid #1b98c6;
   border-color: #1b98c6;
   transform: scale(1.12);
 }

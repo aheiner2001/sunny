@@ -11,31 +11,26 @@ import {
   GraduationCap,
   Wrench,
   AlertTriangle,
+  CalendarDays,
   Users,
   BarChart3,
   Settings,
-  CalendarDays,
-  Wifi,
-  BatteryMedium,
-  Image,
-  Gamepad2,
+  QrCode,
   Power,
-  QrCode
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { playSwitchSound } from '@/lib/switchAudio';
 import { dbService } from '@/lib/db';
 import { useAuth } from '@/context/AuthContext';
 import { getResolvedAvatarUrl } from '@/lib/avatarPresets';
-import { asset } from '@/lib/basePath';
-import { SWITCH_PNG_ICONS } from '@/lib/switchIconsData';
 
 interface SwitchAppTile {
   title: string;
   subtitle: string;
   href: string;
-  imageSrc?: string;
   icon: React.ElementType;
-  accentColor: string;
+  iconColor: string;
   badge?: number | string;
 }
 
@@ -83,298 +78,300 @@ export function SwitchHomeScreen({
     return () => window.removeEventListener('sunny_db_update', refreshStats);
   }, []);
 
-  // Ordered strictly according to daily manager priority with guaranteed embedded PNG Switch app icons:
+  // Matching Books App Nintendo Switch Carousel:
   const apps: SwitchAppTile[] = [
     {
       title: 'Inspections Log',
-      subtitle: 'Completed vehicle audits',
+      subtitle: 'Completed Audits',
       href: '/inspections',
-      imageSrc: SWITCH_PNG_ICONS['inspections'],
       icon: ClipboardCheck,
-      accentColor: '#10b981',
+      iconColor: '#10b981',
     },
     {
       title: 'Timesheets',
-      subtitle: 'Hours, edits & overtime',
+      subtitle: 'Clock Hours & Edits',
       href: '/timesheets',
-      imageSrc: SWITCH_PNG_ICONS['timesheets'],
       icon: Clock,
-      accentColor: '#00c3e3',
+      iconColor: '#00c3e3',
     },
     {
       title: 'Vehicles & Fleet',
-      subtitle: `${activeVehicles} active units`,
+      subtitle: `${activeVehicles} Active Vans`,
       href: '/vehicles',
-      imageSrc: SWITCH_PNG_ICONS['vehicles'],
       icon: Truck,
-      accentColor: '#0284c7',
+      iconColor: '#0284c7',
       badge: activeVehicles > 0 ? activeVehicles : undefined,
     },
     {
       title: 'Pending Alerts',
-      subtitle: 'Manager review queue',
+      subtitle: 'Manager Approvals',
       href: '/pending',
-      imageSrc: SWITCH_PNG_ICONS['pending'],
       icon: Bell,
-      accentColor: '#ff4554',
+      iconColor: '#ff4554',
       badge: pendingAlerts > 0 ? pendingAlerts : undefined,
     },
     {
       title: 'Training & Skills',
-      subtitle: 'Certifications & modules',
+      subtitle: 'Modules & Records',
       href: '/training',
-      imageSrc: SWITCH_PNG_ICONS['training'],
       icon: GraduationCap,
-      accentColor: '#f59e0b',
+      iconColor: '#f59e0b',
     },
     {
       title: 'Equipment & Supplies',
-      subtitle: 'Tools, stock & lifespans',
+      subtitle: 'Tools & Lifespans',
       href: '/equipment',
-      imageSrc: SWITCH_PNG_ICONS['equipment'],
       icon: Wrench,
-      accentColor: '#8b5cf6',
+      iconColor: '#8b5cf6',
     },
     {
       title: 'Issues & Repairs',
-      subtitle: 'Fleet maintenance requests',
+      subtitle: 'Maintenance Tickets',
       href: '/issues',
-      imageSrc: SWITCH_PNG_ICONS['issues'],
       icon: AlertTriangle,
-      accentColor: '#f97316',
+      iconColor: '#f97316',
       badge: openIssues > 0 ? openIssues : undefined,
     },
     {
       title: 'Calendar Schedule',
-      subtitle: 'Inspection appointments',
+      subtitle: 'Fleet Appointments',
       href: '/calendar',
-      imageSrc: SWITCH_PNG_ICONS['calendar'],
       icon: CalendarDays,
-      accentColor: '#3b82f6',
+      iconColor: '#3b82f6',
     },
     {
       title: 'Employee Roster',
-      subtitle: 'Security pins & access',
+      subtitle: 'Staff & Security Pins',
       href: '/employees',
-      imageSrc: SWITCH_PNG_ICONS['employees'],
       icon: Users,
-      accentColor: '#ec4899',
+      iconColor: '#ec4899',
     },
     {
       title: 'Reports & Analytics',
-      subtitle: 'PDF exports & KPI data',
+      subtitle: 'PDF & Data Exports',
       href: '/reports',
-      imageSrc: SWITCH_PNG_ICONS['reports'],
       icon: BarChart3,
-      accentColor: '#6366f1',
+      iconColor: '#6366f1',
     },
     {
       title: 'System Settings',
-      subtitle: 'Form setup & database',
+      subtitle: 'Database & Sound Options',
       href: '/settings',
-      imageSrc: SWITCH_PNG_ICONS['settings'],
       icon: Settings,
-      accentColor: '#64748b',
+      iconColor: '#64748b',
     },
   ];
 
+  const scrollCarousel = (direction: 'left' | 'right') => {
+    const el = document.getElementById('switch-home-carousel');
+    if (el) {
+      el.scrollBy({ left: direction === 'left' ? -280 : 280, behavior: 'smooth' });
+      playSwitchSound('klick', 0.2);
+    }
+  };
+
   return (
     <div className="switch-viewport select-none">
-      {/* 1. TOP ROW: Profile Avatar & Status Icons - Clean spacing to prevent any overlap */}
-      <div className="flex items-center justify-between h-[8vh] px-4 sm:px-8 border-b border-[#f0f0f0] bg-white">
+      {/* 1. TOP ROW: Profile Avatar & Status Tray */}
+      <header className="switch-top-row">
         <button
           type="button"
           onClick={() => {
             playSwitchSound('user');
             onProfileClick();
           }}
-          className="flex items-center gap-3 group focus:outline-none shrink-0"
+          className="switch-profiles focus:outline-none"
         >
-          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full border-[2.5px] border-[#504F4E] group-hover:border-[#00c3e3] group-hover:scale-105 transition-all overflow-hidden bg-[#0885a5] shadow-sm flex items-center justify-center text-white font-bold text-base">
+          <div className="switch-avatar">
             {avatarUrl ? (
-              <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+              <img src={avatarUrl} alt="Avatar" />
             ) : (
-              user?.name?.[0]?.toUpperCase() || 'M'
+              <div className="w-full h-full bg-[#0885a5] text-white flex items-center justify-center font-bold text-lg">
+                {user?.name?.[0]?.toUpperCase() || 'M'}
+              </div>
             )}
           </div>
-          <div className="text-left flex flex-col justify-center">
-            <span className="text-base sm:text-lg font-bold text-[#222] group-hover:text-[#0885a5] transition-colors leading-tight">
-              {user?.name || 'Manager'}
-            </span>
-            <span className="text-[11px] font-semibold text-[#888] uppercase tracking-wider">
-              {role || 'Operations'}
-            </span>
-          </div>
+          <span className="switch-profile-name">
+            {user?.name || 'Manager'}
+          </span>
         </button>
 
-        <div className="flex items-center gap-4 text-sm sm:text-base font-bold text-[#444] shrink-0">
+        <div className="switch-status-tray">
           <span>{timeStr}</span>
-          <div className="w-px h-4 bg-[#e0e0e0]" />
-          <span className="text-xs uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-[#f0f9ff] text-[#0284c7] border border-[#bae6fd]">
+          <span className="text-xs uppercase font-extrabold tracking-wider px-2.5 py-1 rounded-full bg-[#f0f9ff] text-[#0284c7] border border-[#bae6fd]">
             Sunny Fleet OS
           </span>
         </div>
-      </div>
+      </header>
 
-      {/* 2. ACTIVE APP TITLE */}
-      <div className="text-center h-[6vh] flex items-center justify-center">
-        <span className="text-2xl font-semibold text-[#0885a5] tracking-wide">
+      {/* 2. ACTIVE SELECTION TITLE BANNER */}
+      <div className="switch-active-title-wrap">
+        <h2 className="switch-active-title">
           {activeTitle}
-        </span>
+        </h2>
       </div>
 
-      {/* 3. CENTER CAROUSEL (Game Cards) - Centered with safe side padding to eliminate left clipping */}
-      <div className="w-full flex items-center gap-6 overflow-x-auto py-8 px-12 sm:px-24 snap-x snap-mandatory scroll-px-12 sm:scroll-px-24 scrollbar-thin">
-        {apps.map((app) => {
-          const Icon = app.icon;
-          const isSelected = activeTitle === app.title;
-          return (
-            <Link
-              key={app.href}
-              href={app.href}
-              onMouseEnter={() => {
-                setActiveTitle(app.title);
-                playSwitchSound('klick', 0.25);
-              }}
-              onClick={() => {
-                playSwitchSound('popup');
-              }}
-              className={`switch-glow relative shrink-0 w-48 h-48 sm:w-56 sm:h-56 rounded-2xl bg-[#ffffff] border-[3.5px] p-5 flex flex-col justify-between text-center cursor-pointer shadow-md snap-center ${
-                isSelected ? 'is-selected border-[#62EFDF]' : 'border-[#f0f0f0]'
-              }`}
-            >
-              {app.badge !== undefined && (
-                <span className="absolute top-3 right-3 min-w-6 h-6 px-1.5 rounded-full bg-[#ff4554] text-white text-xs font-black flex items-center justify-center border-2 border-white shadow-sm">
-                  {app.badge}
-                </span>
-              )}
+      {/* 3. CENTER CAROUSEL (Nintendo Switch Cards) */}
+      <div className="relative w-full flex items-center justify-center">
+        {/* Carousel Nav Arrows */}
+        <button
+          type="button"
+          onClick={() => scrollCarousel('left')}
+          className="hidden md:flex absolute left-2 z-30 w-10 h-10 rounded-full bg-white border border-[#dadada] shadow-md items-center justify-center text-[#555] hover:text-[#0885a5] hover:border-[#0885a5] hover:scale-110 transition-all"
+          title="Scroll Left"
+        >
+          <ChevronLeft className="w-6 h-6" />
+        </button>
 
-              <div className="flex items-center justify-center flex-1 my-1">
-                {app.imageSrc ? (
-                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-white shadow-sm border border-[#e5e7eb] p-2 flex items-center justify-center group-hover:scale-105 transition-transform duration-150">
-                    <img
-                      src={app.imageSrc}
-                      alt={app.title}
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                ) : (
-                  <div
-                    className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-inner transition-transform group-hover:scale-110"
-                    style={{ backgroundColor: `${app.accentColor}18`, color: app.accentColor }}
-                  >
-                    <Icon className="w-10 h-10 stroke-[2.2]" />
-                  </div>
+        <div
+          id="switch-home-carousel"
+          className="switch-carousel-container snap-x snap-mandatory scroll-smooth"
+        >
+          {apps.map((app) => {
+            const Icon = app.icon;
+            const isSelected = activeTitle === app.title;
+            return (
+              <Link
+                key={app.href}
+                href={app.href}
+                onMouseEnter={() => {
+                  setActiveTitle(app.title);
+                  playSwitchSound('klick', 0.25);
+                }}
+                onClick={() => {
+                  playSwitchSound('popup');
+                }}
+                className={`switch-card snap-center ${
+                  isSelected ? 'is-selected' : ''
+                }`}
+              >
+                {/* Badge for Pending/Issues/Vehicles */}
+                {app.badge !== undefined && (
+                  <span className="card-badge" style={{ display: 'block' }}>
+                    {app.badge}
+                  </span>
                 )}
-              </div>
 
-              <div>
-                <h3 className="text-lg font-bold text-[#222] truncate">
+                {/* Nintendo Switch Icon */}
+                <div
+                  className="card-icon"
+                  style={{ color: app.iconColor }}
+                >
+                  <Icon className="w-16 h-16 sm:w-20 sm:h-20 stroke-[1.8] transition-transform duration-150" />
+                </div>
+
+                {/* Card Title & Subtitle */}
+                <h3 className="card-title truncate w-full px-2">
                   {app.title}
                 </h3>
-                <p className="text-xs text-[#777] font-medium mt-0.5 truncate">
+                <p className="card-subtitle truncate w-full px-2">
                   {app.subtitle}
                 </p>
-              </div>
-            </Link>
-          );
-        })}
-      </div>
-
-      {/* 4. CIRCULAR OPTION BUTTONS & CONSOLE CONTROLS */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 h-[12vh] px-6 sm:px-12 pt-2">
-        {/* Switch Action Tray */}
-        <div className="flex items-center justify-center gap-4 sm:gap-6">
-          {/* News / Alerts */}
-          <button
-            type="button"
-            onClick={() => {
-              playSwitchSound('news');
-              router.push('/pending');
-            }}
-            className="switch-circle-btn group"
-            title="News & Pending Alerts"
-          >
-            <Bell className="w-6 h-6 text-[#ff4554] group-hover:scale-110 transition-transform" />
-            {pendingAlerts > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#ff4554] text-white text-[10px] font-extrabold flex items-center justify-center border-2 border-white">
-                {pendingAlerts}
-              </span>
-            )}
-          </button>
-
-          {/* eShop / QR Scan */}
-          <button
-            type="button"
-            onClick={() => {
-              playSwitchSound('popup');
-              onScanClick();
-            }}
-            className="switch-circle-btn group !bg-[#ffa524] !border-[#ffa524]"
-            title="Scan QR Code"
-          >
-            <QrCode className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
-          </button>
-
-          {/* Album / Inspections */}
-          <button
-            type="button"
-            onClick={() => {
-              playSwitchSound('popup');
-              router.push('/inspections');
-            }}
-            className="switch-circle-btn group"
-            title="Completed Inspection Records"
-          >
-            <ClipboardCheck className="w-6 h-6 text-[#10b981] group-hover:scale-110 transition-transform" />
-          </button>
-
-          {/* Fleet Vehicles */}
-          <button
-            type="button"
-            onClick={() => {
-              playSwitchSound('popup');
-              router.push('/vehicles');
-            }}
-            className="switch-circle-btn group"
-            title="Fleet Vehicles & Status"
-          >
-            <Truck className="w-6 h-6 text-[#0284c7] group-hover:scale-110 transition-transform" />
-          </button>
-
-          {/* Settings */}
-          <button
-            type="button"
-            onClick={() => {
-              playSwitchSound('popup');
-              router.push('/settings');
-            }}
-            className="switch-circle-btn group"
-            title="System Settings"
-          >
-            <Settings className="w-6 h-6 text-[#444] group-hover:scale-110 transition-transform" />
-          </button>
-
-          {/* Sleep / Logout placed cleanly at far right of tray */}
-          <button
-            type="button"
-            onClick={() => {
-              playSwitchSound('klick');
-              logout();
-            }}
-            className="switch-circle-btn group"
-            title="Lock Console / Sign Out"
-          >
-            <Power className="w-6 h-6 text-[#888] group-hover:text-[#ff4554] group-hover:scale-110 transition-all" />
-          </button>
+              </Link>
+            );
+          })}
         </div>
 
-        {/* Clean right side status badge */}
-        <div className="flex items-center gap-3 text-xs font-bold text-[#888]">
-          <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] animate-pulse" />
-          <span className="tracking-wide uppercase text-[11px] font-extrabold text-[#555]">System Ready</span>
-        </div>
+        <button
+          type="button"
+          onClick={() => scrollCarousel('right')}
+          className="hidden md:flex absolute right-2 z-30 w-10 h-10 rounded-full bg-white border border-[#dadada] shadow-md items-center justify-center text-[#555] hover:text-[#0885a5] hover:border-[#0885a5] hover:scale-110 transition-all"
+          title="Scroll Right"
+        >
+          <ChevronRight className="w-6 h-6" />
+        </button>
       </div>
+
+      {/* 4. CIRCULAR OPTION BUTTONS & ACTION TRAY */}
+      <div className="switch-options-row">
+        {/* Pending Alerts / News */}
+        <button
+          type="button"
+          onClick={() => {
+            playSwitchSound('news');
+            router.push('/pending');
+          }}
+          className="switch-circle-btn group"
+          title="News & Pending Alerts"
+        >
+          <Bell className="w-7 h-7 text-[#ff4554] group-hover:scale-110 transition-transform" />
+          {pendingAlerts > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#ff4554] text-white text-[10px] font-extrabold flex items-center justify-center border-2 border-white">
+              {pendingAlerts}
+            </span>
+          )}
+        </button>
+
+        {/* Scan QR */}
+        <button
+          type="button"
+          onClick={() => {
+            playSwitchSound('popup');
+            onScanClick();
+          }}
+          className="switch-circle-btn group !bg-[#ffa524] !border-[#ffa524]"
+          title="Scan QR Code"
+        >
+          <QrCode className="w-7 h-7 text-white group-hover:scale-110 transition-transform" />
+        </button>
+
+        {/* Inspections */}
+        <button
+          type="button"
+          onClick={() => {
+            playSwitchSound('popup');
+            router.push('/inspections');
+          }}
+          className="switch-circle-btn group"
+          title="Completed Inspections Log"
+        >
+          <ClipboardCheck className="w-7 h-7 text-[#10b981] group-hover:scale-110 transition-transform" />
+        </button>
+
+        {/* Vehicles */}
+        <button
+          type="button"
+          onClick={() => {
+            playSwitchSound('popup');
+            router.push('/vehicles');
+          }}
+          className="switch-circle-btn group"
+          title="Fleet Vehicles & Status"
+        >
+          <Truck className="w-7 h-7 text-[#0284c7] group-hover:scale-110 transition-transform" />
+        </button>
+
+        {/* Settings */}
+        <button
+          type="button"
+          onClick={() => {
+            playSwitchSound('popup');
+            router.push('/settings');
+          }}
+          className="switch-circle-btn group"
+          title="System Settings"
+        >
+          <Settings className="w-7 h-7 text-[#444] group-hover:scale-110 transition-transform" />
+        </button>
+
+        {/* Logout */}
+        <button
+          type="button"
+          onClick={() => {
+            playSwitchSound('klick');
+            logout();
+          }}
+          className="switch-circle-btn group"
+          title="Lock Console / Sign Out"
+        >
+          <Power className="w-7 h-7 text-[#888] group-hover:text-[#ff4554] group-hover:scale-110 transition-all" />
+        </button>
+      </div>
+
+      {/* 5. FOOTER: Status text */}
+      <footer className="text-center py-2 text-xs font-semibold text-[#888]">
+        Sunny Fleet Accountability &bull; Nintendo Switch OS Mode
+      </footer>
     </div>
   );
 }
