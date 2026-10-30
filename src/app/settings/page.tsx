@@ -49,6 +49,8 @@ import { ReturnChecklistEditor } from '@/components/ReturnChecklistEditor';
 import { ShopExitQRCode } from '@/components/ShopExitQRCode';
 import { mintCategoryId, planDeleteCategory } from '@/lib/checklistCategories';
 import { loadDashboardColor, saveDashboardColor } from '@/lib/dashboardAppearance';
+import { isSwitchSoundEnabled, setSwitchSoundEnabled, playSwitchSound } from '@/lib/switchAudio';
+import { Volume2, VolumeX } from 'lucide-react';
 
 type SettingsTab = 'checklist' | 'equipment' | 'tasks' | 'appearance' | 'danger';
 
@@ -1141,6 +1143,44 @@ function SettingsPageContent() {
 
       {activeTab === 'appearance' && (
         <div className="stack">
+          {/* Nintendo Switch Sound Effects Toggle */}
+          <section className="card card-pad stack">
+            <div className="spread items-start flex-wrap gap-2">
+              <div>
+                <h2 className="card-title cluster gap-2">
+                  <Volume2 className="w-5 h-5 text-[#00c3e3]" />
+                  Nintendo Switch Audio Feedback
+                </h2>
+                <p className="hint">
+                  Play interactive audio effects (Klick, Popup, Home) when navigating carousels, clicking buttons, and switching tabs.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextState = !isSwitchSoundEnabled();
+                  setSwitchSoundEnabled(nextState);
+                  if (nextState) playSwitchSound('popup');
+                }}
+                className={`btn btn-sm ${
+                  isSwitchSoundEnabled() ? 'btn-primary' : 'btn-secondary'
+                }`}
+              >
+                {isSwitchSoundEnabled() ? (
+                  <>
+                    <Volume2 className="w-4 h-4" />
+                    <span>Sounds Enabled</span>
+                  </>
+                ) : (
+                  <>
+                    <VolumeX className="w-4 h-4 text-slate-400" />
+                    <span>Sounds Muted</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </section>
+
           {isTrueManager && (
             <section className="card card-pad stack">
               <div>

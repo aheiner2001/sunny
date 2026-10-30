@@ -12,8 +12,25 @@ const SOUND_PATHS: Record<SwitchSoundName, string> = {
 
 const audioCache: Partial<Record<SwitchSoundName, HTMLAudioElement>> = {};
 
+const SOUND_STORAGE_KEY = 'sunny_switch_sound_enabled';
+
+/** Check if Nintendo Switch UI sounds are enabled (defaults to true) */
+export function isSwitchSoundEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  const stored = localStorage.getItem(SOUND_STORAGE_KEY);
+  return stored !== 'false';
+}
+
+/** Enable or disable Nintendo Switch UI sounds */
+export function setSwitchSoundEnabled(enabled: boolean): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(SOUND_STORAGE_KEY, enabled ? 'true' : 'false');
+  window.dispatchEvent(new Event('sunny_sound_setting_changed'));
+}
+
 export function playSwitchSound(name: SwitchSoundName, volume = 0.45) {
   if (typeof window === 'undefined') return;
+  if (!isSwitchSoundEnabled()) return;
 
   try {
     let audio = audioCache[name];
@@ -34,3 +51,4 @@ export function playSwitchSound(name: SwitchSoundName, volume = 0.45) {
     // Non-blocking fallback
   }
 }
+
