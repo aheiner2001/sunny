@@ -802,43 +802,60 @@ function ReportsPageContent() {
                   <div className="p-3 rounded-xl bg-surface-sunk border border-line space-y-1">
                     <div className="font-bold text-ink">Report Period (Denver Time)</div>
                     <div className="text-ink-muted">
-                      {lambdaPreview.period.startLabel || lambdaPreview.period.start || 'Current week'} &rarr;{' '}
-                      {lambdaPreview.period.endLabel || lambdaPreview.period.end || 'Now'}
+                      {lambdaPreview.period.startDay || (lambdaPreview.period.start ? new Date(lambdaPreview.period.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Start')} &rarr;{' '}
+                      {lambdaPreview.period.endDay || (lambdaPreview.period.end ? new Date(lambdaPreview.period.end).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'End')}
+                      <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-slate-200 text-slate-700 font-bold uppercase">{lambdaPreview.period.mode || 'current'} week</span>
                     </div>
                   </div>
                 )}
 
                 {lambdaPreview.summary && (
                   <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(lambdaPreview.summary).map(([key, val]) => (
-                      <div key={key} className="p-2.5 rounded-xl bg-surface-sunk border border-line">
-                        <div className="text-[10px] text-ink-muted uppercase font-bold">{key.replace(/([A-Z])/g, ' $1')}</div>
-                        <div className="text-sm font-extrabold text-ink mt-0.5">{String(val)}</div>
+                    <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200">
+                      <div className="text-[10px] text-emerald-800 uppercase font-bold">Approved Hours</div>
+                      <div className="text-sm font-extrabold text-emerald-700 mt-0.5">
+                        {Number(lambdaPreview.summary.approvedHours || 0).toFixed(2)} hrs
                       </div>
-                    ))}
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200">
+                      <div className="text-[10px] text-amber-800 uppercase font-bold">Pending Hours</div>
+                      <div className="text-sm font-extrabold text-amber-700 mt-0.5">
+                        {Number(lambdaPreview.summary.pendingHours || 0).toFixed(2)} hrs
+                      </div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-surface-sunk border border-line">
+                      <div className="text-[10px] text-ink-muted uppercase font-bold">Services Due</div>
+                      <div className="text-sm font-extrabold text-ink mt-0.5">{lambdaPreview.summary.servicesDue ?? 0}</div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-surface-sunk border border-line">
+                      <div className="text-[10px] text-ink-muted uppercase font-bold">Setup Gaps</div>
+                      <div className="text-sm font-extrabold text-red-600 mt-0.5">{lambdaPreview.summary.setupGaps ?? 0}</div>
+                    </div>
                   </div>
                 )}
 
-                {lambdaPreview.approvedHours !== undefined && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="p-2.5 rounded-xl bg-surface-sunk border border-line">
-                      <div className="text-[10px] text-ink-muted uppercase font-bold">Approved Shift Hours</div>
-                      <div className="text-sm font-extrabold text-emerald-600 mt-0.5">{lambdaPreview.approvedHours} hrs</div>
-                    </div>
-                    <div className="p-2.5 rounded-xl bg-surface-sunk border border-line">
-                      <div className="text-[10px] text-ink-muted uppercase font-bold">Pending Shift Hours</div>
-                      <div className="text-sm font-extrabold text-amber-600 mt-0.5">{lambdaPreview.pendingHours} hrs</div>
+                {/* Recommended Next Actions from Lambda */}
+                {lambdaPreview.diagnostics?.nextActions && lambdaPreview.diagnostics.nextActions.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="font-bold text-ink">Recommended Actions ({lambdaPreview.diagnostics.nextActions.length})</div>
+                    <div className="space-y-1.5">
+                      {lambdaPreview.diagnostics.nextActions.map((action: any, idx: number) => (
+                        <div key={idx} className="p-2.5 rounded-xl bg-blue-50/60 border border-blue-200 text-blue-900 space-y-0.5">
+                          <div className="font-bold text-[11px] text-blue-950">{action.title}</div>
+                          <div className="text-[11px] text-blue-800">{action.step}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
 
                 {lambdaPreview.diagnostics?.setupGaps && lambdaPreview.diagnostics.setupGaps.length > 0 && (
                   <div className="space-y-1.5">
-                    <div className="font-bold text-ink">Setup / Maintenance Gaps ({lambdaPreview.diagnostics.setupGaps.length})</div>
-                    <div className="space-y-1">
+                    <div className="font-bold text-ink">Fleet Setup Gaps ({lambdaPreview.diagnostics.setupGaps.length})</div>
+                    <div className="space-y-1 max-h-40 overflow-y-auto">
                       {lambdaPreview.diagnostics.setupGaps.map((gap: any, idx: number) => (
                         <div key={idx} className="p-2 rounded-lg bg-surface-sunk border border-line">
-                          <span className="font-bold">{gap.vehicle || `Vehicle #${idx + 1}`}: </span>
+                          <span className="font-bold text-ink">{gap.vehicle || `Vehicle #${idx + 1}`}: </span>
                           <span className="text-ink-muted">{gap.reasons || JSON.stringify(gap)}</span>
                         </div>
                       ))}
