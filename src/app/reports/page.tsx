@@ -15,6 +15,8 @@ import {
   Users,
   BarChart3,
   Sparkles,
+  Loader2,
+  X,
 } from 'lucide-react';
 import { dbService } from '@/lib/db';
 import { findPossibleMissedIssues } from '@/lib/possibleMissedIssues';
@@ -51,6 +53,33 @@ function ReportsPageContent() {
     return d.toISOString().split('T')[0];
   });
   const [customEndDate, setCustomEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+
+  // Lambda Report Preview State
+  const [lambdaLoading, setLambdaLoading] = useState(false);
+  const [lambdaPreview, setLambdaPreview] = useState<any | null>(null);
+  const [lambdaError, setLambdaError] = useState<string | null>(null);
+
+  const fetchLambdaPreview = async () => {
+    setLambdaLoading(true);
+    setLambdaError(null);
+    try {
+      const endpoint = process.env.NEXT_PUBLIC_REPORTS_API_URL || 'http://localhost:4000/reports/weekly/preview?week=current';
+      const res = await fetch(endpoint, {
+        headers: {
+          'Authorization': 'Bearer manager-token',
+        },
+      });
+      if (!res.ok) {
+        throw new Error(`API returned HTTP ${res.status}: ${res.statusText}`);
+      }
+      const data = await res.json();
+      setLambdaPreview(data);
+    } catch (err: any) {
+      setLambdaError(err.message || 'Failed to fetch report preview');
+    } finally {
+      setLambdaLoading(false);
+    }
+  };
 
   const load = () => {
     setInspections(dbService.getInspections());
@@ -708,7 +737,7 @@ function ReportsPageContent() {
             <p className="hint">Download CSV or formatted HTML compliance packages for auditing.</p>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <button
             onClick={() => exportInspectionsAsCSV(filteredInspections)}
             className="btn btn-secondary cluster gap-2 justify-center"
@@ -730,8 +759,106 @@ function ReportsPageContent() {
             <FileText className="w-4 h-4" />
             <span>Compliance Report (HTML)</span>
           </button>
+          <button
+            onClick={() => void fetchLambdaPreview()}
+            disabled={lambdaLoading}
+            className="btn btn-primary cluster gap-2 justify-center bg-amber-600 hover:bg-amber-700 text-white"
+          >
+            {lambdaLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-amber-200" />}
+            <span>{lambdaLoading ? 'Loading Preview...' : 'Preview Weekly Report'}</span>
+          </button>
         </div>
       </div>
+
+      {/* Lambda Preview Modal */}
+      {(lambdaPreview || lambdaError) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-surface border border-line rounded-2xl max-w-lg w-full p-6 shadow-2xl relative space-y-4 max-h-[85vh] overflow-y-auto">
+            <button
+              onClick={() => { setLambdaPreview(null); setLambdaError(null); }}
+              className="absolute top-4 right-4 text-ink-muted hover:text-ink p-1"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-amber-500" />
+              <h3 className="text-base font-bold text-ink m-0">Live Weekly Report Preview</h3>
+            </div>
+
+            {lambdaError && (
+              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
+                {lambdaError}
+              </div>
+            )}
+
+            {lambdaPreview && (
+              <div className="space-y-4 text-xs">
+                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 font-medium">
+                  {lambdaPreview.message || 'No email sent. (Preview Mode)'}
+                </div>
+
+                {lambdaPreview.period && (
+                  <div className="p-3 rounded-xl bg-surface-sunk border border-line space-y-1">
+                    <div className="font-bold text-ink">Report Period (Denver Time)</div>
+                    <div className="text-ink-muted">
+                      {lambdaPreview.period.startLabel || lambdaPreview.period.start || 'Current week'} &rarr;{' '}
+                      {lambdaPreview.period.endLabel || lambdaPreview.period.end || 'Now'}
+                    </div>
+                  </div>
+                )}
+
+                {lambdaPreview.summary && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(lambdaPreview.summary).map(([key, val]) => (
+                      <div key={key} className="p-2.5 rounded-xl bg-surface-sunk border border-line">
+                        <div className="text-[10px] text-ink-muted uppercase font-bold">{key.replace(/([A-Z])/g, ' $1')}</div>
+                        <div className="text-sm font-extrabold text-ink mt-0.5">{String(val)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {lambdaPreview.approvedHours !== undefined && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2.5 rounded-xl bg-surface-sunk border border-line">
+                      <div className="text-[10px] text-ink-muted uppercase font-bold">Approved Shift Hours</div>
+                      <div className="text-sm font-extrabold text-emerald-600 mt-0.5">{lambdaPreview.approvedHours} hrs</div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-surface-sunk border border-line">
+                      <div className="text-[10px] text-ink-muted uppercase font-bold">Pending Shift Hours</div>
+                      <div className="text-sm font-extrabold text-amber-600 mt-0.5">{lambdaPreview.pendingHours} hrs</div>
+                    </div>
+                  </div>
+                )}
+
+                {lambdaPreview.diagnostics?.setupGaps && lambdaPreview.diagnostics.setupGaps.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="font-bold text-ink">Setup / Maintenance Gaps ({lambdaPreview.diagnostics.setupGaps.length})</div>
+                    <div className="space-y-1">
+                      {lambdaPreview.diagnostics.setupGaps.map((gap: any, idx: number) => (
+                        <div key={idx} className="p-2 rounded-lg bg-surface-sunk border border-line">
+                          <span className="font-bold">{gap.vehicle || `Vehicle #${idx + 1}`}: </span>
+                          <span className="text-ink-muted">{gap.reasons || JSON.stringify(gap)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="pt-2 border-t border-line flex justify-end">
+              <button
+                onClick={() => { setLambdaPreview(null); setLambdaError(null); }}
+                className="btn btn-secondary px-4 py-1.5"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
