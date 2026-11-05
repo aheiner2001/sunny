@@ -58,12 +58,17 @@ function ReportsPageContent() {
   const [lambdaLoading, setLambdaLoading] = useState(false);
   const [lambdaPreview, setLambdaPreview] = useState<any | null>(null);
   const [lambdaError, setLambdaError] = useState<string | null>(null);
+  const [previewWeekMode, setPreviewWeekMode] = useState<'current' | 'previous'>('current');
+  const [testEmailSending, setTestEmailSending] = useState(false);
+  const [testEmailSuccess, setTestEmailSuccess] = useState<string | null>(null);
 
-  const fetchLambdaPreview = async () => {
+  const fetchLambdaPreview = async (mode: 'current' | 'previous' = previewWeekMode) => {
     setLambdaLoading(true);
     setLambdaError(null);
+    setTestEmailSuccess(null);
     try {
-      const endpoint = process.env.NEXT_PUBLIC_REPORTS_API_URL || 'https://1s8yydgkbk.execute-api.us-east-2.amazonaws.com/reports/weekly/preview?week=current';
+      const baseUrl = 'https://1s8yydgkbk.execute-api.us-east-2.amazonaws.com/reports/weekly/preview';
+      const endpoint = `${baseUrl}?week=${mode}`;
       const res = await fetch(endpoint, {
         headers: {
           'Authorization': 'Bearer manager-token',
@@ -74,10 +79,43 @@ function ReportsPageContent() {
       }
       const data = await res.json();
       setLambdaPreview(data);
+      setPreviewWeekMode(mode);
     } catch (err: any) {
       setLambdaError(err.message || 'Failed to fetch report preview');
     } finally {
       setLambdaLoading(false);
+    }
+  };
+
+  const sendTestEmail = async (recipientEmail: string) => {
+    if (!recipientEmail || !recipientEmail.includes('@')) {
+      alert('Please provide a valid email address');
+      return;
+    }
+    setTestEmailSending(true);
+    setTestEmailSuccess(null);
+    try {
+      const endpoint = 'https://1s8yydgkbk.execute-api.us-east-2.amazonaws.com/reports/weekly/preview/email';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer manager-token',
+        },
+        body: JSON.stringify({
+          email: recipientEmail,
+          week: previewWeekMode,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: Failed to send test email`);
+      }
+      const result = await res.json();
+      setTestEmailSuccess(`Draft report sent successfully to ${recipientEmail}!`);
+    } catch (err: any) {
+      alert(`Error sending draft email: ${err.message}`);
+    } finally {
+      setTestEmailSending(false);
     }
   };
 
@@ -781,9 +819,31 @@ function ReportsPageContent() {
               <X className="w-5 h-5" />
             </button>
 
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-amber-500" />
-              <h3 className="text-base font-bold text-ink m-0">Live Weekly Report Preview</h3>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-500" />
+                <h3 className="text-base font-bold text-ink m-0">Live Weekly Report Preview</h3>
+              </div>
+              <div className="flex items-center gap-1 bg-surface-sunk p-1 rounded-xl border border-line">
+                <button
+                  type="button"
+                  onClick={() => void fetchLambdaPreview('current')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    previewWeekMode === 'current' ? 'bg-amber-600 text-white shadow-xs' : 'text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  Current Week
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void fetchLambdaPreview('previous')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    previewWeekMode === 'previous' ? 'bg-amber-600 text-white shadow-xs' : 'text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  Previous Week
+                </button>
+              </div>
             </div>
 
             {lambdaError && (
@@ -864,6 +924,36 @@ function ReportsPageContent() {
                 )}
               </div>
             )}
+
+            {/* Test Email Dispatch Section */}
+            <div className="p-3 rounded-xl bg-surface-sunk border border-line space-y-2">
+              <div className="font-bold text-ink text-xs">Email Draft to Manager</div>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  id="draft-email-input"
+                  placeholder="manager@example.com"
+                  defaultValue="test@sunnyfleet.com"
+                  className="input text-xs flex-1 py-1 px-2.5 rounded-lg border border-line bg-surface text-ink"
+                />
+                <button
+                  type="button"
+                  disabled={testEmailSending}
+                  onClick={() => {
+                    const input = document.getElementById('draft-email-input') as HTMLInputElement;
+                    void sendTestEmail(input?.value || '');
+                  }}
+                  className="btn btn-secondary text-xs px-3 py-1 bg-amber-100 hover:bg-amber-200 text-amber-900 border-amber-300 font-bold"
+                >
+                  {testEmailSending ? 'Sending...' : 'Send Draft SES Email'}
+                </button>
+              </div>
+              {testEmailSuccess && (
+                <div className="text-[11px] font-bold text-emerald-700 bg-emerald-50 p-2 rounded-lg border border-emerald-200">
+                  {testEmailSuccess}
+                </div>
+              )}
+            </div>
 
             <div className="pt-2 border-t border-line flex justify-end">
               <button

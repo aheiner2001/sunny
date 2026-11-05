@@ -3465,6 +3465,43 @@ export async function handler(
     };
   }
 
+  const path = event.rawPath || event.path || "";
+  const httpMethod = event.requestContext?.http?.method || (isHttpApi ? "GET" : "CLI");
+
+  // 1. ROUTE: GET /training/gaps
+  if (isHttpApi && path.endsWith("/training/gaps")) {
+    const token = await getGoogleToken();
+    const trainingAssignments = await readCollection("trainingAssignments", token).catch(() => []);
+    const gaps = trainingAssignments
+      .filter(asg => asg.status && asg.status !== "completed")
+      .map(asg => ({
+        id: asg.id,
+        traineeName: asg.traineeName || asg.employeeName || "Unknown",
+        trainingTitle: asg.itemTitle || asg.trainingTitle || "Safety Training",
+        status: asg.status,
+        dueAt: asg.dueAt || null,
+        actionNeeded: asg.status === "needs_retrain"
+          ? "Retraining required"
+          : asg.status === "awaiting_trainee"
+          ? "Awaiting employee certification"
+          : "Sign-off pending",
+      }));
+
+    return {
+      statusCode: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type,Authorization",
+        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+      },
+      body: JSON.stringify({
+        totalGaps: gaps.length,
+        gaps,
+      }),
+    };
+  }
+
   required(
     "FIREBASE_PROJECT_ID"
   );
@@ -3516,11 +3553,25 @@ export async function handler(
     mode
   );
 
+  // Parse JSON request body if POST
+  let parsedBody = {};
+  if (event.body) {
+    try {
+      parsedBody = JSON.parse(event.isBase64Encoded ? Buffer.from(event.body, "base64").toString("utf-8") : event.body);
+    } catch {
+      parsedBody = {};
+    }
+  }
+
+  const isPostEmail = isHttpApi && httpMethod === "POST" && path.endsWith("/email");
+  const testRecipient = parsedBody.email || query.email;
+
   const send =
-    !isHttpApi &&
-    process.env.SEND_ENABLED ===
-      "true" &&
-    event.dryRun === false;
+    (isPostEmail && testRecipient) ||
+    (!isHttpApi &&
+      process.env.SEND_ENABLED ===
+        "true" &&
+      event.dryRun === false);
 
   let recipients = [];
 
@@ -3529,21 +3580,25 @@ export async function handler(
       "SES_FROM_EMAIL"
     );
 
-    recipients = [
-      ...new Set(
-        required(
-          "REPORT_RECIPIENTS"
-        )
-          .split(",")
-          .map(
-            recipient =>
-              recipient
-                .trim()
-                .toLowerCase()
+    if (isPostEmail && testRecipient) {
+      recipients = [testRecipient.trim().toLowerCase()];
+    } else {
+      recipients = [
+        ...new Set(
+          required(
+            "REPORT_RECIPIENTS"
           )
-          .filter(Boolean)
-      ),
-    ];
+            .split(",")
+            .map(
+              recipient =>
+                recipient
+                  .trim()
+                  .toLowerCase()
+            )
+            .filter(Boolean)
+        ),
+      ];
+    }
   }
 
   const token =
@@ -3692,7 +3747,7 @@ export async function handler(
     );
   }
 
-  return {
+  const sendResult = {
     mode: "send",
     sent,
     messageIds,
@@ -3701,4 +3756,19 @@ export async function handler(
     period:
       report.period,
   };
+
+  if (isHttpApi) {
+    return {
+      statusCode: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type,Authorization",
+        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+      },
+      body: JSON.stringify(sendResult),
+    };
+  }
+
+  return sendResult;
 }
