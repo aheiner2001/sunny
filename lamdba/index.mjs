@@ -3563,11 +3563,14 @@ export async function handler(
     }
   }
 
-  const isPostEmail = isHttpApi && httpMethod === "POST" && path.endsWith("/email");
-  const testRecipient = parsedBody.email || query.email;
+  const isSendEmailRequested = Boolean(
+    (isHttpApi && query.sendEmailTo) ||
+    (isHttpApi && httpMethod === "POST" && (path.endsWith("/email") || path.endsWith("/preview")))
+  );
+  const testRecipient = query.sendEmailTo || parsedBody.email || query.email;
 
   const send =
-    (isPostEmail && testRecipient) ||
+    (isSendEmailRequested && testRecipient) ||
     (!isHttpApi &&
       process.env.SEND_ENABLED ===
         "true" &&
@@ -3580,7 +3583,7 @@ export async function handler(
       "SES_FROM_EMAIL"
     );
 
-    if (isPostEmail && testRecipient) {
+    if (isSendEmailRequested && testRecipient) {
       recipients = [testRecipient.trim().toLowerCase()];
     } else {
       recipients = [

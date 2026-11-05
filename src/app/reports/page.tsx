@@ -95,22 +95,17 @@ function ReportsPageContent() {
     setTestEmailSending(true);
     setTestEmailSuccess(null);
     try {
-      const endpoint = 'https://1s8yydgkbk.execute-api.us-east-2.amazonaws.com/reports/weekly/preview/email';
+      // Use the existing configured preview route
+      const endpoint = `https://1s8yydgkbk.execute-api.us-east-2.amazonaws.com/reports/weekly/preview?week=${previewWeekMode}&sendEmailTo=${encodeURIComponent(recipientEmail.trim())}`;
       const res = await fetch(endpoint, {
-        method: 'POST',
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': 'Bearer manager-token',
         },
-        body: JSON.stringify({
-          email: recipientEmail,
-          week: previewWeekMode,
-        }),
       });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: Failed to send test email`);
       }
-      const result = await res.json();
       setTestEmailSuccess(`Draft report sent successfully to ${recipientEmail}!`);
     } catch (err: any) {
       alert(`Error sending draft email: ${err.message}`);
