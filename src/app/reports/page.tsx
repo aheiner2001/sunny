@@ -63,7 +63,7 @@ function ReportsPageContent() {
     setLambdaLoading(true);
     setLambdaError(null);
     try {
-      const endpoint = process.env.NEXT_PUBLIC_REPORTS_API_URL || 'http://localhost:4000/reports/weekly/preview?week=current';
+      const endpoint = process.env.NEXT_PUBLIC_REPORTS_API_URL || 'https://1s8yydgkbk.execute-api.us-east-2.amazonaws.com/reports/weekly/preview?week=current';
       const res = await fetch(endpoint, {
         headers: {
           'Authorization': 'Bearer manager-token',
