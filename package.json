@@ -7,6 +7,7 @@
     "build": "next build && node -e \"require('fs').copyFileSync('public/404.html', 'out/404.html')\"",
     "start": "next start",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest"

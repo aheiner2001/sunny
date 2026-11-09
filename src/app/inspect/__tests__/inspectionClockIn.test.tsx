@@ -90,6 +90,7 @@ describe('Inspection Form Clock-In Integration', () => {
     vi.spyOn(dbService, 'submitInspection').mockResolvedValueOnce({
       inspection: { id: 'insp-123', vehicleId: 'van-test', userId: 'emp-55', status: 'passed' } as any,
       newIssues: [],
+      localCacheWarning: false,
     });
 
     await act(async () => {
@@ -130,6 +131,7 @@ describe('Inspection Form Clock-In Integration', () => {
     vi.spyOn(dbService, 'submitInspection').mockResolvedValueOnce({
       inspection: { id: 'insp-456', vehicleId: 'van-test', userId: 'mgr-1', status: 'passed' } as any,
       newIssues: [],
+      localCacheWarning: false,
     });
 
     await act(async () => {

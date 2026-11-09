@@ -8,6 +8,7 @@ const db = vi.hoisted(() => ({
   getChecklistConfig: vi.fn(() => ({ categories: [], questions: [], collectOdometer: true, collectFuelLevel: false })),
   getTasks: vi.fn(() => []), getOfflineInspections: vi.fn(() => []), getEquipment: vi.fn(() => []), getInspections: vi.fn(() => []),
   getAppSettings: vi.fn(() => ({ recentInspectorsDepth: 5 })), getRecentInspectors: vi.fn(() => []),
+  getOpenPreviousUserFlagsForEmployee: vi.fn(() => []),
   submitInspection: vi.fn(async (payload: any) => ({ inspection: { ...payload, status: 'passed' }, newIssues: [] })),
   saveOfflineInspection: vi.fn(),
 }));
