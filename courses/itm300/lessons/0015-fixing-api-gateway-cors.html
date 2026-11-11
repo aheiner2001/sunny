@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0015: Fixing the CORS Preflight Check in AWS API Gateway</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0015</span>
+      <h1>Why Browsers Block CORS and How to Enable It in API Gateway</h1>
+      <p class="subtitle">Solving <code>Response to preflight request doesn't pass access control check</code> in 60 seconds.</p>
+    </header>
+
+    <section class="card">
+      <h2>What Just Happened? (The "Preflight" Check)</h2>
+      <p>
+        Your Vercel app is hosted at:
+        <code>https://sunny-3mqxv0rrz-gooly.vercel.app</code>
+      </p>
+      <p>
+        When a website on Vercel asks a server on AWS for data with a custom header (like <code>Authorization</code>), the web browser sends a silent "security check" first:
+      </p>
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.25rem; margin-top: 1rem;">
+        <pre><code>
+  Browser (Vercel)                    AWS API Gateway
+        │                                    │
+        │── 1. HTTP OPTIONS (Preflight) ────▶│
+        │      "Can Vercel talk to you?"     │
+        │                                    │
+        │◀─ 2. HTTP 404 (Not Found!) ────────│
+        │      "I don't know who OPTIONS is" │
+        ▼                                    ▼
+  ❌ Browser blocks the real request before it even starts!
+        </code></pre>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>The 60-Second Fix in AWS Console</h2>
+      <p>API Gateway has a built-in switch that automatically answers these browser checks. Here is how to turn it on:</p>
+      <ol>
+        <li>In AWS Console, open your API: <strong>sunny-fleet-api</strong>.</li>
+        <li>In the left sidebar, click <strong>CORS</strong>.</li>
+        <li>Click the <strong>Configure</strong> button on the right.</li>
+        <li>Set the following values:
+          <ul>
+            <li><strong>Access-Control-Allow-Origin:</strong> <code>*</code></li>
+            <li><strong>Access-Control-Allow-Headers:</strong> <code>Authorization,Content-Type,*</code></li>
+            <li><strong>Access-Control-Allow-Methods:</strong> Select <code>GET</code> and <code>OPTIONS</code></li>
+          </ul>
+        </li>
+        <li>Click <strong>Save</strong>!</li>
+      </ol>
+      <p>That's it! API Gateway will now immediately reply <code>200 OK</code> to browser preflight checks from Vercel.</p>
+    </section>
+
+    <footer>
+      <p>Once you click Save in the AWS console, refresh Vercel and click the button!</p>
+      <p><a href="0014-do-you-need-a-stage.html">&larr; Previous Lesson</a></p>
+    </footer>
+  </div>
+</body>
+</html>

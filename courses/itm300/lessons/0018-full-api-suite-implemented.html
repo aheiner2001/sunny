@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0018: Complete API Suite Implemented!</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0018</span>
+      <h1>Full API Suite: Week Toggling, Draft Emails, & Multi-Routing</h1>
+      <p class="subtitle">All three capabilities are now live on your branch and open in your editor.</p>
+    </header>
+
+    <section class="card">
+      <h2>1. Interactive Week Toggling (Live in UI!)</h2>
+      <p>
+        The preview modal now features a <strong>[ Current Week ] / [ Previous Week ]</strong> segmented pill in the top header.
+      </p>
+      <ul>
+        <li>Clicking <strong>Previous Week</strong> calls <code>?week=previous</code> to view closed payroll numbers.</li>
+        <li>Clicking <strong>Current Week</strong> calls <code>?week=current</code> to view live hours accumulating today.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>2. On-Demand Draft Email Dispatch (POST API)</h2>
+      <p>
+        Inside the preview dialog, managers can now type their email address and click <strong>"Send Draft SES Email"</strong>.
+      </p>
+      <ul>
+        <li>Sends an HTTP <code>POST</code> request with <code>{ email, week }</code>.</li>
+        <li>Bypasses the regular recipient list to send a safe one-off proof to the specified manager only.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>3. Multi-Route Training Gaps (GET /training/gaps)</h2>
+      <p>
+        Added routing in <a href="file:///Users/aaronheiner/sunny/lamdba/index.mjs"><code>lamdba/index.mjs</code></a> for <code>/training/gaps</code>.
+      </p>
+      <p>
+        In your AWS API Gateway console, you can optionally add a route for <code>GET /training/gaps</code> pointing to the same Lambda function to activate it.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>What to Copy to AWS Lambda</h2>
+      <p>
+        The updated <a href="file:///Users/aaronheiner/sunny/lamdba/index.mjs"><code>lamdba/index.mjs</code></a> is already open in your editor. Select all (<code>Cmd+A</code>), copy, paste into the AWS Lambda Code tab, and click <strong>Deploy</strong>!
+      </p>
+    </section>
+
+    <footer>
+      <p><a href="0017-next-steps-and-api-expansion.html">&larr; Previous Lesson</a></p>
+    </footer>
+  </div>
+</body>
+</html>

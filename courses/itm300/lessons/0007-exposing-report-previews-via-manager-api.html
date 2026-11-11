@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0007: Exposing Report Previews via Manager API</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0007</span>
+      <h1>Exposing Report Previews via Manager API Gateway</h1>
+      <p class="subtitle">Adapting your Lambda into a live, interactive API where managers can preview reports on-demand.</p>
+    </header>
+
+    <section class="card">
+      <h2>The Core Concept: Scheduled Job vs. On-Demand API</h2>
+      <p>
+        Currently, AWS Lambda can run in two ways:
+      </p>
+      <table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
+        <thead>
+          <tr style="text-align: left; border-bottom: 2px solid #cbd5e1;">
+            <th style="padding: 8px;">Trigger</th>
+            <th style="padding: 8px;">How It Runs</th>
+            <th style="padding: 8px;">Output</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 8px;"><strong>Cron / EventBridge</strong></td>
+            <td style="padding: 8px;">Runs automatically once a week</td>
+            <td style="padding: 8px;">Sends weekly emails to fleet managers</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 8px;"><strong>API Gateway (HTTP API)</strong></td>
+            <td style="padding: 8px;">Runs when a manager clicks "Preview Report" in the app</td>
+            <td style="padding: 8px;">Returns immediate JSON with <code>{ dryRun: true }</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>How the Handler Adapts for API Gateway</h2>
+      <p>When an API Gateway calls your Lambda handler, it provides an <code>event</code> with query parameters and headers:</p>
+      <pre><code>// Manager calls: GET /reports/weekly/preview?week=current
+export async function handler(event = {}) {
+  // 1. Detect if this came from HTTP API Gateway
+  const isHttpApi = Boolean(event.rawPath || event.requestContext?.http);
+
+  // 2. Extract manager parameters
+  const query = event.queryStringParameters || {};
+  const mode = query.week || "previous"; // current or previous week
+
+  // 3. Set dryRun = true so it NEVER sends actual emails during preview!
+  const dryRun = query.send !== "true";
+
+  // 4. Return standard HTTP API response format
+  return {
+    statusCode: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*"
+    },
+    body: JSON.stringify({
+      mode: "preview",
+      period: report.period,
+      summary: report.summary,
+      gaps: analytics.setupGaps,
+      timesheets: analytics.timesheets
+    })
+  };
+}</code></pre>
+    </section>
+
+    <section class="card">
+      <h2>What a Manager Can Do Through the API</h2>
+      <ul>
+        <li><strong>Preview Before Sending:</strong> Check current week numbers before the scheduled Sunday email fires.</li>
+        <li><strong>Inspect Setup Gaps:</strong> Spot vehicles missing safety setups or overdue maintenance.</li>
+        <li><strong>Check Shift Totals:</strong> Validate approved vs. pending driver hours.</li>
+      </ul>
+    </section>
+
+    <section class="card question-box">
+      <h2>Check Your Understanding</h2>
+      <p><strong>Question:</strong> Why do we enforce <code>dryRun: true</code> when handling requests from the preview API endpoint?</p>
+      <p><em>Answer:</em> To guarantee that reviewing report data or testing numbers in the dashboard never accidentally triggers SES email dispatches to managers.</p>
+    </section>
+
+    <footer>
+      <p>Ready to update the Lambda handler or test the response? Ask in chat!</p>
+      <p><a href="0006-anatomy-of-the-weekly-fleet-report-lambda.html">&larr; Previous Lesson</a> | <a href="../aws-lambda/index.mjs">AWS Lambda Handler</a></p>
+    </footer>
+  </div>
+</body>
+</html>

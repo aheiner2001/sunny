@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0016: Why Use AWS Lambda Instead of Querying Firestore Directly in the Browser?</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0016</span>
+      <h1>Why Use AWS Lambda Instead of Querying Firestore in the Browser?</h1>
+      <p class="subtitle">The three architectural pillars: Security, Device Battery/Performance, and Single Source of Truth.</p>
+    </header>
+
+    <section class="card">
+      <h2>Question 1: Why Not Just Read Firestore Directly in the Browser?</h2>
+      <p>
+        In a simple app, reading straight from the database into React feels easier. But for <strong>fleet reporting and payroll analytics</strong>, running it in the client browser breaks down quickly for three critical reasons:
+      </p>
+
+      <table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
+        <thead>
+          <tr style="text-align: left; border-bottom: 2px solid #cbd5e1;">
+            <th style="padding: 8px;">Architecture Challenge</th>
+            <th style="padding: 8px;">Direct Browser Query ❌</th>
+            <th style="padding: 8px;">AWS Lambda Backend ✅</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 8px;"><strong>1. Security & Payroll Privacy</strong></td>
+            <td style="padding: 8px;">To calculate shift totals, the browser must download <em>every raw timesheet of every coworker</em>. Any user can open DevTools and see pay/hours.</td>
+            <td style="padding: 8px;">Lambda has secure Admin SDK keys in AWS Secrets Manager. It calculates the aggregated summary on the server and never leaks raw employee records.</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 8px;"><strong>2. Heavy Processing & Network Bandwidth</strong></td>
+            <td style="padding: 8px;">Downloading 5,000 inspections, 1,000 shifts, and vehicle histories drains phone battery and bogs down a driver's mobile browser.</td>
+            <td style="padding: 8px;">Lambda crunches 3,600 lines of complex boundary math in AWS data centers in <strong>200ms</strong> and sends back a tiny 2KB clean JSON summary.</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 8px;"><strong>3. Single Source of Truth</strong></td>
+            <td style="padding: 8px;">If you change how overtime or break deductions work, you must update the website AND the email script separately. If their math differs, payroll is wrong!</td>
+            <td style="padding: 8px;"><strong>One single engine:</strong> The exact same math runs for the automated Sunday 2:00 AM email and the manager's live preview button.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>Question 2: Why Did the Dates Look Like <code>1793602800000</code>?</h2>
+      <p>
+        Computers measure time in <em>Unix epoch milliseconds</em>. In our preview modal, we printed <code>period.start</code> instead of formatting it into a human date like <strong>Nov 2, 2026</strong>.
+      </p>
+      <p>
+        Also, the Lambda sends back rich diagnostics that we haven't displayed yet:
+      </p>
+      <ul>
+        <li><strong>Recommended Manager Actions:</strong> e.g., <em>"Enable odometer in inspection checklist"</em>.</li>
+        <li><strong>Per-Vehicle Status Breakdown:</strong> Which vans have missing readings vs. clean records.</li>
+        <li><strong>Formatted Dates:</strong> Converting raw millisecond timestamps into readable calendar days.</li>
+      </ul>
+    </section>
+
+    <footer>
+      <p><a href="0015-fixing-api-gateway-cors.html">&larr; Previous Lesson</a></p>
+    </footer>
+  </div>
+</body>
+</html>

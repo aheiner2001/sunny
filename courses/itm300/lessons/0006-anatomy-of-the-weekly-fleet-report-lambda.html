@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0006: Anatomy of the Weekly Fleet Report Lambda</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0006</span>
+      <h1>How the Production Lambda Works (Without the Confusion)</h1>
+      <p class="subtitle">Demystifying <code>lamdba/index.mjs</code> step-by-step so you can adapt it with confidence.</p>
+    </header>
+
+    <section class="card">
+      <h2>The 30,000-Foot View</h2>
+      <p>
+        The file in <a href="file:///Users/aaronheiner/sunny/lamdba/index.mjs"><code>lamdba/index.mjs</code></a> is 3,600+ lines, but its core job is very straightforward:
+      </p>
+      <ol>
+        <li><strong>Read Cloud Configuration:</strong> Grabs credentials from AWS Secrets Manager and checks environment variables (Timezone, Recipient emails).</li>
+        <li><strong>Fetch Operational Data:</strong> Authenticates with Google Cloud/Firestore and pulls 5 collections: <em>vehicles, equipment, inspections, timesheet_shifts, timesheet_corrections</em>.</li>
+        <li><strong>Compute Analytics:</strong> Aggregates shift hours, detects vehicle service gaps, and checks inspection warnings.</li>
+        <li><strong>Format and Deliver:</strong> Formats the numbers into HTML + CSV attachments. If <code>dryRun: true</code>, it returns the summary JSON without emailing. If <code>dryRun: false</code>, it delivers via AWS SES.</li>
+      </ol>
+    </section>
+
+    <section class="card">
+      <h2>The Core Lambda Flow</h2>
+      <pre><code>
+  [AWS EventBridge / Cron Trigger]
+               │
+               ▼
+  handler(event) in index.mjs
+    ├─ 1. Authenticate with Google (getGoogleToken via Secrets Manager)
+    ├─ 2. Fetch Firestore collections in parallel (readCollection)
+    ├─ 3. Run business rules: buildAnalytics(data, ...)
+    ├─ 4. Render email text & HTML: renderReport(analytics)
+    └─ 5. Return JSON preview OR send via SES
+      </code></pre>
+    </section>
+
+    <section class="card">
+      <h2>Key Takeaways for Your Mission</h2>
+      <ul>
+        <li><strong>Dry-run safety:</strong> The handler defaults to or supports <code>{ dryRun: true }</code>, which runs all computations without sending emails or modifying databases.</li>
+        <li><strong>Separation of Concerns:</strong> Data fetching is decoupled from report generation logic (<code>buildAnalytics</code> and <code>renderReport</code>).</li>
+        <li><strong>Timezone precision:</strong> Always operates against Denver boundaries (<code>America/Denver</code>) to ensure consistent weekly shift sums.</li>
+      </ul>
+    </section>
+
+    <section class="card question-box">
+      <h2>Quick Self-Check</h2>
+      <p><strong>Question:</strong> When testing the Lambda function locally or via AWS console, what parameter ensures no actual emails get sent to fleet managers?</p>
+      <p><code>{ "dryRun": true }</code></p>
+    </section>
+
+    <footer>
+      <p>Have questions or ready to run a test preview? Ask in the chat anytime!</p>
+      <p><a href="0005-aws-lambda-api-gateway-architecture.html">&larr; Previous Lesson</a> | <a href="../reference/http-api-cheat-sheet.html">API Reference Sheet</a></p>
+    </footer>
+  </div>
+</body>
+</html>

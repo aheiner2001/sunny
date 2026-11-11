@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0001: Connecting AWS Lambda to GitHub CI/CD</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<div class="container">
+  <header>
+    <span class="badge">Week 9 &bull; Senior Project CSE 499</span>
+    <h1>Lesson 0001: Connecting AWS Lambda to GitHub Actions</h1>
+    <p class="subtitle">Eliminate manual console copy-pasting by using GitHub as the single source of truth for your AWS Lambda code.</p>
+  </header>
+
+  <div class="card">
+    <h2>1. The Problem: Manual Console Drift</h2>
+    <p>Right now, your Lambda function code is updated manually in the AWS Console. This creates several risks:</p>
+    <ul>
+      <li><strong>Drift:</strong> What is running in the cloud may not match what is in git history.</li>
+      <li><strong>Friction:</strong> Every fix requires packaging, logging into the console, and uploading.</li>
+      <li><strong>Lack of Tests:</strong> Untested changes can break the preview endpoint immediately.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>2. Architecture: How GitHub Deploys to Lambda</h2>
+    <pre>
+[git push / merge to branch]
+      │
+      ▼
+[GitHub Actions Workflow]
+      ├─ 1. Run Tests (vitest & tsc --noEmit)
+      ├─ 2. Assume AWS IAM Role (OIDC - No hardcoded secrets!)
+      ├─ 3. Zip Lambda code (lambda/index.mjs)
+      └─ 4. Run: aws lambda update-function-code --function-name &lt;NAME&gt; --zip-file ...
+      │
+      ▼
+[AWS Lambda (Live Preview Endpoint)]
+    </pre>
+  </div>
+
+  <div class="card">
+    <h2>3. The 3 Steps to Wire It</h2>
+    <ol>
+      <li><strong>Consolidate the Code:</strong> Keep the Lambda file tracked in <code>lambda/index.mjs</code> in this repo.</li>
+      <li><strong>Configure AWS OIDC IAM Role:</strong> Give GitHub Actions permission to run <code>lambda:UpdateFunctionCode</code> without permanent AWS access keys.</li>
+      <li><strong>Add a Workflow:</strong> Create <code>.github/workflows/deploy-lambda.yml</code> that triggers on changes to the lambda directory.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>Next Action</h2>
+    <p>Review the hand-off prompt prepared for external AI models, and check Lesson 2 for the live deployment verification loop.</p>
+  </div>
+</div>
+</body>
+</html>

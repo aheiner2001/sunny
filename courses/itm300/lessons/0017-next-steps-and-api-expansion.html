@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0017: What Else Can You Do With Your Fleet API?</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0017</span>
+      <h1>Where To Go Next: 3 Exciting Ways to Level Up Your Fleet API</h1>
+      <p class="subtitle">From passive data viewer to interactive manager commands and automated workflows.</p>
+    </header>
+
+    <section class="card">
+      <h2>You Just Hit a Huge Milestone!</h2>
+      <p>
+        Building a serverless Lambda, connecting it to an HTTP API Gateway, setting up CORS, and integrating it with a React UI across two cloud platforms (AWS + Vercel) is <strong>real-world cloud engineering</strong>. Most college courses never get this far!
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>3 Practical Pathways to Build on This API</h2>
+
+      <div style="margin-bottom: 1.5rem;">
+        <h3>Pathway 1: The "Send Test Email to Me" Action (Mutating Command)</h3>
+        <p>
+          Right now your API only reads data (<code>GET</code>). What if a manager wants to send a one-off draft email right now to themselves?
+        </p>
+        <ul>
+          <li><strong>How it works:</strong> Add a button: <em>"Email Me This Draft"</em>.</li>
+          <li><strong>What you learn:</strong> <code>POST</code> requests, JSON request bodies (e.g. <code>{ "recipient": "manager@sunnyfleet.com" }</code>), and triggering AWS SES on-demand.</li>
+        </ul>
+      </div>
+
+      <div style="margin-bottom: 1.5rem;">
+        <h3>Pathway 2: Download the CSV Audit Package Directly from the Cloud</h3>
+        <p>
+          Notice how your Lambda produces CSV attachments (<code>shift-details.csv</code>, <code>vehicle-maintenance.csv</code>).
+        </p>
+        <ul>
+          <li><strong>How it works:</strong> Add an endpoint: <code>GET /reports/weekly/download-csv?type=shifts</code>.</li>
+          <li><strong>What you learn:</strong> Streaming file downloads from Lambda to the browser with headers like <code>Content-Disposition: attachment; filename="..."</code>.</li>
+        </ul>
+      </div>
+
+      <div style="margin-bottom: 1.5rem;">
+        <h3>Pathway 3: Training Gaps Endpoint Integration</h3>
+        <p>
+          Remember your training logic from earlier (<a href="0004-training-gaps-and-dual-signoff.html">Lesson 0004</a>)?
+        </p>
+        <ul>
+          <li><strong>How it works:</strong> Add the route <code>GET /training/gaps</code> to your API Gateway.</li>
+          <li><strong>What you learn:</strong> Multi-route API Gateways (routing multiple features to the same or separate Lambdas).</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="card question-box">
+      <h2>Recommended Next Step</h2>
+      <p>Which one feels the most exciting to you?</p>
+      <ol>
+        <li><strong>Interactive Date Selector:</strong> Let the manager choose <em>Previous Week</em> vs. <em>Current Week</em> dynamically in the popup.</li>
+        <li><strong>On-Demand Test Email:</strong> A button to send the actual preview report to your email inbox via AWS SES.</li>
+        <li><strong>Multi-Route API:</strong> Wire up the <code>/training/gaps</code> route so managers have an automated training audit API.</li>
+      </ol>
+    </section>
+
+    <footer>
+      <p><a href="0016-why-lambda-backend-vs-client-database.html">&larr; Previous Lesson</a></p>
+    </footer>
+  </div>
+</body>
+</html>

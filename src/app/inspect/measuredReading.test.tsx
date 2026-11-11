@@ -10,6 +10,7 @@ const db = vi.hoisted(() => ({
   getAppSettings: vi.fn(() => ({ recentInspectorsDepth: 5 })), getRecentInspectors: vi.fn(() => []),
   submitInspection: vi.fn(async (payload: any) => ({ inspection: { ...payload, status: 'passed' }, newIssues: [] })),
   saveOfflineInspection: vi.fn(),
+  getOpenPreviousUserFlagsForEmployee: vi.fn(() => []),
 }));
 vi.mock('@/lib/db', () => ({ dbService: db }));
 vi.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: { id: 'employee', name: 'Employee', role: 'employee' }, role: 'employee' }) }));

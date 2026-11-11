@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0003: Authentication vs. Authorization (Who vs. What)</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <header>
+    <div class="lesson-meta">
+      <strong>Lesson 0003</strong> &bull; Track: Sunny Fleet Reporting API &bull; <a href="../MISSION.md">Mission</a>
+    </div>
+    <h1>Authentication vs. Authorization (Who vs. What)</h1>
+  </header>
+
+  <p>
+    Welcome to Lesson 3! With your report preview math working smoothly, we now tackle one of the most critical security concepts in backend engineering: <strong>Authentication (AuthN)</strong> vs. <strong>Authorization (AuthZ)</strong>.
+  </p>
+
+  <h2>1. The Fundamental Difference</h2>
+
+  <div class="box">
+    <h3>The Security Checkpoint Analogy</h3>
+    <p>
+      <strong>Authentication (401 Unauthorized):</strong> Showing your passport or driver's license at an airport checkpoint. The officer verifies: <em>"Are you really Sarah Connor?"</em>
+    </p>
+    <p>
+      <strong>Authorization (403 Forbidden):</strong> Trying to enter the airplane cockpit with a passenger boarding pass. You proved who you are, but the system says: <em>"You do not have permission to be in here."</em>
+    </p>
+  </div>
+
+  <ul>
+    <li>
+      <strong>401 Unauthorized:</strong> Missing, expired, or invalid credentials. The server does not know who you are.
+    </li>
+    <li>
+      <strong>403 Forbidden:</strong> The server knows who you are, but your account lacks the required role or permission (e.g. an employee requesting manager payroll reports).
+    </li>
+  </ul>
+
+  <h2>2. The Critical Security Rule: Never Trust the Client</h2>
+  <div class="sidenote">
+    <strong>A Common Rookie Mistake:</strong> Accepting <code>?role=manager</code> as a query parameter or in a JSON body. Any user could open Developer Tools and pass <code>role=manager</code> to see sensitive business data!
+  </div>
+
+  <p>
+    The server must determine the user's role independently:
+  </p>
+  <ol>
+    <li>The client sends a credential in the HTTP header: <code>Authorization: Bearer &lt;token&gt;</code>.</li>
+    <li>The server decrypts/verifies the token (or checks the trusted user record).</li>
+    <li>The server reads the trusted role from that record.</li>
+  </ol>
+
+  <h2>3. How It Works Locally (Test Identities)</h2>
+  <p>
+    To experiment locally without needing a live Google cloud account, we use simple test tokens in our prototype:
+  </p>
+  <ul>
+    <li><code>Bearer token-manager</code> &rarr; Authenticates as <strong>Morgan (Manager)</strong></li>
+    <li><code>Bearer token-employee</code> &rarr; Authenticates as <strong>Alex (Employee)</strong></li>
+    <li>No header or bad token &rarr; <strong>HTTP 401</strong></li>
+    <li>Alex requesting manager reports &rarr; <strong>HTTP 403</strong></li>
+  </ul>
+
+  <h2>4. How Sunny Fleet Uses Firebase Auth in Production</h2>
+  <p>
+    In production, Sunny Fleet uses Firebase Authentication:
+  </p>
+  <ol>
+    <li>On the frontend, the user signs in with Firebase Auth.</li>
+    <li>The frontend retrieves an ID token: <code>const token = await auth.currentUser.getIdToken();</code>.</li>
+    <li>The frontend sends it in the header: <code>Authorization: Bearer ${token}</code>.</li>
+    <li>The backend uses the Firebase Admin SDK:
+      <pre><code>import { getAuth } from 'firebase-admin/auth';
+
+const decodedToken = await getAuth().verifyIdToken(token);
+const userId = decodedToken.uid;
+
+// Look up role in the trusted 'users' collection or check custom claims:
+const userDoc = await getFirestore().collection('users').doc(userId).get();
+if (userDoc.data().role !== 'manager') {
+  return res.status(403).json({ error: 'Manager access required' });
+}</code></pre>
+    </li>
+  </ol>
+
+  <h2>Recommended Primary Source</h2>
+  <p>
+    Read the official Firebase documentation on <a href="https://firebase.google.com/docs/auth/admin/verify-id-tokens" target="_blank" rel="noopener">Verifying ID Tokens on Backend</a>.
+  </p>
+
+</body>
+</html>

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Week 9 Runbook: Connecting GitHub Actions to AWS Lambda</title>
+  <style>
+    :root {
+      --primary: #0284c7;
+      --primary-dark: #0369a1;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --text-muted: #475569;
+      --border: #e2e8f0;
+      --code-bg: #0f172a;
+      --code-text: #f8fafc;
+      --success-bg: #ecfdf5;
+      --success-border: #a7f3d0;
+      --success-text: #065f46;
+      --amber-bg: #fffbeb;
+      --amber-border: #fde68a;
+      --amber-text: #92400e;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: var(--text);
+      max-width: 900px;
+      margin: 30px auto;
+      padding: 0 24px;
+      background: var(--bg);
+    }
+    h1 { font-size: 1.8rem; color: var(--text); margin-bottom: 6px; }
+    h2 { font-size: 1.3rem; color: var(--text); margin-top: 28px; border-bottom: 2px solid var(--border); padding-bottom: 8px; }
+    h3 { font-size: 1.05rem; color: var(--primary-dark); margin-top: 20px; }
+    p { margin: 10px 0; color: var(--text-muted); }
+    .badge { display: inline-block; background: #e0f2fe; color: #0369a1; padding: 4px 12px; border-radius: 9999px; font-weight: 600; font-size: 0.8rem; margin-bottom: 12px; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 22px; margin: 18px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+    .callout-amber { background: var(--amber-bg); border-left: 4px solid var(--amber-border); padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 16px 0; color: var(--amber-text); }
+    .callout-green { background: var(--success-bg); border-left: 4px solid var(--success-border); padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 16px 0; color: var(--success-text); }
+    ol, ul { padding-left: 22px; color: var(--text-muted); }
+    li { margin: 8px 0; }
+    code { background: #e2e8f0; color: #0f172a; padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; }
+    pre { background: var(--code-bg); color: var(--code-text); padding: 16px; border-radius: 8px; overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.88rem; line-height: 1.45; }
+    .step-number { display: inline-flex; align-items: center; justify-content: center; background: var(--primary); color: white; border-radius: 50%; width: 26px; height: 26px; font-weight: bold; font-size: 0.85rem; margin-right: 8px; }
+    .diagram { background: #0f172a; color: #38bdf8; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 0.82rem; white-space: pre; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <span class="badge">Week 9 Runbook &bull; CSE 499 Senior Project</span>
+  <h1>AWS Lambda Automated CI/CD Setup Guide</h1>
+  <p><strong>Goal:</strong> Stop manual console copy-pasting. Every git push to <code>main</code> will automatically test, zip, and deploy your Lambda code directly to AWS in <code>us-east-2</code>.</p>
+
+  <div class="callout-amber">
+    <strong>Current Status:</strong> Week 9 is <strong>NOT</strong> finished yet! The code and workflow file (<code>.github/workflows/deploy-lambda.yml</code>) are created in the repo, but AWS IAM permissions and GitHub repository secrets must be configured in AWS and GitHub to establish the live deployment bridge.
+  </div>
+
+  <div class="card">
+    <h2>1. What Was Built in the Codebase</h2>
+    <div class="diagram">
+Local Repository (courses/itm300/aws-lambda/)
+       |
+       v (git push origin main)
+GitHub Actions (.github/workflows/deploy-lambda.yml)
+       |
+       +--> 1. Validate syntax: `node --check index.mjs`
+       +--> 2. Package bundle: `(cd dist && zip ../deployment.zip index.mjs)` (includes luxon)
+       +--> 3. Auth to AWS: (uses AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY)
+       +--> 4. Deploy: `aws lambda update-function-code --function-name $AWS_LAMBDA_FUNCTION_NAME`
+       |
+       v
+Live AWS Lambda (us-east-2) Updated Automatically!
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2. Step-by-Step AWS Setup (5–10 Minutes)</h2>
+    <p>You need to create a dedicated IAM user in AWS with permission to update your Lambda function.</p>
+
+    <h3><span class="step-number">A</span> Log into the AWS Console</h3>
+    <ol>
+      <li>Go to <a href="https://console.aws.amazon.com/" target="_blank">console.aws.amazon.com</a> and sign in.</li>
+      <li>Verify your region is set to <strong>US East (Ohio) <code>us-east-2</code></strong> in the top-right header (matches your API Gateway <code>1s8yydgkbk.execute-api.us-east-2.amazonaws.com</code>).</li>
+    </ol>
+
+    <h3><span class="step-number">B</span> Find Your Lambda Function Name</h3>
+    <ol>
+      <li>Open the <strong>AWS Lambda Console</strong>.</li>
+      <li>Find your weekly report function in the list (e.g. <code>sunny-weekly-fleet-report</code>, <code>weeklyFleetReport</code>, or similar).</li>
+      <li><strong>Copy the exact Function name</strong>. You will need this for GitHub Secrets.</li>
+    </ol>
+
+    <h3><span class="step-number">C</span> Create an IAM User for GitHub Actions</h3>
+    <ol>
+      <li>In the top search bar, type <strong>IAM</strong> and click into the IAM dashboard.</li>
+      <li>In the left sidebar, click <strong>Users</strong> &rarr; click <strong>Create user</strong>.</li>
+      <li>User name: <code>github-actions-sunny-deployer</code>. (Do NOT check console access). Click <strong>Next</strong>.</li>
+      <li>Under <strong>Permissions options</strong>, choose <strong>Attach policies directly</strong>.</li>
+      <li>Click <strong>Create policy</strong> (opens a new tab), switch to the <strong>JSON</strong> tab, and paste:</li>
+    </ol>
+    <pre>{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "lambda:UpdateFunctionCode",
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration"
+      ],
+      "Resource": "arn:aws:lambda:us-east-2:*:function:*"
+    }
+  ]
+}</pre>
+    <ol start="6">
+      <li>Click <strong>Next</strong> &rarr; Policy name: <code>SunnyLambdaDeployPolicy</code> &rarr; click <strong>Create policy</strong>.</li>
+      <li>Return to your User creation tab, refresh the policy list, select <code>SunnyLambdaDeployPolicy</code>, and click <strong>Next</strong> &rarr; <strong>Create user</strong>.</li>
+    </ol>
+
+    <h3><span class="step-number">D</span> Generate Access Keys</h3>
+    <ol>
+      <li>Click into the user <code>github-actions-sunny-deployer</code> you just created.</li>
+      <li>Click the <strong>Security credentials</strong> tab &rarr; scroll to <strong>Access keys</strong> &rarr; click <strong>Create access key</strong>.</li>
+      <li>Select <strong>Command Line Interface (CLI)</strong> &rarr; check the confirmation box &rarr; click <strong>Next</strong> &rarr; <strong>Create access key</strong>.</li>
+      <li>Keep this window open! Copy:
+        <ul>
+          <li><strong>Access key ID</strong> (starts with <code>AKIA...</code>)</li>
+          <li><strong>Secret access key</strong> (long random string)</li>
+        </ul>
+      </li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>3. Add Secrets to Your GitHub Repository</h2>
+    <p>Now give GitHub Actions permission to use these credentials.</p>
+    <ol>
+      <li>Go to your GitHub repository: <a href="https://github.com/aheiner2001/sunny" target="_blank">github.com/aheiner2001/sunny</a>.</li>
+      <li>Click <strong>Settings</strong> (gear icon in repository header) &rarr; in left menu, click <strong>Secrets and variables</strong> &rarr; <strong>Actions</strong>.</li>
+      <li>Click <strong>New repository secret</strong> and add the following 3 secrets:</li>
+    </ol>
+
+    <table style="width:100%; border-collapse: collapse; margin-top: 10px;">
+      <thead>
+        <tr style="background:#f1f5f9; text-align:left;">
+          <th style="padding:10px; border:1px solid #cbd5e1;">Secret Name</th>
+          <th style="padding:10px; border:1px solid #cbd5e1;">Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:10px; border:1px solid #cbd5e1;"><code>AWS_ACCESS_KEY_ID</code></td>
+          <td style="padding:10px; border:1px solid #cbd5e1;">Your Access Key from Step 2D (starts with <code>AKIA...</code>)</td>
+        </tr>
+        <tr>
+          <td style="padding:10px; border:1px solid #cbd5e1;"><code>AWS_SECRET_ACCESS_KEY</code></td>
+          <td style="padding:10px; border:1px solid #cbd5e1;">Your Secret Access Key from Step 2D</td>
+        </tr>
+        <tr>
+          <td style="padding:10px; border:1px solid #cbd5e1;"><code>AWS_LAMBDA_FUNCTION_NAME</code></td>
+          <td style="padding:10px; border:1px solid #cbd5e1;">Your exact Lambda function name from Step 2B</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>4. Testing & Verification: How You Know Week 9 Is Complete</h2>
+    <p>Once your secrets are added, verify the end-to-end pipeline:</p>
+    <ol>
+      <li>Go to <a href="https://github.com/aheiner2001/sunny/actions" target="_blank">github.com/aheiner2001/sunny/actions</a>.</li>
+      <li>Click the <strong>Deploy Lambda to AWS</strong> workflow in the left list.</li>
+      <li>Click <strong>Run workflow</strong> &rarr; select branch <code>main</code> (or <code>feat/senior-project-cloud-and-teaching</code>) &rarr; click green <strong>Run workflow</strong> button.</li>
+      <li>Watch the job execute:
+        <ul>
+          <li>&check; Validate Lambda Syntax</li>
+          <li>&check; Package Deployment Archive (dist/index.mjs with luxon bundled)</li>
+          <li>&check; Authenticate to AWS</li>
+          <li>&check; Deploy to AWS Lambda</li>
+        </ul>
+      </li>
+      <li>Check the AWS Lambda console: the <strong>Last modified</strong> timestamp on your function will update to right now!</li>
+    </ol>
+
+    <div class="callout-green">
+      <strong>Exit Evidence for Week 9:</strong> Take a screenshot of the green GitHub Actions deployment run and the updated timestamp in the AWS Lambda console. That is your verified proof that Week 9's automated CI/CD requirement is complete!
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0008: One Lambda, Two Doors (Cron Schedule vs. Manager Live Preview)</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0008</span>
+      <h1>One Lambda, Two Doors: Cron Schedule vs. Manager Live Preview</h1>
+      <p class="subtitle">How a single Lambda function sends scheduled weekly emails AND serves live on-demand API previews without breaking anything.</p>
+    </header>
+
+    <section class="card">
+      <h2>Your Core Question Answered: Does It Still Send the Weekly Email?</h2>
+      <p>
+        <strong>YES! 100% Yes.</strong> The weekly email scheduler continues to run untouched.
+      </p>
+      <p>
+        Think of your Lambda function as a single kitchen with <strong>two different doors</strong>:
+      </p>
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1.25rem; margin-top: 1rem;">
+        <pre><code>
+                      ┌────────────────────────────────────────┐
+                      │          YOUR LAMBDA FUNCTION          │
+                      │           (The Core Engine)            │
+                      └────────────────────────────────────────┘
+                                    ▲            ▲
+                                    │            │
+            DOOR 1: Scheduled Cron  │            │  DOOR 2: Manager API
+         (Automatic Weekly Service) │            │  (Live On-Demand Preview)
+                                    │            │
+          Every Sunday at Midnight  │            │  Whenever a manager clicks
+            • dryRun = false        │            │    "Preview Today's Report"
+            • Computes past week    │            │  • dryRun = true (NEVER emails!)
+            • Sends emails via SES  │            │  • Can look at current week/day
+                                    │            │  • Returns instant HTTP JSON
+        </code></pre>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>How the Code Knows Which Door Opened</h2>
+      <p>
+        The Lambda handler inspects the <code>event</code> object passed to it. It’s like checking who knocked on the door:
+      </p>
+      <pre><code>export async function handler(event = {}) {
+  // Did API Gateway knock? (HTTP request)
+  const isHttpApi = Boolean(event.rawPath || event.requestContext?.http);
+
+  if (isHttpApi) {
+    // 🚪 DOOR 2: A Manager is asking via the API!
+    // Force dryRun: true so we NEVER accidentally send an email while testing
+    // Can preview "current" week or today's live data
+    const previewData = buildLivePreview(event);
+    return {
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(previewData)
+    };
+  }
+
+  // 🚪 DOOR 1: The AWS Cron Scheduler knocked! (Standard weekly run)
+  // Runs normal email generation and delivers via SES
+  return runScheduledWeeklyEmailDelivery();
+}</code></pre>
+    </section>
+
+    <section class="card">
+      <h2>Why This Is the Industry Best Practice</h2>
+      <ul>
+        <li><strong>Zero Code Duplication:</strong> The math for shifts, service gaps, and inspection warnings is written once and shared by both triggers.</li>
+        <li><strong>Failsafe Email Protection:</strong> Whenever accessed through HTTP API, <code>dryRun</code> is hard-coded to <code>true</code>. Even if a manager tests the endpoint 50 times an hour, <strong>zero emails are ever sent</strong>.</li>
+        <li><strong>Live Mid-Week Intelligence:</strong> A manager doesn't have to wait until Sunday midnight to see if a vehicle is overdue for an oil change or an employee has unapproved hours—they can see it live right now.</li>
+      </ul>
+    </section>
+
+    <section class="card question-box">
+      <h2>Self-Check</h2>
+      <p><strong>Question:</strong> If you add HTTP API Gateway preview capability to the Lambda, does it disrupt or stop the weekly scheduled email from running?</p>
+      <p><em>Answer:</em> <strong>No.</strong> The cron job continues to trigger on schedule and send SES emails just like before. The API simply provides a read-only preview window into the exact same data engine.</p>
+    </section>
+
+    <footer>
+      <p>Whenever you're ready, we can look at the exact spot in code where this check lives!</p>
+      <p><a href="0007-exposing-report-previews-via-manager-api.html">&larr; Previous Lesson</a> | <a href="../learning-records/0007-dual-trigger-lambda-architecture.md">Learning Record</a></p>
+    </footer>
+  </div>
+</body>
+</html>

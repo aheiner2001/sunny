@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0011: Clarity on the Lambda Code Snippet</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0011</span>
+      <h1>Clearing Up the Confusion: They Are the Same Thing!</h1>
+      <p class="subtitle">Seeing the beginning and end of the function together so it all clicks.</p>
+    </header>
+
+    <section class="card">
+      <h2>They Are Not Two Different Codes!</h2>
+      <p>
+        Don't worry at all—you did not miss anything. They are <strong>part of the exact same flow</strong>!
+      </p>
+      <p>
+        Think of a function like a sandwich:
+      </p>
+      <ul>
+        <li><strong>Top bread (Input):</strong> Check who called us (<code>const isHttpApi = Boolean(...)</code>).</li>
+        <li><strong>The meat (Middle):</strong> The Lambda calculates your shift hours and maintenance gaps (already written!).</li>
+        <li><strong>Bottom bread (Output):</strong> If it was an HTTP call, wrap the answer in HTTP status and CORS headers (<code>if (isHttpApi) return { statusCode: 200, ... }</code>).</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Here is the Whole Picture in One Glance</h2>
+      <pre><code>export async function handler(event = {}) {
+
+  // 🍞 1. TOP BREAD: Detect if API Gateway called us
+  const isHttpApi = Boolean(event.rawPath || event.requestContext?.http);
+  const query = event.queryStringParameters || {};
+
+  // 🥩 2. THE MEAT: Run calculations (lines 3445 - 3569 unchanged!)
+  // ... reads Firestore ...
+  // ... calculates shift hours ...
+  // ... builds report ...
+
+  // 🍞 3. BOTTOM BREAD: Send back the answer
+  if (!send) {
+    const previewResult = {
+      mode: "preview",
+      summary: report.summary,
+      period: report.period
+    };
+
+    // If API Gateway called us, wrap it for the web browser:
+    if (isHttpApi) {
+      return {
+        statusCode: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET,OPTIONS"
+        },
+        body: JSON.stringify(previewResult)
+      };
+    }
+
+    // If AWS internal test console called us, return raw object:
+    return previewResult;
+  }
+}</code></pre>
+    </section>
+
+    <footer>
+      <p>Take a breath—you have the exact right intuition! Let me know if you want me to insert this into your file for you.</p>
+    </footer>
+  </div>
+</body>
+</html>

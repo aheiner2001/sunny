@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0014: Do You Need to Add a Stage in AWS API Gateway?</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0014</span>
+      <h1>Do You Need to Add a Stage?</h1>
+      <p class="subtitle">The short answer is NO—AWS gives you <code>$default</code> for free!</p>
+    </header>
+
+    <section class="card">
+      <h2>Short Answer: NO!</h2>
+      <p>
+        <strong>You do not need to create or add a new stage.</strong>
+      </p>
+      <p>
+        AWS automatically creates a stage called <strong><code>$default</code></strong> with <strong>Auto-deploy: ON</strong>.
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>What is a Stage anyway?</h2>
+      <p>
+        A "Stage" in AWS is like an environment tag (e.g. <em>dev</em>, <em>staging</em>, or <em>prod</em>).
+      </p>
+      <ul>
+        <li>In old AWS REST APIs, you had to manually create a stage called <code>prod</code> or <code>v1</code>.</li>
+        <li>In modern <strong>HTTP APIs</strong>, AWS simplified this: they give you <strong><code>$default</code></strong>.</li>
+      </ul>
+      <p>
+        Because <code>$default</code> has <strong>Auto-deploy enabled</strong>, every change you make to routes or integrations goes live <em>instantly</em>—no manual clicking "Deploy API" needed!
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>What Should Your URL Look Like?</h2>
+      <p>
+        With the <code>$default</code> stage, your URL doesn't have an awkward <code>/prod</code> or <code>/dev</code> prefix in the path:
+      </p>
+      <pre><code>https://abcdef123.execute-api.us-west-2.amazonaws.com/reports/weekly/preview</code></pre>
+      <p>Clean, simple, and ready to go!</p>
+    </section>
+
+    <footer>
+      <p>Just click <strong>Next</strong> past the Stage step and click <strong>Create</strong>!</p>
+      <p><a href="0013-what-is-a-resource-path.html">&larr; Previous Lesson</a></p>
+    </footer>
+  </div>
+</body>
+</html>

@@ -1,0 +1,131 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SunnyFleetSeniorProjectRoadmap",
+  "totalPlannedHours": 60,
+  "totalLoggedHours": 0,
+  "currentWeek": 9,
+  "weeks": {
+    "9": {
+      "title": "Automated Lambda CI/CD & Baseline Smoke Test",
+      "plannedHours": 10,
+      "loggedHours": 0,
+      "status": "in_progress",
+      "courseRequirements": ["M1-prep", "M4-prep", "M6-prep"],
+      "engineeringPrinciples": [
+        "Infrastructure as Code (IaC) vs Manual Console Drifts",
+        "Continuous Deployment (CD) with GitHub Actions Workflows",
+        "Least Privilege & Short-Lived Secrets via AWS IAM OIDC"
+      ],
+      "lessonFile": "courses/cse499/lessons/0001-lambda-cicd-oidc.html",
+      "learningRecord": "courses/cse499/learning-records/0001-lambda-github-cicd.md",
+      "resources": [
+        { "name": "GitHub Actions: Security Hardening with OpenID Connect", "url": "https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect" },
+        { "name": "AWS Lambda CLI update-function-code", "url": "https://docs.aws.amazon.com/cli/latest/reference/lambda/update-function-code.html" }
+      ],
+      "tasks": [
+        { "id": "W9.1", "desc": "Draft .github/workflows/deploy-lambda.yml", "status": "pending" },
+        { "id": "W9.2", "desc": "Setup IAM role and trust policy for GitHub OIDC", "status": "pending" },
+        { "id": "W9.3", "desc": "Test automated push to update AWS Lambda", "status": "pending" },
+        { "id": "W9.4", "desc": "Smoke test 2 fictional employees and 1 manager", "status": "pending" }
+      ]
+    },
+    "10": {
+      "title": "Requirements Acceptance Gate (M1–M6) & Unified Theme Switcher",
+      "plannedHours": 14,
+      "loggedHours": 0,
+      "status": "planned",
+      "courseRequirements": ["M1", "M2", "M3", "M4", "M5", "M6"],
+      "engineeringPrinciples": [
+        "Component State Separation and Design System Tokens",
+        "Idempotency in CRUD Operations and Acceptance Verification",
+        "Role-Based Access Boundaries in Frontend SPAs"
+      ],
+      "lessonFile": "courses/cse499/lessons/0002-theme-state-isolation.html",
+      "learningRecord": "courses/cse499/learning-records/0002-theme-switcher-and-m1-m6.md",
+      "resources": [
+        { "name": "MDN CSS Custom Properties (Variables)", "url": "https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties" },
+        { "name": "Vitest Component & Integration Testing", "url": "https://vitest.dev/guide/" }
+      ],
+      "tasks": [
+        { "id": "W10.1", "desc": "Implement Theme Switcher (Enterprise vs Nintendo Switch UI)", "status": "pending" },
+        { "id": "W10.2", "desc": "Execute and document M1 (Manager checklist config)", "status": "pending" },
+        { "id": "W10.3", "desc": "Execute and document M2 (QR inspection photo & signature)", "status": "pending" },
+        { "id": "W10.4", "desc": "Execute and document M3 (Pending finding conversion to issue)", "status": "pending" },
+        { "id": "W10.5", "desc": "Execute and document M4 (Employee shift recording 1.75h)", "status": "pending" },
+        { "id": "W10.6", "desc": "Execute and document M5 (Manager hours approval idempotency)", "status": "pending" },
+        { "id": "W10.7", "desc": "Execute and document M6 (Scheduled weekly email reconciliation)", "status": "pending" }
+      ]
+    },
+    "11": {
+      "title": "Cloud Security & Stateless Firebase JWT Validation",
+      "plannedHours": 12,
+      "loggedHours": 0,
+      "status": "planned",
+      "courseRequirements": ["S1", "API-Security"],
+      "engineeringPrinciples": [
+        "Cryptographic Token Validation (JWKS & x509 Certs)",
+        "Stateless Authorization vs Session Databases",
+        "Dual-Trigger Serverless Architecture (Cron vs HTTP)"
+      ],
+      "lessonFile": "courses/cse499/lessons/0003-stateless-jwt-auth.html",
+      "learningRecord": "courses/cse499/learning-records/0003-firebase-jwt-validation.md",
+      "resources": [
+        { "name": "Firebase Auth: Verify ID Tokens on Backend", "url": "https://firebase.google.com/docs/auth/admin/verify-id-tokens" },
+        { "name": "RFC 7519 JSON Web Token (JWT)", "url": "https://datatracker.ietf.org/doc/html/rfc7519" }
+      ],
+      "tasks": [
+        { "id": "W11.1", "desc": "Implement Google JWKS caching in AWS Lambda", "status": "pending" },
+        { "id": "W11.2", "desc": "Enforce HTTP 401/403 on /reports/weekly/preview", "status": "pending" },
+        { "id": "W11.3", "desc": "Update Next.js report preview client to pass Bearer token", "status": "pending" },
+        { "id": "W11.4", "desc": "Verify S1 training progress cross-role isolation", "status": "pending" }
+      ]
+    },
+    "12": {
+      "title": "Scheduled Fleet Reporting & Data Integrity",
+      "plannedHours": 12,
+      "loggedHours": 0,
+      "status": "planned",
+      "courseRequirements": ["S2", "S3", "S4", "M6-reconciliation"],
+      "engineeringPrinciples": [
+        "Timezone-Aware Date Math (Mountain Time Boundaries)",
+        "Audit Logging and Historical State Preservation",
+        "Automated Regression Test Suites"
+      ],
+      "lessonFile": "courses/cse499/lessons/0004-timezone-reporting-reconciliation.html",
+      "learningRecord": "courses/cse499/learning-records/0004-data-integrity-and-boundaries.md",
+      "resources": [
+        { "name": "Luxon Timezones & Date Math", "url": "https://moment.github.io/luxon/" },
+        { "name": "AWS EventBridge Cron Patterns", "url": "https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-create-rule-schedule.html" }
+      ],
+      "tasks": [
+        { "id": "W12.1", "desc": "Reconcile weekly shift calculations against Mountain Time boundaries", "status": "pending" },
+        { "id": "W12.2", "desc": "Test S2 shift corrections preserves original hours", "status": "pending" },
+        { "id": "W12.3", "desc": "Test S3 maintenance calendar deadlines without odometer", "status": "pending" },
+        { "id": "W12.4", "desc": "Test S4 observed mileage handling of anomalous readings", "status": "pending" }
+      ]
+    },
+    "13": {
+      "title": "Final Demo Rehearsal & Portfolio Packaging",
+      "plannedHours": 12,
+      "loggedHours": 0,
+      "status": "planned",
+      "courseRequirements": ["Final-Presentation", "Portfolio"],
+      "engineeringPrinciples": [
+        "Technical Communication & Architecture Diagramming",
+        "Clean-Slate Demo Environments",
+        "Professional Engineering Portfolio Documentation"
+      ],
+      "lessonFile": "courses/cse499/lessons/0005-portfolio-and-demo.html",
+      "learningRecord": "courses/cse499/learning-records/0005-senior-project-reflection.md",
+      "resources": [
+        { "name": "C4 Model for Software Architecture", "url": "https://c4model.com/" }
+      ],
+      "tasks": [
+        { "id": "W13.1", "desc": "Draft C4 architecture diagram (Next.js, API Gateway, Lambda, Firestore, SES)", "status": "pending" },
+        { "id": "W13.2", "desc": "Rehearse end-to-end demo from clean test state", "status": "pending" },
+        { "id": "W13.3", "desc": "Record final demo video walkthrough", "status": "pending" },
+        { "id": "W13.4", "desc": "Complete senior project reflection document", "status": "pending" }
+      ]
+    }
+  }
+}

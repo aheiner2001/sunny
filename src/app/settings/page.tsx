@@ -49,6 +49,7 @@ import { ReturnChecklistEditor } from '@/components/ReturnChecklistEditor';
 import { ShopExitQRCode } from '@/components/ShopExitQRCode';
 import { mintCategoryId, planDeleteCategory } from '@/lib/checklistCategories';
 import { loadDashboardColor, saveDashboardColor } from '@/lib/dashboardAppearance';
+import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 
 type SettingsTab = 'checklist' | 'equipment' | 'tasks' | 'appearance' | 'danger';
 
@@ -1141,6 +1142,14 @@ function SettingsPageContent() {
 
       {activeTab === 'appearance' && (
         <div className="stack">
+          <section className="card card-pad stack">
+            <div>
+              <h2 className="card-title">Appearance & Interface Mode</h2>
+              <p className="hint">Choose between the classic enterprise Fleet OS layout or the high-contrast Nintendo Switch software gallery UI.</p>
+            </div>
+            <ThemeSwitcher variant="cards" />
+          </section>
+
           {isTrueManager && (
             <section className="card card-pad stack">
               <div>
