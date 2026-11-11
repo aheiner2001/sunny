@@ -37,7 +37,7 @@ jobs:
       - name: Package Deployment Archive
         working-directory: courses/itm300/aws-lambda
         run: |
-          (cd dist && zip -9 ../deployment.zip index.mjs)
+          zip -9 deployment.zip index.mjs package.json
           echo "Packaged deployment.zip ($(stat -c%s deployment.zip 2>/dev/null || stat -f%z deployment.zip) bytes)"
 
       - name: Authenticate to AWS via OIDC or Secrets

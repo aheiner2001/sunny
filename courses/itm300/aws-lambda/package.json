@@ -3,8 +3,5 @@
   "version": "1.0.0",
   "description": "AWS Lambda function for Sunny fleet report and training gaps API",
   "type": "module",
-  "main": "index.mjs",
-  "dependencies": {
-    "luxon": "^3.7.2"
-  }
+  "main": "index.mjs"
 }
