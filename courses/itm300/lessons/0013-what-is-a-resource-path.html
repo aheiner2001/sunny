@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0013: What Is a "Resource Path" and Where Does It Live?</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0013</span>
+      <h1>What Is a Resource Path and Where Does It Live?</h1>
+      <p class="subtitle">Demystifying URLs, routes, and why we chose <code>/reports/weekly/preview</code>.</p>
+    </header>
+
+    <section class="card">
+      <h2>1. Anatomy of a Web Address (URL)</h2>
+      <p>
+        Every web request is broken into two main parts:
+      </p>
+      <pre><code>https://abc123xyz.execute-api.us-west-2.amazonaws.com /reports/weekly/preview
+└──────────────────────────┬────────────────────────┘ └───────────┬──────────┘
+             Domain Name (Base Address)                Resource Path (The Room)</code></pre>
+      <ul>
+        <li><strong>Base Domain:</strong> Tells the internet <em>which server</em> in AWS to visit.</li>
+        <li><strong>Resource Path:</strong> Tells AWS API Gateway <em>which specific action or room</em> to enter inside that server.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>2. Where Did <code>/reports/weekly/preview</code> Come From?</h2>
+      <p>
+        It didn't come out of thin air—it is directly defined in your capstone project requirements!
+      </p>
+      <ol>
+        <li>
+          <strong>The Project Spec (<a href="../MISSION.md">MISSION.md</a>):</strong><br>
+          <em>"Success looks like: Author and test a standalone local HTTP server handling <code>GET /reports/weekly/preview?weekStart=YYYY-MM-DD</code>..."</em>
+        </li>
+        <li>
+          <strong>Your Prototype Server (<a href="../prototype/server.mjs">prototype/server.mjs</a>):</strong><br>
+          <code>if (req.method === 'GET' && parsedUrl.pathname === '/reports/weekly/preview')</code>
+        </li>
+        <li>
+          <strong>Your AWS Lambda Prototype (<a href="../aws-lambda/index.mjs">aws-lambda/index.mjs</a>):</strong><br>
+          <code>if (path.endsWith('/reports/weekly/preview'))</code>
+        </li>
+      </ol>
+      <p>
+        When you type <code>/reports/weekly/preview</code> into API Gateway's <strong>Configure Routes</strong> box, you are telling AWS:
+        <em>"Whenever someone visits this exact path, send the request directly to my Lambda function!"</em>
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>3. Can It Be Named Anything Else?</h2>
+      <p>
+        <strong>Yes!</strong> You could name it <code>/preview</code>, <code>/report</code>, or <code>/api/weekly</code>.
+      </p>
+      <p>
+        However, in REST API design, naming paths hierarchically (like folders on a computer) is standard best practice:
+      </p>
+      <ul>
+        <li><code>/reports</code> &rarr; We are asking about reports (not employees or vehicles).</li>
+        <li><code>/reports/weekly</code> &rarr; It's the weekly report (not monthly or annual).</li>
+        <li><code>/reports/weekly/preview</code> &rarr; It's a live preview (not sending emails).</li>
+      </ul>
+    </section>
+
+    <section class="card question-box">
+      <h2>Quick Check</h2>
+      <p><strong>Question:</strong> Where in the AWS Lambda code can we see the path being read?</p>
+      <p><em>Answer:</em> In the event object as <code>event.rawPath</code>! When API Gateway forwards the request, it sets <code>event.rawPath = "/reports/weekly/preview"</code>.</p>
+    </section>
+
+    <footer>
+      <p><a href="0012-api-gateway-setup-and-ui-integration.html">&larr; Previous Lesson</a></p>
+    </footer>
+  </div>
+</body>
+</html>

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0012: The Full Step-by-Step API Setup Guide</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0012</span>
+      <h1>How to Set Up the API Gateway & Add the Button in React</h1>
+      <p class="subtitle">Your exact, step-by-step roadmap for AWS and the UI.</p>
+    </header>
+
+    <section class="card">
+      <h2>Part 1: Your Lambda is Updated and Ready!</h2>
+      <p>
+        The Lambda code in <a href="file:///Users/aaronheiner/sunny/lamdba/index.mjs"><code>lamdba/index.mjs</code></a> has now been updated and opened in your editor.
+      </p>
+      <ul>
+        <li>It now automatically detects HTTP requests from AWS API Gateway.</li>
+        <li>It automatically prevents emails during previews (<code>dryRun = true</code>).</li>
+        <li>It returns standard HTTP <code>200 OK</code> with CORS headers.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Part 2: Setting Up the AWS API Gateway (5 Simple Steps)</h2>
+      <p>In the AWS Console:</p>
+      <ol>
+        <li>Go to <strong>API Gateway</strong> and click <strong>Create API</strong>.</li>
+        <li>Under <strong>HTTP API</strong> (fast and free tier), click <strong>Build</strong>.</li>
+        <li>Add an Integration:
+          <ul>
+            <li>Choose <strong>Lambda</strong>.</li>
+            <li>Select your existing Lambda function name from the dropdown.</li>
+            <li>API name: <code>sunny-fleet-api</code>.</li>
+          </ul>
+        </li>
+        <li>Configure Routes:
+          <ul>
+            <li>Method: <code>GET</code></li>
+            <li>Resource path: <code>/reports/weekly/preview</code></li>
+            <li>Integration: select your Lambda.</li>
+          </ul>
+        </li>
+        <li>Click <strong>Next &rarr; Next &rarr; Create</strong>! AWS will give you an <em>Invoke URL</em> (e.g. <code>https://abc123xyz.execute-api.us-west-2.amazonaws.com</code>).</li>
+      </ol>
+    </section>
+
+    <section class="card">
+      <h2>Part 3: Where to Put the React Button</h2>
+      <p>
+        The best location is in <a href="file:///Users/aaronheiner/sunny/src/app/reports/page.tsx"><code>src/app/reports/page.tsx</code></a> right next to your export buttons at the bottom:
+      </p>
+      <pre><code>&lt;div className="grid grid-cols-1 sm:grid-cols-4 gap-3"&gt;
+  &lt;!-- Button 1: Export Inspections --&gt;
+  &lt;!-- Button 2: Export Issues --&gt;
+  &lt;!-- Button 3: Compliance Report HTML --&gt;
+
+  &lt;!-- NEW BUTTON: Live Lambda Preview --&gt;
+  &lt;button
+    onClick={fetchLambdaPreview}
+    className="btn btn-primary cluster gap-2 justify-center"
+  &gt;
+    &lt;Sparkles className="w-4 h-4 text-amber-300" /&gt;
+    &lt;span&gt;Preview Weekly Report&lt;/span&gt;
+  &lt;/button&gt;
+&lt;/div&gt;</code></pre>
+    </section>
+
+    <footer>
+      <p><a href="0011-clearing-up-lambda-code-confusion.html">&larr; Previous Lesson</a></p>
+    </footer>
+  </div>
+</body>
+</html>

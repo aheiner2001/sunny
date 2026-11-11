@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0005: Deploying to AWS API Gateway + Lambda with Firebase</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <header>
+    <div class="lesson-meta">
+      <strong>Lesson 0005</strong> &bull; Track: Sunny Fleet Reporting API &bull; <a href="../MISSION.md">Mission</a>
+    </div>
+    <h1>Deploying to AWS API Gateway + Lambda with Firebase</h1>
+  </header>
+
+  <p>
+    Congratulations! Both of your core manager endpoints are now fully operational, tested, and guarded by authentication and role-based authorization locally.
+  </p>
+
+  <p>
+    In this final capstone lesson, we examine how this local Node service translates to a production <strong>serverless architecture on AWS</strong> while keeping Firebase as the primary database.
+  </p>
+
+  <h2>1. The Target Architecture</h2>
+
+  <div class="box">
+    <h3>Architecture Diagram</h3>
+    <pre><code>[Sunny Static Frontend] 
+          │  HTTPS GET /reports/weekly/preview
+          │  Header: Authorization: Bearer <Firebase ID Token>
+          ▼
+[AWS API Gateway (HTTP API v2)]
+          │  Routes path & forwards event payload
+          ▼
+[AWS Lambda (Node.js 20+ Runtime)]
+          ├── 1. Verifies token via Firebase Admin SDK
+          ├── 2. Queries Firestore ('users', 'shifts', 'trainingAssignments')
+          └── 3. Runs your Luxon boundary math & gap filters
+          ▼
+[JSON Response: 200 OK / 401 / 403 / 400]</code></pre>
+  </div>
+
+  <h2>2. What Carries Over vs. What Changes</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Component</th>
+        <th>Carries Over Unchanged?</th>
+        <th>What Changes in Lambda</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Date & Boundary Math</strong></td>
+        <td><strong>YES (100%)</strong></td>
+        <td>The exact Luxon Monday-to-Sunday math and net hours logic runs identically in Lambda.</td>
+      </tr>
+      <tr>
+        <td><strong>Gap Filter Logic</strong></td>
+        <td><strong>YES (100%)</strong></td>
+        <td>Filtering out <code>completed</code> and mapping action items remains identical.</td>
+      </tr>
+      <tr>
+        <td><strong>HTTP Server Setup</strong></td>
+        <td><strong>NO</strong></td>
+        <td>Replace <code>http.createServer</code> with an exported <code>export async function handler(event)</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>Request/Response Parsing</strong></td>
+        <td><strong>NO</strong></td>
+        <td>Read params from <code>event.queryStringParameters</code> and headers from <code>event.headers</code>. Return a simple object: <code>{ statusCode: 200, body: JSON.stringify(...) }</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>Data Source</strong></td>
+        <td><strong>NO</strong></td>
+        <td>Replace <code>FIXTURE_SHIFTS</code> with Firestore queries using <code>firebase-admin/firestore</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3. The Lambda Handler Pattern</h2>
+  <pre><code>// lambda.mjs
+import { DateTime } from 'luxon';
+import admin from 'firebase-admin';
+
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+
+export async function handler(event) {
+  const path = event.rawPath || event.path;
+  const authHeader = event.headers?.authorization || event.headers?.Authorization;
+
+  // 1. Verify Firebase ID Token
+  if (!authHeader?.startsWith('Bearer ')) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Missing token' }) };
+  }
+
+  const token = authHeader.slice(7);
+  let decodedToken;
+  try {
+    decodedToken = await admin.auth().verifyIdToken(token);
+  } catch (err) {
+    return { statusCode: 401, body: JSON.stringify({ error: 'Invalid token' }) };
+  }
+
+  // 2. Server-side Role Check from Firestore
+  const userDoc = await admin.firestore().collection('users').doc(decodedToken.uid).get();
+  if (userDoc.data()?.role !== 'manager') {
+    return { statusCode: 403, body: JSON.stringify({ error: 'Manager access required' }) };
+  }
+
+  // 3. Route to your existing calculations...
+  if (path === '/reports/weekly/preview') {
+    const weekStart = event.queryStringParameters?.weekStart;
+    // ... same calculations you wrote today!
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approvedHours: "1.75", pendingHours: "2.00" })
+    };
+  }
+
+  return { statusCode: 404, body: JSON.stringify({ error: 'Not Found' }) };
+}</code></pre>
+
+  <h2>4. AWS Cost & Free Tier Analysis</h2>
+  <p>
+    Before deploying any cloud infrastructure, let's look at the actual costs:
+  </p>
+  <ul>
+    <li>
+      <strong>AWS Lambda Free Tier:</strong> 1,000,000 requests per month and 400,000 GB-seconds of compute time per month permanently free. A 128MB function executing in 200ms costs <strong>$0.00</strong>.
+    </li>
+    <li>
+      <strong>API Gateway (HTTP API v2):</strong> 1,000,000 requests per month free for the first 12 months, then only $1.00 per million requests.
+    </li>
+    <li>
+      <strong>Secrets & Credentials:</strong> Storing Firebase service account JSON as an encrypted Lambda environment variable costs <strong>$0.00</strong> (AWS Secrets Manager charges $0.40/month per secret).
+    </li>
+    <li>
+      <strong>Total Estimated AWS Cost:</strong> <strong>$0.00 / month</strong> during development and testing.
+    </li>
+  </ul>
+
+  <div class="box">
+    <strong>Coursework Guardrail:</strong> Per your project requirements, we will not deploy to AWS without your explicit review and approval. All local testing is complete and verified!
+  </div>
+
+</body>
+</html>

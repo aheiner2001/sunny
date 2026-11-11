@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0004: Training Gaps & Dual Sign-Off Logic</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <header>
+    <div class="lesson-meta">
+      <strong>Lesson 0004</strong> &bull; Track: Sunny Fleet Reporting API &bull; <a href="../MISSION.md">Mission</a>
+    </div>
+    <h1>Training Gaps & Dual Sign-Off Logic</h1>
+  </header>
+
+  <p>
+    Welcome to Lesson 4! We now build your second manager endpoint: <code>GET /training/gaps</code>.
+  </p>
+
+  <p>
+    This endpoint answers the critical manager question: <strong>"Who still needs to finish or redo assigned training?"</strong>
+  </p>
+
+  <h2>1. How Sunny's Dual Sign-Off Works</h2>
+  <p>
+    In Sunny Fleet, training is not a self-administered checklist. It requires a <strong>dual handshake</strong> between an experienced trainer and the employee:
+  </p>
+
+  <ol>
+    <li>
+      <strong>Step 1: Trainer Sign-off:</strong> The designated trainer works with the employee on the van or in the shop, then marks the item complete. The status transitions to <code>awaiting_trainee</code>.
+    </li>
+    <li>
+      <strong>Step 2: Trainee Certification:</strong> The employee logs into Sunny and certifies that they were trained and understand the procedure. The status transitions to <code>completed</code>.
+    </li>
+    <li>
+      <strong>Step 3: Retraining Trigger:</strong> If an employee repeatedly misses questions during daily vehicle inspections (or a manager flags an incident), the status changes to <code>needs_retrain</code>.
+    </li>
+  </ol>
+
+  <h2>2. Which Statuses Belong in the Manager Report?</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>Included in /training/gaps?</th>
+        <th>Manager Meaning</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>assigned</code></td>
+        <td><strong>YES</strong></td>
+        <td>Incomplete: In-progress or waiting on trainer demonstration.</td>
+      </tr>
+      <tr>
+        <td><code>awaiting_trainee</code></td>
+        <td><strong>YES</strong></td>
+        <td>Incomplete: Trainer signed off; waiting for employee to certify in-app.</td>
+      </tr>
+      <tr>
+        <td><code>overdue</code></td>
+        <td><strong>YES</strong></td>
+        <td>Incomplete: Deadline passed without dual sign-off.</td>
+      </tr>
+      <tr>
+        <td><code>needs_retrain</code></td>
+        <td><strong>YES</strong></td>
+        <td>Redo: Excessive inspection misses or manager required retraining.</td>
+      </tr>
+      <tr>
+        <td><code>completed</code></td>
+        <td><strong>NO (Excluded)</strong></td>
+        <td>Compliant: Both trainer and trainee have signed off.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3. The Fixtures (1 Completed, 1 Incomplete, 1 Retrain)</h2>
+  <div class="box">
+    <p>We test with three clear assignments:</p>
+    <ul>
+      <li><strong>Assignment A (John Smith - Pressure Washer):</strong> Status <code>completed</code> &rarr; <em>Excluded</em>.</li>
+      <li><strong>Assignment B (Alex Rivera - Chemical Dilution):</strong> Status <code>awaiting_trainee</code> &rarr; <em>Included (Incomplete)</em>.</li>
+      <li><strong>Assignment C (Sarah Connor - Ladder Safety):</strong> Status <code>needs_retrain</code> &rarr; <em>Included (Needs Redo)</em>.</li>
+    </ul>
+  </div>
+
+  <h2>4. Minimal Manager Response Structure</h2>
+  <p>
+    Managers need actionable operational intelligence, not raw database noise:
+  </p>
+  <pre><code>{
+  "totalGaps": 2,
+  "gaps": [
+    {
+      "assignmentId": "asg-2",
+      "employeeId": "emp-102",
+      "employeeName": "Alex Rivera",
+      "trainingTitle": "Chemical Dilution & PPE",
+      "status": "awaiting_trainee",
+      "actionNeeded": "Awaiting employee certification",
+      "dueAt": "2026-11-06T00:00:00.000Z"
+    },
+    {
+      "assignmentId": "asg-3",
+      "employeeId": "emp-101",
+      "employeeName": "Sarah Connor",
+      "trainingTitle": "Van Ladder Rack Safety",
+      "status": "needs_retrain",
+      "actionNeeded": "Retraining required (inspection miss streak: 3)",
+      "dueAt": "2026-11-04T00:00:00.000Z"
+    }
+  ]
+}</code></pre>
+
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0002: Dynamic Calculations, Input Validation, and Boundaries</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <header>
+    <div class="lesson-meta">
+      <strong>Lesson 0002</strong> &bull; Track: Sunny Fleet Reporting API &bull; <a href="../MISSION.md">Mission</a>
+    </div>
+    <h1>Dynamic Calculations, Input Validation, and Boundaries</h1>
+  </header>
+
+  <p>
+    Excellent work on your initial handler! You mastered the core anatomy of <code>node:http</code> and WHATWG <code>URL</code> parsing.
+  </p>
+
+  <p>
+    Now we take your handler from returning static hardcoded strings to <strong>dynamic calculation</strong>, <strong>rigorous HTTP input validation</strong>, and <strong>reporting boundary handling</strong>.
+  </p>
+
+  <h2>1. Input Validation: Handling Bad Requests (HTTP 400)</h2>
+  <p>
+    In REST APIs, if a client provides a missing parameter or malformed date, the server must reject it immediately with an HTTP <code>400 Bad Request</code> status code before touching data or doing math.
+  </p>
+
+  <div class="sidenote">
+    <strong>Postel's Law vs API Security:</strong> "Be conservative in what you send, be liberal in what you accept." In modern security, however, input validation must be strict: never allow ambiguous date strings to propagate into financial or timesheet records.
+  </div>
+
+  <pre><code>import { DateTime } from 'luxon';
+
+const weekStartStr = parsedUrl.searchParams.get('weekStart');
+if (!weekStartStr) {
+  res.writeHead(400, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: "Missing required query parameter 'weekStart'" }));
+  return;
+}
+
+const dt = DateTime.fromISO(weekStartStr, { zone: 'America/Denver' });
+if (!dt.isValid) {
+  res.writeHead(400, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: "Invalid date format for 'weekStart'. Expected YYYY-MM-DD." }));
+  return;
+}</code></pre>
+
+  <h2>2. Week Boundaries in America/Denver</h2>
+  <p>
+    Sunny Fleet operates in <code>America/Denver</code>. In November 2026, Daylight Saving Time ended on Sunday, November 1 at 2:00 AM (switching from MDT UTC-6 to MST UTC-7).
+  </p>
+  <p>
+    For <code>weekStart=2026-11-02</code> (a Monday):
+  </p>
+  <ul>
+    <li><strong>Week Start:</strong> Monday, Nov 2, 2026 at 00:00:00 Denver &rarr; <code>2026-11-02T07:00:00.000Z</code></li>
+    <li><strong>Week End:</strong> Sunday, Nov 8, 2026 at 23:59:59.999 Denver &rarr; <code>2026-11-09T06:59:59.999Z</code></li>
+  </ul>
+
+  <h2>3. The Boundary Test Case</h2>
+  <p>
+    What happens if an employee works a shift on Sunday evening, Nov 1 that ends right at midnight as Monday begins?
+  </p>
+  <ul>
+    <li>Shift A: Ends at <code>2026-11-02T06:59:59.000Z</code> &rarr; Belongs to previous week.</li>
+    <li>Shift B: Starts at <code>2026-11-02T07:00:00.000Z</code> &rarr; Belongs to this week.</li>
+  </ul>
+
+  <h2>4. Your Implementation Task</h2>
+  <div class="interactive-task">
+    <h3>Upgrade Your Handler</h3>
+    <ol>
+      <li>Create <code>prototype/fixtures.mjs</code> with our test shifts.</li>
+      <li>Update <code>prototype/server.mjs</code> to:
+        <ul>
+          <li>Validate <code>weekStart</code> (return <code>400</code> on invalid/missing dates).</li>
+          <li>Compute start and end timestamps in UTC milliseconds using Luxon.</li>
+          <li>Loop over <code>FIXTURE_SHIFTS</code>, check if <code>shift.startAtUtc</code> falls within the window, and sum approved and pending seconds.</li>
+          <li>Format to two decimal places: <code>(seconds / 3600).toFixed(2)</code>.</li>
+        </ul>
+      </li>
+      <li>Test all 3 scenarios with <code>curl</code>:
+        <ul>
+          <li><strong>Valid:</strong> <code>curl -i "http://localhost:4000/reports/weekly/preview?weekStart=2026-11-02"</code></li>
+          <li><strong>Invalid date:</strong> <code>curl -i "http://localhost:4000/reports/weekly/preview?weekStart=not-a-date"</code></li>
+          <li><strong>Missing param:</strong> <code>curl -i "http://localhost:4000/reports/weekly/preview"</code></li>
+        </ul>
+      </li>
+    </ol>
+  </div>
+
+  <h2>Recommended Primary Source</h2>
+  <p>
+    Check the <a href="https://moment.github.io/luxon/#/tour" target="_blank" rel="noopener">Luxon Tour</a> on time zones and ISO math to see how <code>DateTime.fromISO(str, { zone: 'America/Denver' })</code> guarantees DST accuracy.
+  </p>
+
+  <div class="box">
+    <strong>Teacher Reminder:</strong> Save your files into <code>prototype/fixtures.mjs</code> and <code>prototype/server.mjs</code>, run them, and paste your code or curl results here. I'm ready to review your logic!
+  </div>
+
+</body>
+</html>

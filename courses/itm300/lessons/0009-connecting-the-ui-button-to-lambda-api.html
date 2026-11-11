@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0009: Connecting the UI "Preview Report" Button to the API</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0009</span>
+      <h1>Connecting the UI "Preview Report" Button to the API</h1>
+      <p class="subtitle">The full round-trip: from React click, to Lambda preview, to rendering the live modal.</p>
+    </header>
+
+    <section class="card">
+      <h2>Yes! That is Exactly How It Works</h2>
+      <p>
+        Your intuition is 100% spot-on:
+      </p>
+      <ol>
+        <li>A manager clicks a <strong>"Preview Weekly Report"</strong> button on the Reports page.</li>
+        <li>The React app calls the HTTP API endpoint (or our local dev server).</li>
+        <li>The Lambda runs in <code>preview</code> mode (never sending an email).</li>
+        <li>The Lambda returns the calculated stats as JSON.</li>
+        <li>The React app displays a popup/modal showing the manager the exact report numbers!</li>
+      </ol>
+    </section>
+
+    <section class="card">
+      <h2>Step 1: The Lambda's API Gateway Adapter</h2>
+      <p>In <code>lamdba/index.mjs</code>, we support both direct invocations and API Gateway HTTP requests:</p>
+      <pre><code>// Detect if invoked via HTTP API Gateway
+const isHttpApi = Boolean(event.rawPath || event.requestContext?.http);
+
+// Return HTTP-wrapped response if called via API Gateway
+if (isHttpApi) {
+  return {
+    statusCode: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET,OPTIONS"
+    },
+    body: JSON.stringify(previewResult)
+  };
+}</code></pre>
+    </section>
+
+    <section class="card">
+      <h2>Step 2: The Next.js / React Frontend Button</h2>
+      <p>On the Reports page (<code>src/app/reports/page.tsx</code>), we add the action button:</p>
+      <pre><code>&lt;button
+  onClick={handleFetchPreview}
+  className="btn btn-secondary cluster gap-2"&gt;
+  &lt;Sparkles className="w-4 h-4 text-amber-500" /&gt;
+  &lt;span&gt;Preview Live Lambda Report&lt;/span&gt;
+&lt;/button&gt;</code></pre>
+    </section>
+
+    <section class="card">
+      <h2>Step 3: The Preview Modal</h2>
+      <p>When the data returns, a clean popup renders:</p>
+      <ul>
+        <li><strong>Report Period:</strong> (e.g., Nov 2 - Nov 8, Denver Time)</li>
+        <li><strong>Timesheet Hours:</strong> Approved vs Pending hours</li>
+        <li><strong>Fleet Setup Gaps:</strong> Vehicles requiring attention</li>
+        <li><strong>Status:</strong> Clear confirmation that <em>"No email was sent (Preview Mode)"</em></li>
+      </ul>
+    </section>
+
+    <footer>
+      <p>Ready to wire up both sides step-by-step? Let's do this!</p>
+      <p><a href="0008-dual-trigger-lambda-architecture.html">&larr; Previous Lesson</a></p>
+    </footer>
+  </div>
+</body>
+</html>

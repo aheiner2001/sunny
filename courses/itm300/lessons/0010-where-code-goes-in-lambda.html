@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0010: Where Does the Code Actually Go in the Lambda?</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Lesson 0010</span>
+      <h1>Where Does the Code Go in the Lambda File?</h1>
+      <p class="subtitle">Understanding why it goes inside <code>export async function handler(event)</code> instead of the very top of the file.</p>
+    </header>
+
+    <section class="card">
+      <h2>Top of the File vs. Top of the Handler</h2>
+      <p>
+        In JavaScript/Node.js, there is an important difference:
+      </p>
+      <ul>
+        <li>
+          <strong>The very top of the file (Line 1):</strong> This runs only <em>once</em> when AWS boots up your Lambda container (called "cold start"). Here you put <code>import</code> statements and client initializations.
+        </li>
+        <li>
+          <strong>The start of the <code>handler(event)</code> function (Line 3442):</strong> This runs <em>every single time</em> someone knocks on the door! Every time a manager clicks preview or a cron fires, AWS passes the <code>event</code> to this function.
+        </li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>The Exact Two Spots in <code>lamdba/index.mjs</code></h2>
+      
+      <h3>Spot A: Inside the top of <code>handler(event)</code> (around Line 3444)</h3>
+      <p>Here we check: <em>"Did an API Gateway request just arrive?"</em></p>
+      <pre><code>export async function handler(event = {}) {
+  // 1. Check if invoked by API Gateway (HTTP request)
+  const isHttpApi = Boolean(event.rawPath || event.requestContext?.http);
+
+  // 2. If it's an API call, read query params like ?week=current
+  const query = event.queryStringParameters || {};
+  const requestedMode = query.week || process.env.REPORT_WEEK || "previous";
+  // ...
+      </code></pre>
+
+      <h3>Spot B: Inside the preview return (around Line 3570)</h3>
+      <p>Here we check: <em>"Should we return standard HTTP status code and headers?"</em></p>
+      <pre><code>  if (!send) {
+    const previewPayload = {
+      mode: "preview",
+      message: "No email sent.",
+      summary: report.summary,
+      period: report.period,
+      diagnostics: { ... },
+      report: { ... }
+    };
+
+    // If API Gateway called us, wrap in HTTP response:
+    if (isHttpApi) {
+      return {
+        statusCode: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET,OPTIONS"
+        },
+        body: JSON.stringify(previewPayload)
+      };
+    }
+
+    // Otherwise return direct object (for direct AWS CLI / test console)
+    return previewPayload;
+  }
+      </code></pre>
+    </section>
+
+    <section class="card">
+      <h2>Why This Structure is So Clean</h2>
+      <p>
+        Notice that you <strong>do not have to touch or rewrite</strong> the thousands of lines in the middle (the date math, Firestore queries, and report tables). The calculation engine stays 100% intact!
+      </p>
+    </section>
+
+    <footer>
+      <p><a href="0009-connecting-the-ui-button-to-lambda-api.html">&larr; Previous Lesson</a></p>
+    </footer>
+  </div>
+</body>
+</html>

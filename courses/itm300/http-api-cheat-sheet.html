@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Reference: HTTP API Fundamentals & Node.js Routing</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header>
+    <div class="lesson-meta">
+      <strong>Reference 001</strong> &bull; Cheat Sheet &bull; <a href="../MISSION.md">Mission</a>
+    </div>
+    <h1>HTTP API Fundamentals & Node.js Routing</h1>
+  </header>
+
+  <h2>Status Codes in Reporting APIs</h2>
+  <ul>
+    <li><code>200 OK</code>: Request succeeded; body contains the requested report payload.</li>
+    <li><code>400 Bad Request</code>: Missing or malformed input (e.g., invalid <code>weekStart</code> format).</li>
+    <li><code>401 Unauthorized</code>: Missing or invalid authentication token (Who are you?).</li>
+    <li><code>403 Forbidden</code>: Authenticated user lacks permission (e.g., employee attempting to read manager reports).</li>
+    <li><code>404 Not Found</code>: Route or resource does not exist.</li>
+  </ul>
+
+  <h2>Parsing URL Queries in Native Node.js</h2>
+  <pre><code>import http from 'node:http';
+
+const server = http.createServer((req, res) => {
+  // Construct a WHATWG URL instance using a dummy host
+  const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  const pathname = parsedUrl.pathname;
+  const weekStart = parsedUrl.searchParams.get('weekStart');
+
+  if (req.method === 'GET' && pathname === '/reports/weekly/preview') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ weekStart }));
+    return;
+  }
+
+  res.writeHead(404, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: 'Not Found' }));
+});</code></pre>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 0001: Building Your First HTTP Report Preview Handler</title>
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+
+  <header>
+    <div class="lesson-meta">
+      <strong>Lesson 0001</strong> &bull; Track: Sunny Fleet Reporting API &bull; <a href="../MISSION.md">Mission</a>
+    </div>
+    <h1>Building Your First HTTP Report Preview Handler</h1>
+  </header>
+
+  <p>
+    Welcome to Lesson 1! In this lesson, you will create a standalone, local Node.js HTTP server that handles a <code>GET /reports/weekly/preview?weekStart=YYYY-MM-DD</code> request and returns JSON calculations for manager review.
+  </p>
+
+  <div class="sidenote">
+    <strong>Why standalone?</strong> Sunny Fleet's Next.js application exports statically to HTML/JS. Running a separate Node service lets us develop server-side API endpoints locally without breaking existing static hosting.
+  </div>
+
+  <h2>1. What Happens in an HTTP Request</h2>
+  <p>
+    When a manager requests a preview via <code>curl</code> or a browser, the raw HTTP transaction consists of three distinct phases:
+  </p>
+  <ol>
+    <li><strong>Request Line & Headers:</strong> <code>GET /reports/weekly/preview?weekStart=2026-11-02 HTTP/1.1</code></li>
+    <li><strong>Routing & Query Extraction:</strong> The server parses the path and inspects the <code>weekStart</code> parameter.</li>
+    <li><strong>Response Body & Content-Type:</strong> The server writes <code>Content-Type: application/json</code> and serializes the summary object.</li>
+  </ol>
+
+  <h2>2. The Reporting Target Math</h2>
+  <p>
+    For the week of <strong>Monday, Nov 2, 2026</strong> in <code>America/Denver</code>, our manager report preview needs to reflect:
+  </p>
+  <ul>
+    <li><strong>Approved Hours:</strong> <code>1.75</code> (exactly 1 hour, 45 minutes = 6,300 seconds)</li>
+    <li><strong>Pending Hours:</strong> <code>2.00</code> (exactly 2 hours, 0 minutes = 7,200 seconds)</li>
+  </ul>
+
+  <div class="box">
+    <h3>The Shift Fixture Data</h3>
+    <p>Save this fixture as <code>prototype/fixtures.mjs</code>:</p>
+<pre><code>// prototype/fixtures.mjs
+export const FIXTURE_SHIFTS = [
+  {
+    id: 'shift-1',
+    employeeId: 'emp-101',
+    employeeName: 'Sarah Connor',
+    status: 'approved',
+    // 09:00 to 10:45 Denver (1.75 hrs)
+    startAtUtc: '2026-11-02T16:00:00.000Z',
+    endAtUtc: '2026-11-02T17:45:00.000Z',
+    unpaidBreakSeconds: 0,
+  },
+  {
+    id: 'shift-2',
+    employeeId: 'emp-102',
+    employeeName: 'John Smith',
+    status: 'pending',
+    // 13:00 to 15:00 Denver (2.00 hrs)
+    startAtUtc: '2026-11-03T20:00:00.000Z',
+    endAtUtc: '2026-11-03T22:00:00.000Z',
+    unpaidBreakSeconds: 0,
+  },
+  {
+    id: 'shift-3-prior-week',
+    employeeId: 'emp-101',
+    employeeName: 'Sarah Connor',
+    status: 'approved',
+    // October 28 (Previous week - should be filtered out)
+    startAtUtc: '2026-10-28T16:00:00.000Z',
+    endAtUtc: '2026-10-28T18:00:00.000Z',
+    unpaidBreakSeconds: 0,
+  }
+];
+</code></pre>
+  </div>
+
+  <h2>3. Interactive Task: Write the Handler</h2>
+
+  <div class="interactive-task">
+    <h3>Your Challenge</h3>
+    <p>
+      Create <code>prototype/server.mjs</code> using Node's native <code>node:http</code> module. Follow these requirements:
+    </p>
+    <ol>
+      <li>Listen on port <code>4000</code>.</li>
+      <li>Match <code>pathname === '/reports/weekly/preview'</code>.</li>
+      <li>Extract <code>req.url</code> search param <code>weekStart</code>.</li>
+      <li>Filter <code>FIXTURE_SHIFTS</code> to only include shifts within that week.</li>
+      <li>Sum the duration in hours for <code>approved</code> and <code>pending</code> shifts.</li>
+      <li>Send back a <code>200 OK</code> response with headers <code>Content-Type: application/json</code>.</li>
+    </ol>
+  </div>
+
+  <h2>4. Verification with curl</h2>
+  <p>Run the server:</p>
+  <pre><code>node prototype/server.mjs</code></pre>
+  <p>Execute your curl request in a separate terminal:</p>
+  <pre><code>curl -i "http://localhost:4000/reports/weekly/preview?weekStart=2026-11-02"</code></pre>
+  <p>Expected JSON response:</p>
+  <pre><code>{
+  "timezone": "America/Denver",
+  "weekStart": "2026-11-02",
+  "approvedHours": "1.75",
+  "pendingHours": "2.00"
+}</code></pre>
+
+  <h2>Recommended Primary Source</h2>
+  <p>
+    Read MDN's <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Overview" target="_blank" rel="noopener">An Overview of HTTP</a> for a clear explanation of HTTP verbs, status headers, and client-server decoupling.
+  </p>
+
+  <div class="box">
+    <strong>Teacher Reminder:</strong> Have a question about how Node handles URL query strings, or want feedback on your server code? Ask me in the conversation whenever you run into any hurdle or finish your first curl test!
+  </div>
+
+</body>
+</html>
