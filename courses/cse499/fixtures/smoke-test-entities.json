@@ -1,0 +1,19 @@
+{
+  "employees": [
+    { "id": "emp-test-1", "name": "Sarah Connor", "role": "employee", "email": "sarah@example.com" },
+    { "id": "emp-test-2", "name": "Alex Rivera", "role": "employee", "email": "alex@example.com" }
+  ],
+  "managers": [
+    { "id": "mgr-test-1", "name": "Jordan Lee", "role": "manager", "email": "jordan@example.com" }
+  ],
+  "vehicles": [
+    { "id": "van-01", "name": "Van #1 (Express Detailing)", "status": "available", "odometer": 10000 },
+    { "id": "van-02", "name": "Van #2 (Mobile Rig)", "status": "available", "odometer": 25400 }
+  ],
+  "testShift": {
+    "start": "2026-11-09T09:00:00.000Z",
+    "end": "2026-11-09T11:00:00.000Z",
+    "unpaidBreakMinutes": 15,
+    "expectedNetHours": 1.75
+  }
+}
