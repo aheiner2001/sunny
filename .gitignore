@@ -9,12 +9,14 @@ node_modules/
 # Build outputs
 .next/
 dist/
+!courses/itm300/aws-lambda/dist/
 out/
 build/
 
 # misc
 .DS_Store
 *.pem
+*.zip
 .superpowers/
 
 # Local-only Cursor/agent defs — never push

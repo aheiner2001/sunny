@@ -1,12 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
+import { fileURLToPath } from 'url';
 
 const args = process.argv.slice(2);
 const targetWeek = args.find(arg => !arg.startsWith('--')) || '9';
 const shouldOpen = !args.includes('--no-open');
 
-const roadmapPath = path.resolve(process.cwd(), 'courses/cse499/roadmap.json');
+const projectRoot = fileURLToPath(new URL('..', import.meta.url));
+const roadmapPath = path.resolve(projectRoot, 'courses/cse499/roadmap.json');
 
 if (!fs.existsSync(roadmapPath)) {
   console.error(`Error: Roadmap file not found at ${roadmapPath}`);
@@ -42,12 +44,12 @@ week.resources.forEach(res => {
   console.log(`  • ${res.name}: ${res.url}`);
 });
 
-if (week.lessonFile && fs.existsSync(path.resolve(process.cwd(), week.lessonFile))) {
+if (week.lessonFile && fs.existsSync(path.resolve(projectRoot, week.lessonFile))) {
   console.log(`\n📖 Interactive Lesson: ${week.lessonFile}`);
   if (shouldOpen) {
-    const fullPath = path.resolve(process.cwd(), week.lessonFile);
+    const fullPath = path.resolve(projectRoot, week.lessonFile);
     console.log(`   Opening lesson in browser...`);
-    const openCommand = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+    const openCommand = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start ""' : 'xdg-open';
     exec(`${openCommand} "${fullPath}"`);
   }
 }

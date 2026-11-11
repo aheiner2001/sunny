@@ -37,8 +37,8 @@ jobs:
       - name: Package Deployment Archive
         working-directory: courses/itm300/aws-lambda
         run: |
-          zip -r deployment.zip index.mjs
-          echo "Packaged deployment.zip ($(stat -c%s deployment.zip) bytes)"
+          (cd dist && zip -9 ../deployment.zip index.mjs)
+          echo "Packaged deployment.zip ($(stat -c%s deployment.zip 2>/dev/null || stat -f%z deployment.zip) bytes)"
 
       - name: Authenticate to AWS via OIDC or Secrets
         uses: aws-actions/configure-aws-credentials@v4
@@ -56,6 +56,7 @@ jobs:
           aws-region: us-east-2
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        continue-on-error: true
 
       - name: Deploy to AWS Lambda
         working-directory: courses/itm300/aws-lambda
