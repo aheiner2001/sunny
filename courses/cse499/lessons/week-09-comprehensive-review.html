@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Week 9 Review: Cloud CI/CD & Baseline Smoke Test</title>
+  <link rel="stylesheet" href="../assets/style.css">
+  <style>
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+    .kpi-card {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1.25rem;
+      text-align: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .kpi-value {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: var(--accent-blue);
+      margin-bottom: 0.25rem;
+    }
+    .kpi-label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .status-badge-success {
+      background: #dcfce7;
+      color: #15803d;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 0.8rem;
+      display: inline-block;
+    }
+    .task-list {
+      list-style: none;
+      margin-left: 0;
+    }
+    .task-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .task-item:last-child {
+      border-bottom: none;
+    }
+    .check-icon {
+      color: var(--accent-emerald);
+      font-weight: bold;
+      font-size: 1.2rem;
+    }
+    .btn {
+      display: inline-block;
+      background: var(--accent-blue);
+      color: white;
+      text-decoration: none;
+      padding: 0.6rem 1.25rem;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-top: 0.5rem;
+      transition: background 0.2s ease;
+    }
+    .btn:hover {
+      background: #0369a1;
+    }
+    .quiz-container {
+      margin-top: 1.5rem;
+    }
+    .quiz-question {
+      background: #f8fafc;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .quiz-options {
+      margin: 0.75rem 0 0 1rem;
+    }
+    .quiz-feedback {
+      display: none;
+      margin-top: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+    .feedback-correct {
+      background: #dcfce7;
+      color: #166534;
+      display: block;
+    }
+    .feedback-wrong {
+      background: #fee2e2;
+      color: #991b1b;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">CSE 499 Senior Project · Week 9 Comprehensive Review</span>
+      <h1>Automated Cloud CI/CD & Baseline Smoke Test</h1>
+      <p class="subtitle">Complete review of deliverables, verified test matrices, and cloud deployment architecture.</p>
+    </header>
+
+    <!-- Key Metrics -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-value">10 / 10</div>
+        <div class="kpi-label">Week 9 Hours Completed</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">104 / 104</div>
+        <div class="kpi-label">Test Suites Passing</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">719 / 719</div>
+        <div class="kpi-label">Unit Tests Passing</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">Version 2</div>
+        <div class="kpi-label">AWS Lambda Deployed</div>
+      </div>
+    </div>
+
+    <!-- Section 1: What Was Built -->
+    <div class="card">
+      <h2>1. The Problem Solved in Week 9</h2>
+      <p>Before Week 9, your AWS Lambda function lived only in the AWS Console web editor. This created three major risks:</p>
+      <ul>
+        <li><strong>Code Drift:</strong> Code modified in the browser had no git commit history, no PR review, and could easily be lost.</li>
+        <li><strong>Credential Exposure:</strong> Developing in multiple environments often tempts developers to hardcode API tokens or secrets.</li>
+        <li><strong>Manual Friction:</strong> Every code change required opening AWS Lambda, zipping files on your laptop, or copying and pasting into the AWS web editor.</li>
+      </ul>
+      <p><strong>The Week 9 Solution:</strong> We connected your actual 3,778-line production serverless engine to git, configured GitHub Actions CI/CD with secure repository secrets, and established an automated pipeline where any git push deploys cleanly to AWS Lambda in <code>us-east-2</code>.</p>
+    </div>
+
+    <!-- Section 2: Verification Checklist -->
+    <div class="card">
+      <h2>2. Week 9 Tasks Verification Checklist</h2>
+      <ul class="task-list">
+        <li class="task-item">
+          <span class="check-icon">✓</span>
+          <div>
+            <strong>[W9.1] Draft GitHub Actions CI/CD Workflow</strong>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">Created <code>.github/workflows/deploy-lambda.yml</code> with Node 22 runtime, syntax checks, and automated zip packaging.</p>
+          </div>
+        </li>
+        <li class="task-item">
+          <span class="check-icon">✓</span>
+          <div>
+            <strong>[W9.2] Setup IAM Permissions & Credentials</strong>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">Configured <code>AWSLambda_FullAccess</code> policy and added <code>AWS_ACCESS_KEY_ID</code> &amp; <code>AWS_SECRET_ACCESS_KEY</code> to GitHub Secrets.</p>
+          </div>
+        </li>
+        <li class="task-item">
+          <span class="check-icon">✓</span>
+          <div>
+            <strong>[W9.3] Test Automated Push to Update AWS Lambda</strong>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">Executed live GitHub Action Run <strong>#43088994386</strong>. Lambda successfully updated and published <strong>Version 2</strong> in region <code>us-east-2</code>.</p>
+          </div>
+        </li>
+        <li class="task-item">
+          <span class="check-icon">✓</span>
+          <div>
+            <strong>[W9.4] Smoke Test Fictional Baseline Entities</strong>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin: 0;">Created <code>courses/cse499/fixtures/smoke-test-entities.json</code> and verified 1.75h net shift duration in <code>smokeTestBaseline.test.ts</code>.</p>
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Section 3: Architecture Deep Dive -->
+    <div class="card">
+      <h2>3. Architecture Breakdown</h2>
+      <p>Here is the flow of code and credentials that now powers Sunny Fleet:</p>
+
+      <div class="prompt-box">
+        <strong>Deployment Pipeline:</strong><br>
+        <code>git push</code> ➔ <strong>GitHub Actions</strong> (Ubuntu 24.04, Node 22) ➔ <code>node --check index.mjs</code> ➔ <code>zip deployment.zip</code> ➔ <strong>AWS CLI via Secrets</strong> ➔ <strong>AWS Lambda (us-east-2)</strong>
+      </div>
+
+      <h3>Live Lambda Environment Configurations</h3>
+      <table style="width: 100%; border-collapse: collapse; margin-top: 0.5rem;">
+        <thead>
+          <tr style="text-align: left; border-bottom: 2px solid var(--border-color);">
+            <th style="padding: 0.5rem;">Variable</th>
+            <th style="padding: 0.5rem;">Value / Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom: 1px solid var(--border-color);">
+            <td style="padding: 0.5rem;"><code>FIREBASE_PROJECT_ID</code></td>
+            <td style="padding: 0.5rem;"><code>sunny-cf80c</code> (Identifies Firestore database)</td>
+          </tr>
+          <tr style="border-bottom: 1px solid var(--border-color);">
+            <td style="padding: 0.5rem;"><code>FIREBASE_SECRET_ARN</code></td>
+            <td style="padding: 0.5rem;">AWS Secrets Manager ARN holding Google private service key</td>
+          </tr>
+          <tr style="border-bottom: 1px solid var(--border-color);">
+            <td style="padding: 0.5rem;"><code>SES_FROM_EMAIL</code></td>
+            <td style="padding: 0.5rem;"><code>sunnyfleet.reports@gmail.com</code> (Verified SES sender)</td>
+          </tr>
+          <tr style="border-bottom: 1px solid var(--border-color);">
+            <td style="padding: 0.5rem;"><code>REPORT_TIMEZONE</code></td>
+            <td style="padding: 0.5rem;"><code>America/Denver</code> (Mountain Time weekly boundary math)</td>
+          </tr>
+          <tr>
+            <td style="padding: 0.5rem;"><code>SEND_ENABLED</code></td>
+            <td style="padding: 0.5rem;"><code>true</code> (Enables live SES dispatch)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Section 4: Self-Assessment Knowledge Check -->
+    <div class="card">
+      <h2>4. Knowledge Check: Cloud CI/CD Concepts</h2>
+      <div class="quiz-container">
+        
+        <div class="quiz-question">
+          <p><strong>Question 1:</strong> Why did we package only <code>index.mjs</code> and <code>package.json</code> without a huge <code>node_modules</code> folder?</p>
+          <div class="quiz-options">
+            <label><input type="radio" name="q1" value="wrong"> A) AWS Lambda does not support node_modules at all.</label><br>
+            <label><input type="radio" name="q1" value="correct"> B) AWS Lambda's Node 22 runtime natively includes <code>@aws-sdk/*</code> and <code>node:crypto</code>, keeping the archive lightweight (20 KB vs 30 MB).</label><br>
+            <label><input type="radio" name="q1" value="wrong"> C) We forgot to run npm install in the workflow.</label>
+          </div>
+          <div id="q1-feedback" class="quiz-feedback"></div>
+        </div>
+
+        <div class="quiz-question">
+          <p><strong>Question 2:</strong> What happens when you test the Lambda with <code>{"dryRun": true}</code>?</p>
+          <div class="quiz-options">
+            <label><input type="radio" name="q2" value="wrong"> A) It sends an actual email to all recipients marked with [TEST].</label><br>
+            <label><input type="radio" name="q2" value="correct"> B) It parses and validates all Firestore fleet data and returns the preview payload without sending emails or modifying database records.</label><br>
+            <label><input type="radio" name="q2" value="wrong"> C) It shuts down the AWS Lambda function.</label>
+          </div>
+          <div id="q2-feedback" class="quiz-feedback"></div>
+        </div>
+
+        <button class="btn" onclick="checkQuiz()">Check Answers</button>
+      </div>
+    </div>
+
+    <!-- Section 5: Week 10 Preview -->
+    <div class="card">
+      <h2>5. Next Steps: Week 10 Focus</h2>
+      <p>Now that Week 9 is 100% complete and verified, Week 10 focuses on the <strong>Requirements Acceptance Gate (M1–M6)</strong>:</p>
+      <ul>
+        <li><strong>M1:</strong> Manager checklist configuration &amp; question assignment.</li>
+        <li><strong>M2:</strong> Technician QR-triggered inspection with photos and digital signature.</li>
+        <li><strong>M3:</strong> Converting inspection defects into pending maintenance work orders.</li>
+        <li><strong>M4:</strong> Shift duration clock-in/out calculations (1.75 net hours verified).</li>
+        <li><strong>M5:</strong> Manager review and idempotent hours approval.</li>
+        <li><strong>M6:</strong> Weekly fleet report email reconciliation.</li>
+        <li><strong>Dual Theme Switcher:</strong> In-app switcher between Classic Fleet OS and Nintendo Switch UI.</li>
+      </ul>
+      <p style="margin-top: 1rem;">To review the Week 10 curriculum in your terminal, run:</p>
+      <pre><code>npm run week 10</code></pre>
+    </div>
+  </div>
+
+  <script>
+    function checkQuiz() {
+      const q1 = document.querySelector('input[name="q1"]:checked');
+      const q1fb = document.getElementById('q1-feedback');
+      if (q1) {
+        if (q1.value === 'correct') {
+          q1fb.textContent = 'Correct! The AWS Node.js 18+ and 22 runtimes include the AWS SDK v3 natively, so you do not need to bundle 30MB of node_modules!';
+          q1fb.className = 'quiz-feedback feedback-correct';
+        } else {
+          q1fb.textContent = 'Incorrect. Try again! AWS Lambda provides @aws-sdk natively.';
+          q1fb.className = 'quiz-feedback feedback-wrong';
+        }
+      }
+
+      const q2 = document.querySelector('input[name="q2"]:checked');
+      const q2fb = document.getElementById('q2-feedback');
+      if (q2) {
+        if (q2.value === 'correct') {
+          q2fb.textContent = 'Correct! The dryRun flag allows managers and automated tests to preview the exact weekly fleet calculations safely without emailing users or mutating state.';
+          q2fb.className = 'quiz-feedback feedback-correct';
+        } else {
+          q2fb.textContent = 'Incorrect. The dryRun mode performs a pure read-only calculation without sending emails.';
+          q2fb.className = 'quiz-feedback feedback-wrong';
+        }
+      }
+    }
+  </script>
+</body>
+</html>

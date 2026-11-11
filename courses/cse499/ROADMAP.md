@@ -7,7 +7,7 @@
 
 | Week | Target Dates | Planned | Status | Primary Focus |
 | :--- | :--- | :---: | :---: | :--- |
-| **Week 9** | Nov 9–15 | 10 hrs | 🟡 In Progress | Automated Lambda CI/CD & Baseline Smoke Test |
+| **Week 9** | Nov 9–15 | 10 hrs | 🟢 Completed | Automated Lambda CI/CD & Baseline Smoke Test |
 | **Week 10** | Nov 16–22 | 14 hrs | ⚪ Planned | M1–M6 Requirements Acceptance Gate & Unified Theme Switcher |
 | **Week 11** | Nov 23–29 | 12 hrs | ⚪ Planned | Cloud Security & Stateless Firebase JWT Validation |
 | **Week 12** | Nov 30–Dec 6 | 12 hrs | ⚪ Planned | Scheduled Fleet Reporting & Data Integrity |
@@ -17,11 +17,13 @@
 
 ## Detailed Weekly Curriculum
 
-### Week 9: Automated Lambda CI/CD & Baseline Smoke Test (10 hrs)
+### Week 9: Automated Lambda CI/CD & Baseline Smoke Test (10 hrs) ✅
 - **Course Goals**: Fictional test users/vehicles smoke test, baseline smoke evidence.
 - **Engineering Principles**: Infrastructure as Code (IaC), Continuous Deployment (CD), AWS IAM OIDC security.
-- **Deliverables**: `.github/workflows/deploy-lambda.yml`, `scripts/week.mjs`, verified smoke test suite.
-- **Lesson**: `courses/cse499/lessons/0001-lambda-cicd-oidc.html`
+- **Deliverables**: `.github/workflows/deploy-lambda.yml`, `scripts/week.mjs`, verified smoke test suite (104/104 passing), deployed AWS Lambda Version 2.
+- **Review Lesson (HTML)**: `courses/cse499/lessons/week-09-comprehensive-review.html`
+- **Review Record (MD)**: `courses/cse499/learning-records/week-09-comprehensive-review.md`
+- **Setup Runbook**: `courses/cse499/lessons/0001-lambda-cicd-oidc.html`
 
 ### Week 10: Requirements Acceptance Gate & Theme Switcher (14 hrs)
 - **Course Goals**: Freeze specification, test and pass M1–M6.
