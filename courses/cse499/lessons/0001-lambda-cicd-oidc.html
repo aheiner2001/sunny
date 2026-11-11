@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lesson 0001: Automated AWS Lambda CI/CD & OIDC Security</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: #1a1a1a;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      background: #fafafa;
+    }
+    h1 { color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; }
+    h2 { color: #1e293b; margin-top: 32px; }
+    .badge { display: inline-block; background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 9999px; font-weight: 600; font-size: 0.85rem; }
+    .card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 24px; margin: 20px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; }
+    pre { background: #0f172a; color: #f8fafc; padding: 16px; border-radius: 8px; overflow-x: auto; }
+    .quiz-option { display: block; width: 100%; text-align: left; padding: 12px; margin: 8px 0; border: 1px solid #cbd5e1; border-radius: 6px; background: white; cursor: pointer; transition: background 0.15s; font-size: 1rem; }
+    .quiz-option:hover { background: #f8fafc; }
+    .correct { background: #dcfce7 !important; border-color: #22c55e !important; }
+    .wrong { background: #fee2e2 !important; border-color: #ef4444 !important; }
+  </style>
+</head>
+<body>
+  <span class="badge">CSE 499 Senior Project &bull; Lesson 0001</span>
+  <h1>Continuous Deployment with AWS Lambda & GitHub Actions</h1>
+  <p><em>Why copy-pasting code into the cloud console is an anti-pattern & how to fix it with automated pipelines.</em></p>
+
+  <div class="card">
+    <h2>1. The Problem: Manual Console Uploads</h2>
+    <p>In early prototype phases, pasting code into the AWS Lambda web editor is fast. But as applications evolve, manual uploads create three severe problems:</p>
+    <ul>
+      <li><strong>Drift</strong>: The code running in production no longer matches git history.</li>
+      <li><strong>Lack of Testing</strong>: A syntax error or failed unit test immediately breaks live users.</li>
+      <li><strong>Credential Risk</strong>: Developers share static admin API keys to push changes.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>2. The Solution: OpenID Connect (OIDC)</h2>
+    <p>Instead of hardcoding long-lived <code>AWS_SECRET_ACCESS_KEY</code> tokens in GitHub Secrets (which can leak or expire), GitHub Actions exchanges a short-lived cryptographic JWT directly with AWS IAM via OIDC:</p>
+    <pre>GitHub Actions Runner ---> (JWT) ---> AWS Security Token Service (STS) ---> Temporary 15m Credentials ---> Lambda Deploy</pre>
+  </div>
+
+  <div class="card">
+    <h2>3. Knowledge Check: Storage Strength Quiz</h2>
+    <p><strong>Question:</strong> Why is GitHub OIDC preferred over permanent AWS Access Keys in continuous deployment pipelines?</p>
+    <button class="quiz-option" onclick="checkAnswer(this, false)">OIDC runs faster than standard AWS CLI commands.</button>
+    <button class="quiz-option" onclick="checkAnswer(this, true)">OIDC issues short-lived temporary credentials, eliminating permanent secret leak risks.</button>
+    <button class="quiz-option" onclick="checkAnswer(this, false)">OIDC automatically rewrites JavaScript code into optimized native Lambda binaries.</button>
+    <div id="feedback" style="margin-top: 12px; font-weight: 600;"></div>
+  </div>
+
+  <script>
+    function checkAnswer(btn, isCorrect) {
+      const options = document.querySelectorAll('.quiz-option');
+      options.forEach(o => o.disabled = true);
+      const feedback = document.getElementById('feedback');
+      if (isCorrect) {
+        btn.classList.add('correct');
+        feedback.textContent = 'Correct! OIDC avoids long-lived credentials, reducing blast radius and security maintenance.';
+        feedback.style.color = '#15803d';
+      } else {
+        btn.classList.add('wrong');
+        feedback.textContent = 'Not quite. The primary benefit of OIDC is security: short-lived tokens eliminate permanent secret storage.';
+        feedback.style.color = '#b91c1c';
+      }
+    }
+  </script>
+</body>
+</html>
