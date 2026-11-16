@@ -20,6 +20,8 @@ export interface MyTrainingSectionProps {
   itemsById: Map<string, TrainingItem>;
   busy: boolean;
   onCertify: (row: TrainingAssignment) => void;
+  titleHeading?: string;
+  isManagerPreview?: boolean;
 }
 
 export function MyTrainingSection({
@@ -28,6 +30,8 @@ export function MyTrainingSection({
   itemsById,
   busy,
   onCertify,
+  titleHeading = 'My Training',
+  isManagerPreview = false,
 }: MyTrainingSectionProps) {
   const [activeItem, setActiveItem] = useState<{
     item: TrainingItem;
@@ -47,7 +51,7 @@ export function MyTrainingSection({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--line)] pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="card-title text-lg m-0">My Training</h2>
+            <h2 className="card-title text-lg m-0">{titleHeading}</h2>
             <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--primary,#f59e0b)]/15 text-[var(--primary,#f59e0b)] font-medium">
               Curriculum Mastery
             </span>

@@ -162,6 +162,17 @@ function TrainingDashboard() {
     );
   };
 
+  const handleUpdateItemFull = async (updatedItem: TrainingItem) => {
+    if (!isManager) return;
+    await runAction(
+      async () => {
+        await dbService.saveTrainingItems(items.map(row => (row.id === updatedItem.id ? updatedItem : row)));
+      },
+      'Learning module updated.',
+      'Could not update learning module details.',
+    );
+  };
+
   const toggleLink = async (item: TrainingItem, questionId: string) => {
     if (!isManager) return;
     const next = toggleLinkedQuestionId(item, questionId, new Date().toISOString());
@@ -564,6 +575,7 @@ function TrainingDashboard() {
                 onDelete={id => void deleteItem(id)}
                 onSettingsBlur={(item, patch) => void saveItemSettings(item, patch)}
                 onToggleLinkedQuestion={(item, questionId) => void toggleLink(item, questionId)}
+                onUpdateItem={handleUpdateItemFull}
               />
             ) : (
               <EmptyState icon={<Plus className="h-7 w-7" aria-hidden />} title="No training steps yet">
@@ -574,15 +586,44 @@ function TrainingDashboard() {
         </>
       )}
 
-      {!isManager && user?.isDesignatedTrainer && (
-        <TrainerSignOffQueue
-          rows={trainerQueue}
-          itemsById={itemById}
-          busy={busy}
-          onSignOff={row => void signOff(row)}
-        />
+      {/* Section for Managers: Interactive Curriculum Module Preview */}
+      {isManager && (
+        <section className="card card-pad space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="card-title text-base m-0">Learning Modules Preview</h2>
+              <p className="hint text-xs m-0 mt-1">
+                Khan-style interactive micro-learning cards seen by employees. Click <strong>Review Lesson</strong> on any module to test the trainee experience.
+              </p>
+            </div>
+            <span className="badge" data-status="info">
+              Interactive Preview
+            </span>
+          </div>
+          <MyTrainingSection
+            userName="Preview Mode"
+            titleHeading="Interactive Curriculum Modules"
+            isManagerPreview
+            rows={items.map(item => ({
+              id: `preview-${item.id}`,
+              traineeId: user?.id || 'preview-user',
+              traineeName: user?.name || 'Manager',
+              itemId: item.id,
+              status: 'assigned',
+              dueAt: null,
+              missStreak: 0,
+              events: [],
+              createdAt: item.createdAt,
+              updatedAt: item.updatedAt,
+            }))}
+            itemsById={itemById}
+            busy={busy}
+            onCertify={() => {}}
+          />
+        </section>
       )}
 
+      {/* Trainee Card Grid & Microlearning Viewer for Employees */}
       {!isManager && (
         <MyTrainingSection
           userName={user?.name || 'current user'}
@@ -590,6 +631,15 @@ function TrainingDashboard() {
           itemsById={itemById}
           busy={busy}
           onCertify={row => void certify(row)}
+        />
+      )}
+
+      {!isManager && user?.isDesignatedTrainer && (
+        <TrainerSignOffQueue
+          rows={trainerQueue}
+          itemsById={itemById}
+          busy={busy}
+          onSignOff={row => void signOff(row)}
         />
       )}
     </div>

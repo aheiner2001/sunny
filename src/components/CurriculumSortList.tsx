@@ -3,13 +3,14 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { GridLayout, useContainerWidth, type Layout } from 'react-grid-layout';
-import { GripVertical, Link2, Trash2, X } from 'lucide-react';
+import { GripVertical, Link2, Trash2, X, Edit3, BookOpen } from 'lucide-react';
 import {
   applyAnchoredMenuPlacement,
   isEventInsideAnchoredMenu,
 } from '@/lib/ui/anchoredMenu';
 import type { TrainingItem } from '@/lib/training/types';
 import type { ChecklistQuestion } from '@/types';
+import { CurriculumEditModal } from './training/CurriculumEditModal';
 
 const ROW_H = 3;
 
@@ -24,6 +25,7 @@ type Props = {
     patch: { withinDays?: number; retrainThreshold?: number },
   ) => void;
   onToggleLinkedQuestion: (item: TrainingItem, questionId: string) => void;
+  onUpdateItem?: (updatedItem: TrainingItem) => Promise<void>;
 };
 
 export function CurriculumSortList({
@@ -34,10 +36,12 @@ export function CurriculumSortList({
   onDelete,
   onSettingsBlur,
   onToggleLinkedQuestion,
+  onUpdateItem,
 }: Props) {
   const { width, mounted, containerRef } = useContainerWidth({ measureBeforeMount: true });
   const [working, setWorking] = useState<Layout | null>(null);
   const [linkingItemId, setLinkingItemId] = useState<string | null>(null);
+  const [editingItem, setEditingItem] = useState<TrainingItem | null>(null);
   const [showAllQuestions, setShowAllQuestions] = useState(false);
   const active = useRef(false);
   const linkBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -275,6 +279,18 @@ export function CurriculumSortList({
                     <span className="truncate max-w-[12rem] sm:max-w-none">{item.title}</span>
                   </button>
                   <div className="cluster gap-1">
+                    {onUpdateItem ? (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm gap-1 text-amber-400 hover:text-amber-300"
+                        disabled={busy}
+                        aria-label={`Edit module details for ${item.title}`}
+                        onClick={() => setEditingItem(item)}
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                        Edit Module
+                      </button>
+                    ) : null}
                     <button
                       ref={isLinking ? linkBtnRef : undefined}
                       type="button"
@@ -359,6 +375,15 @@ export function CurriculumSortList({
         </GridLayout>
       )}
       {linkMenu}
+      {editingItem && onUpdateItem ? (
+        <CurriculumEditModal
+          item={editingItem}
+          isOpen={Boolean(editingItem)}
+          busy={busy}
+          onClose={() => setEditingItem(null)}
+          onSave={onUpdateItem}
+        />
+      ) : null}
     </div>
   );
 }
