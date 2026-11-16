@@ -19,6 +19,24 @@ export type TrainingEventType =
   | 'onboarded'
   | 'marked_trained';
 
+export type TrainingCategory =
+  | 'inspection'
+  | 'safety'
+  | 'chemicals'
+  | 'equipment'
+  | 'maintenance'
+  | 'general';
+
+export interface TrainingCard {
+  id: string;
+  title?: string;
+  imageUrl?: string;
+  imageCaption?: string;
+  content: string;
+  calloutType?: 'info' | 'warning' | 'tip';
+  calloutText?: string;
+}
+
 export interface TrainingItem {
   id: string;
   title: string;
@@ -31,6 +49,11 @@ export interface TrainingItem {
   linkedQuestionIds: string[];
   createdAt: string;
   updatedAt: string;
+  category?: TrainingCategory;
+  coverImageUrl?: string;
+  estimatedMinutes?: number;
+  keyTakeaways?: string[];
+  cards?: TrainingCard[];
 }
 
 export interface TraineeTrainerLink {

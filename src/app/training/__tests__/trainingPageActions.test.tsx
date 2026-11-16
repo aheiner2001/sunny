@@ -5,7 +5,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 const saveTrainingItems = vi.fn();
 const saveTrainingAssignment = vi.fn();
 const getTrainingItems = vi.fn(() => []);
-const getTrainingAssignments = vi.fn(() => []);
+const getTrainingAssignments = vi.fn<() => any[]>(() => []);
 const getTraineeTrainerLinks = vi.fn(() => []);
 const getUsers = vi.fn(() => [
   { id: 'emp-1', name: 'Alex', role: 'employee', status: 'active', isDesignatedTrainer: true },
