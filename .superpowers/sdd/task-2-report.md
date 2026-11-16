@@ -1,113 +1,44 @@
-# Task 2 Report: Commit Firestore training hydration
+# Task 2 Report: Interactive Weekly Learning Runner (`scripts/week.mjs` & `npm run week`)
 
-## Status
+## Overview
+Successfully implemented the interactive weekly learning runner CLI script (`scripts/week.mjs`), registered the `npm run week` convenience script in `package.json`, and verified with end-to-end unit tests using Vitest.
 
-**Complete.** All brief steps verified; hydration changes committed on branch `october-26-changes`.
+## Changes Completed
 
-## Steps performed
+1. **Test-Driven Development (TDD)**:
+   - Created `scripts/__tests__/weekRunner.test.mjs` asserting CLI behavior:
+     - Formatted display of curriculum and tasks for Week 9 with `--no-open` flag.
+     - Graceful failure and error exit when an invalid week number is passed.
+   - Verified initial failure (`MODULE_NOT_FOUND` for `scripts/week.mjs`).
 
-### Step 1: Persistence tests
+2. **Runner Implementation (`scripts/week.mjs`)**:
+   - Reads target week argument (defaults to Week 9 if unspecified).
+   - Validates existence of `courses/cse499/roadmap.json` and requested week ID.
+   - Renders formatted dashboard containing planned/logged hours, status, core engineering principles, weekly task checklists, and primary reference links.
+   - Handles `--no-open` flag to suppress browser launching (useful in automated tests and CI environments).
+   - Dynamically resolves platform browser opener command (`open` on macOS, `start` on Windows, `xdg-open` on Linux) to open interactive lesson HTML files when available.
 
-```text
-npx vitest run src/lib/training/__tests__/trainingPersistence.test.ts
-```
+3. **NPM Script Integration (`package.json`)**:
+   - Added `"week": "node scripts/week.mjs"` to `scripts`.
 
-- **Result:** PASS — 1 file, 3 tests, ~2s
+4. **Verification**:
+   - Executed `npx vitest run scripts/__tests__/weekRunner.test.mjs`:
+     ```
+     ✓ scripts/__tests__/weekRunner.test.mjs (2 tests) 80ms
+       ✓ Week Runner Script (2)
+         ✓ displays curriculum and tasks for week 9 when run via node 41ms
+         ✓ fails gracefully when an invalid week number is passed 38ms
 
-### Step 2: Listener verification
+      Test Files  1 passed (1)
+           Tests  2 passed (2)
+     ```
+   - Executed full test suite across `courses/` and `scripts/`: 4 tests passed across 2 test files.
+   - Tested CLI execution directly with `npm run week -- 9 --no-open`: successfully rendered Week 9 dashboard.
 
-Confirmed in `setupFirestoreListeners` (`src/lib/db.ts`):
-
-| Collection           | localStorage key (via `STORAGE_KEYS`) | Notes |
-|----------------------|----------------------------------------|-------|
-| `trainingItems`      | `TRAINING_ITEMS`                       | Sorted by `order`; `sunny_db_update` dispatched |
-| `trainingAssignments`| `TRAINING_ASSIGNMENTS`                 | Same guard pattern |
-| `traineeTrainers`    | `TRAINEE_TRAINERS`                     | Same guard pattern |
-| `previousUserFlags`  | `PREVIOUS_USER_FLAGS`                  | Merges doc `id` when missing on payload |
-
-All four use: `if (!snapshot.empty || localStorage.getItem(STORAGE_KEYS.FIREBASE_SYNCED) === 'true')`.
-
-### Step 3: Commit
-
-**Commit message:** `fix(training): hydrate curriculum and assignments from Firestore listeners`
-
-**Files committed:**
-
-- `src/lib/db.ts`
-- `src/lib/training/__tests__/trainingPersistence.test.ts`
-
-## Implementation summary
-
-### `setupFirestoreListeners`
-
-Added real-time hydration for training curriculum, assignments, trainee↔trainer links, and previous-user flags so localStorage stays aligned with Firestore after preview URL changes or new devices.
-
-### `syncAllToFirestore`
-
-Extended bulk sync to seed all four training-related collections (previously writes existed on individual save paths but were not included in full sync).
-
-### `saveTrainingItems`
-
-Before batch write, loads existing Firestore docs via `getDocs`, deletes orphans not in the new item id set, then sets current items. Local storage updates only after successful `batch.commit()` (failures propagate; tests assert no local curriculum on permission denied).
-
-### Test mocks (`trainingPersistence.test.ts`)
-
-- `getDocs` returns empty snapshot with no-op `forEach` (supports orphan-delete path without throwing).
-- `writeBatch` mock includes `delete` alongside `set` and `commit`.
-
-## Out of scope (unchanged)
-
-- Attention helpers, training page UI, and other plan tasks were not modified.
-
-## Concerns / follow-ups
-
-1. **Empty cloud after sync:** Once `FIREBASE_SYNCED` is true, an empty snapshot still overwrites local training data (intentional parity with other collections; worth awareness for admins).
-2. **Orphan delete scope:** Only `saveTrainingItems` deletes removed Firestore docs; assignments/links/flags are upsert-only (may be fine if ids are stable).
-3. **Batch size:** Full curriculum replace is a single batch; very large curricula could hit Firestore batch limits (unlikely for typical fleet sizes).
-
-## Verification evidence
-
-```
-Test Files  1 passed (1)
-     Tests  3 passed (3)
-```
-
----
-
-## Review fix: skip pending-write snapshots (2026-10-26)
-
-**Finding:** Training/previous-user `onSnapshot` listeners could persist optimistic Firestore data into localStorage before writes confirmed; rejected writes could leave stale curriculum if a non-empty pending snapshot passed the `!snapshot.empty` guard while `FIREBASE_SYNCED` was unset.
-
-**Change:** In `setupFirestoreListeners`, all four listeners (`trainingItems`, `trainingAssignments`, `traineeTrainers`, `previousUserFlags`) now `return` early when `snapshot.metadata?.hasPendingWrites` is true, before the existing `!snapshot.empty || FIREBASE_SYNCED` guard.
-
-**Tests:** Added `ignores optimistic trainingItems snapshots while writes are pending` in `trainingPersistence.test.ts` (captures listener callbacks via mock `onSnapshot`).
-
-```text
-npx vitest run src/lib/training/__tests__/trainingPersistence.test.ts
-```
-
-```
-Test Files  1 passed (1)
-     Tests  4 passed (4)
-   Duration  ~1.9s
-```
-
----
-
-## Re-review fix: includeMetadataChanges (2026-10-26)
-
-**Finding:** With `hasPendingWrites` early return only, Firestore may not deliver a follow-up snapshot when pending metadata clears unless `includeMetadataChanges: true` is set on the listener.
-
-**Change:** All four training/previous-user listeners pass `{ includeMetadataChanges: true }` as the `onSnapshot` options argument; `hasPendingWrites` guard unchanged.
-
-**Tests:** Mock records listener options; asserts all four collections; adds pending→committed hydration case for `trainingItems`.
-
-```text
-npx vitest run src/lib/training/__tests__/trainingPersistence.test.ts
-```
-
-```
-Test Files  1 passed (1)
-     Tests  6 passed (6)
-   Duration  ~1.9s
-```
+5. **Commit**:
+   - Commit: `57586b96dc9dd9a5d2b36cde3f9c52dcdde1a9f3`
+   - Message: `feat(cli): add interactive week learning runner script`
+   - Files committed:
+     - `package.json`
+     - `scripts/__tests__/weekRunner.test.mjs`
+     - `scripts/week.mjs`
